@@ -111,10 +111,10 @@ import com.vidgrab.app.R
 import com.vidgrab.app.util.getClipboardText
 import com.vidgrab.app.util.isValidUrl
 
-private val FredokaFamily = FontFamily(
-    Font(R.font.fredoka_var, FontWeight.Normal),
-    Font(R.font.fredoka_var, FontWeight.Bold),
-    Font(R.font.fredoka_var, FontWeight.Black)
+private val BrandFont = FontFamily(
+    Font(R.font.manrope_var, FontWeight.Normal),
+    Font(R.font.manrope_var, FontWeight.Bold),
+    Font(R.font.manrope_var, FontWeight.Black)
 )
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -219,7 +219,7 @@ fun HomeScreen(
             Text(
                 text = "Otter",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontFamily = FredokaFamily,
+                    fontFamily = BrandFont,
                     fontSize = 38.sp
                 ),
                 fontWeight = FontWeight.Black,
@@ -479,7 +479,7 @@ fun HomeScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
@@ -979,7 +979,7 @@ private fun AboutDialog(
                             Text(
                                 text = "Otter",
                                 style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontFamily = FredokaFamily,
+                                    fontFamily = BrandFont,
                                     fontSize = 48.sp
                                 ),
                                 fontWeight = FontWeight.Black,
