@@ -82,6 +82,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -107,6 +109,12 @@ import com.vidgrab.app.ui.theme.OtterDimens
 import com.vidgrab.app.R
 import com.vidgrab.app.util.getClipboardText
 import com.vidgrab.app.util.isValidUrl
+
+private val FredokaFamily = FontFamily(
+    Font(R.font.fredoka_var, FontWeight.Normal),
+    Font(R.font.fredoka_var, FontWeight.Bold),
+    Font(R.font.fredoka_var, FontWeight.Black)
+)
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -177,51 +185,46 @@ fun HomeScreen(
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            val headerBreathe = rememberInfiniteTransition(label = "header_breathe")
-            val breatheScale by headerBreathe.animateFloat(
-                initialValue = 1f,
-                targetValue = 1.05f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1800, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "breathe_scale"
-            )
+    val headerBreathe = rememberInfiniteTransition(label = "header_breathe")
+    val breatheScale by headerBreathe.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathe_scale"
+    )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.otter_logo),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .clickable { showAboutDialog = true }
-                            .graphicsLayer(scaleX = breatheScale, scaleY = breatheScale),
-                        tint = logoTint
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Otter",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Black,
-                            color = accentColor
-                        )
-                        Text(
-                            text = "Download Anything, Fast",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.otter_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .clickable { showAboutDialog = true }
+                    .graphicsLayer(scaleX = breatheScale, scaleY = breatheScale),
+                tint = logoTint
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "Otter",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontFamily = FredokaFamily
+                ),
+                fontWeight = FontWeight.Black,
+                color = accentColor
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(onClick = { showPaletteSheet = true }) {
                         Icon(
                             Icons.Default.Palette,
@@ -548,6 +551,7 @@ fun HomeScreen(
             isDarkMode = isDarkMode,
             onSelectColor = { color ->
                 themeViewModel.setAccentColor(color)
+                showPaletteSheet = false
             },
             onDismiss = { showPaletteSheet = false }
         )

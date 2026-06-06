@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.luminance
 
 fun lightColorSchemeFromAccent(accent: Color) = lightColorScheme(
     primary = accent,
-    onPrimary = PureWhite,
+    onPrimary = if (accent.luminance() > 0.7f) OffBlack else PureWhite,
     primaryContainer = accent.copy(alpha = 0.10f),
     onPrimaryContainer = accent,
     secondary = accent.lighten(0.35f).saturate(1.2f),
@@ -32,7 +32,7 @@ fun lightColorSchemeFromAccent(accent: Color) = lightColorScheme(
 
 fun darkColorSchemeFromAccent(accent: Color) = darkColorScheme(
     primary = accent.lighten(0.15f),
-    onPrimary = DarkBackground,
+    onPrimary = if (accent.lighten(0.15f).luminance() > 0.5f) DarkBackground else PureWhite,
     primaryContainer = accent.copy(alpha = 0.15f),
     onPrimaryContainer = accent.lighten(0.3f),
     secondary = accent.lighten(0.3f).saturate(1.2f),

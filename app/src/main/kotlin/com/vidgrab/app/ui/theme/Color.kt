@@ -56,7 +56,10 @@ val ACCENT_PRESETS = listOf(
     AccentPreset("Brown", Color(0xFF5D4037), Color(0xFF8D6E63)),
     AccentPreset("Blue Grey", Color(0xFF455A64), Color(0xFF78909C)),
     AccentPreset("Lime", Color(0xFF9E9D24), Color(0xFFD4E157)),
-    AccentPreset("Deep Purple", Color(0xFF512DA8), Color(0xFF9575CD))
+    AccentPreset("Deep Purple", Color(0xFF512DA8), Color(0xFF9575CD)),
+    AccentPreset("White", Color(0xFFFFFFFF), Color(0xFFFFFFFF)),
+    AccentPreset("Grey", Color(0xFF808080), Color(0xFF808080)),
+    AccentPreset("Black", Color(0xFF000000), Color(0xFF000000))
 )
 
 fun Color.lighten(factor: Float): Color {
