@@ -6,20 +6,20 @@ plugins {
 }
 
 android {
-    namespace = "com.vidgrab.app"
+    namespace = "com.otter.app"
     compileSdk = 35
 
     signingConfigs {
         create("release") {
             storeFile = file("../release.keystore")
-            storePassword = "vidgrab123"
-            keyAlias = "vidgrab"
-            keyPassword = "vidgrab123"
+            storePassword = "otter123"
+            keyAlias = "otter"
+            keyPassword = "otter123"
         }
     }
 
     defaultConfig {
-        applicationId = "com.vidgrab.app"
+        applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
