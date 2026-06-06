@@ -23,6 +23,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -804,7 +805,9 @@ private fun PaletteSheet(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Surface(
-                                        modifier = Modifier.size(44.dp),
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clickable { onSelectColor(c) },
                                         shape = MaterialTheme.shapes.small,
                                         color = c,
                                         tonalElevation = if (isSelected) 4.dp else 0.dp,
