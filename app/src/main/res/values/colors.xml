@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="periwinkle">#4E55E0</color>
+    <color name="lime_green">#B8EB6C</color>
+    <color name="golden_yellow">#F7CD63</color>
+    <color name="playful_pink">#FC8FC6</color>
+    <color name="off_black">#070707</color>
+    <color name="pure_white">#FFFFFF</color>
+    <color name="light_gray">#F5F5F5</color>
+    <color name="error_red">#E53935</color>
+</resources>

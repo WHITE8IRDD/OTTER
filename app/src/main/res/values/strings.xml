@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Otter</string>
+    <string name="paste_url">Paste a video link…</string>
+    <string name="fetch_info">Fetch Info</string>
+    <string name="download">Download</string>
+    <string name="cancel">Cancel</string>
+    <string name="audio_only">Audio Only</string>
+    <string name="pick_quality">Pick Your Quality</string>
+    <string name="choose_quality">Choose Quality</string>
+    <string name="home">Home</string>
+    <string name="history">History</string>
+    <string name="settings">Settings</string>
+    <string name="no_downloads">No downloads yet!</string>
+    <string name="download_complete">Download Complete!</string>
+    <string name="download_failed">Download Failed</string>
+    <string name="update_ytdlp">Update Engine</string>
+    <string name="clear_history">Clear All</string>
+    <string name="no_url_found">No valid URL found</string>
+    <string name="download_location">Download Location</string>
+    <string name="default_quality">Default Quality</string>
+    <string name="auto_download">Auto-download (skip quality picker)</string>
+    <string name="about">About</string>
+    <string name="open_file">Open File</string>
+    <string name="legal_notice">Please only download content you have the right to save. Respect copyright and platform terms of service.</string>
+    <string name="notification_channel_download">Downloads</string>
+    <string name="notification_channel_download_desc">Shows progress for active downloads</string>
+    <string name="notification_channel_complete">Download Complete</string>
+    <string name="notification_channel_complete_desc">Notifies when a download finishes</string>
+</resources>
