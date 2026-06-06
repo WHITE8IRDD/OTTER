@@ -83,8 +83,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -111,11 +109,7 @@ import com.vidgrab.app.R
 import com.vidgrab.app.util.getClipboardText
 import com.vidgrab.app.util.isValidUrl
 
-private val BrandFont = FontFamily(
-    Font(R.font.manrope_var, FontWeight.Normal),
-    Font(R.font.manrope_var, FontWeight.Bold),
-    Font(R.font.manrope_var, FontWeight.Black)
-)
+
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -217,9 +211,8 @@ fun HomeScreen(
                 tint = logoTint
             )
             Text(
-                text = "Otter",
+                text = "OTTER",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontFamily = BrandFont,
                     fontSize = 38.sp
                 ),
                 fontWeight = FontWeight.Black,
@@ -516,9 +509,9 @@ fun HomeScreen(
                 )
             }
 
-            PlatformsRow()
-
             Spacer(modifier = Modifier.height(80.dp))
+
+            PlatformsRow()
         }
     }
 
@@ -754,9 +747,9 @@ private fun MascotErrorState(
 @Composable
 private fun PlatformsRow() {
     Text(
-        text = "YouTube \u2022 Instagram \u2022 TikTok \u2022 Facebook \u2022 Twitter +1000 more",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        text = "YouTube \u2022 Instagram \u2022 Facebook \u2022 Twitter/X +1000 more",
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -977,9 +970,8 @@ private fun AboutDialog(
                                 tint = logoTint
                             )
                             Text(
-                                text = "Otter",
+                                text = "OTTER",
                                 style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontFamily = BrandFont,
                                     fontSize = 48.sp
                                 ),
                                 fontWeight = FontWeight.Black,
