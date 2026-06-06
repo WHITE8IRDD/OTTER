@@ -22,6 +22,9 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
     private val _accentColor = MutableStateFlow(Periwinkle)
     val accentColor: StateFlow<Color> = _accentColor.asStateFlow()
 
+    private val _tintLogo = MutableStateFlow(true)
+    val tintLogo: StateFlow<Boolean> = _tintLogo.asStateFlow()
+
     init {
         viewModelScope.launch {
             preferences.darkMode.collect { dark ->
@@ -31,6 +34,11 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             preferences.accentColor.collect { argb ->
                 _accentColor.value = if (argb == -1) Periwinkle else Color(argb)
+            }
+        }
+        viewModelScope.launch {
+            preferences.tintLogo.collect { enabled ->
+                _tintLogo.value = enabled
             }
         }
     }
@@ -52,5 +60,13 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAccentColorFromPreset(preset: AccentPreset) {
         setAccentColor(preset.light)
+    }
+
+    fun toggleTintLogo() {
+        viewModelScope.launch {
+            val newValue = !_tintLogo.value
+            _tintLogo.value = newValue
+            preferences.setTintLogo(newValue)
+        }
     }
 }

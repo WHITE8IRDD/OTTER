@@ -58,6 +58,7 @@ import com.vidgrab.app.data.model.DownloadItem
 import com.vidgrab.app.ui.components.BrutalButton
 import com.vidgrab.app.ui.components.BrutalCard
 import com.vidgrab.app.ui.components.SpeechBubble
+import com.vidgrab.app.ui.theme.ThemeViewModel
 import com.vidgrab.app.util.toReadableDuration
 import com.vidgrab.app.util.toReadableFileSize
 import java.text.SimpleDateFormat
@@ -66,11 +67,20 @@ import java.util.Locale
 
 @Composable
 fun HistoryScreen(
+    themeViewModel: ThemeViewModel,
     viewModel: HistoryViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val downloads by viewModel.downloads.collectAsStateWithLifecycle()
+    val isDarkMode by themeViewModel.isDarkMode.collectAsStateWithLifecycle()
+    val tintLogo by themeViewModel.tintLogo.collectAsStateWithLifecycle()
     var showClearDialog by remember { mutableStateOf(false) }
+
+    val logoTint = when {
+        tintLogo -> MaterialTheme.colorScheme.primary
+        isDarkMode -> Color.White
+        else -> Color.Unspecified
+    }
 
     Box(
         modifier = Modifier
@@ -117,7 +127,7 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    MascotHistoryEmptyState()
+                    MascotHistoryEmptyState(logoTint = logoTint)
                 }
             } else {
                 LazyColumn(
@@ -165,7 +175,7 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun MascotHistoryEmptyState() {
+private fun MascotHistoryEmptyState(logoTint: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "history_idle")
     val idleScale by infiniteTransition.animateFloat(
         initialValue = 0.98f,
@@ -187,7 +197,7 @@ private fun MascotHistoryEmptyState() {
             modifier = Modifier
                 .size(96.dp)
                 .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
-            tint = Color.Unspecified
+            tint = logoTint
         )
         SpeechBubble(
             text = "No videos here yet!\nFeed me some links!",

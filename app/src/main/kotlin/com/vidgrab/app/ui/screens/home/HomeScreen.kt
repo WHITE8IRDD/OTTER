@@ -74,6 +74,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -124,6 +125,7 @@ fun HomeScreen(
     val alsoSaveThumbnail by viewModel.alsoSaveThumbnail.collectAsStateWithLifecycle()
     val isDarkMode by themeViewModel.isDarkMode.collectAsStateWithLifecycle()
     val accentColor by themeViewModel.accentColor.collectAsStateWithLifecycle()
+    val tintLogo by themeViewModel.tintLogo.collectAsStateWithLifecycle()
     val autoDownload by viewModel.autoDownload.collectAsStateWithLifecycle()
     val fetchingMessage by viewModel.fetchingMessage.collectAsStateWithLifecycle()
     val selectedCarouselIndices by viewModel.selectedCarouselIndices.collectAsStateWithLifecycle()
@@ -138,6 +140,12 @@ fun HomeScreen(
     var showPaletteSheet by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var clipboardDetectedUrl by remember { mutableStateOf<String?>(null) }
+
+    val logoTint = when {
+        tintLogo -> MaterialTheme.colorScheme.primary
+        isDarkMode -> Color.White
+        else -> Color.Unspecified
+    }
 
     LaunchedEffect(Unit) {
         notificationPermission?.let {
@@ -196,7 +204,7 @@ fun HomeScreen(
                             .clip(CircleShape)
                             .clickable { showAboutDialog = true }
                             .graphicsLayer(scaleX = breatheScale, scaleY = breatheScale),
-                        tint = Color.Unspecified
+                        tint = logoTint
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
@@ -383,7 +391,7 @@ fun HomeScreen(
             }
 
             if (urlInput.isEmpty() && downloadState is DownloadState.Idle && currentVideoInfo == null) {
-                MascotEmptyState()
+                MascotEmptyState(logoTint = logoTint)
             }
 
             AnimatedVisibility(
@@ -392,6 +400,7 @@ fun HomeScreen(
                 exit = fadeOut() + slideOutVertically()
             ) {
                 MascotFetchingState(
+                    logoTint = logoTint,
                     message = fetchingMessage,
                     onCancel = viewModel::cancelFetch
                 )
@@ -546,6 +555,7 @@ fun HomeScreen(
 
     if (showAboutDialog) {
         AboutDialog(
+            logoTint = logoTint,
             accentColor = accentColor,
             onDismiss = { showAboutDialog = false }
         )
@@ -553,7 +563,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun MascotEmptyState() {
+private fun MascotEmptyState(logoTint: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "idle_bounce")
     val idleScale by infiniteTransition.animateFloat(
         initialValue = 0.98f,
@@ -577,7 +587,7 @@ private fun MascotEmptyState() {
             modifier = Modifier
                 .size(96.dp)
                 .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
-            tint = Color.Unspecified
+            tint = logoTint
         )
         Spacer(modifier = Modifier.height(8.dp))
         SpeechBubble(
@@ -592,7 +602,7 @@ private fun MascotEmptyState() {
 }
 
 @Composable
-private fun MascotFetchingState(message: String, onCancel: () -> Unit) {
+private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "fetch_bounce")
     val bounceY by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -633,7 +643,7 @@ private fun MascotFetchingState(message: String, onCancel: () -> Unit) {
                         translationY = bounceY
                         rotationZ = searchRotate
                     },
-                tint = Color.Unspecified
+                tint = logoTint
             )
             Text(
                 text = message,
@@ -901,6 +911,7 @@ private fun PaletteSheet(
 
 @Composable
 private fun AboutDialog(
+    logoTint: Color,
     accentColor: Color,
     onDismiss: () -> Unit
 ) {
@@ -953,7 +964,7 @@ private fun AboutDialog(
                             painter = painterResource(id = R.drawable.otter_logo),
                             contentDescription = null,
                             modifier = Modifier.size(36.dp),
-                            tint = Color.Unspecified
+                            tint = logoTint
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(

@@ -118,7 +118,7 @@ fun NavGraph(
                 enterTransition = { fadeIn() + slideInHorizontally { it / 4 } },
                 exitTransition = { fadeOut() + slideOutHorizontally { -it / 4 } }
             ) {
-                HistoryScreen()
+                HistoryScreen(themeViewModel = themeViewModel)
             }
             composable(
                 route = Screen.Settings.route,

@@ -42,6 +42,7 @@ class UserPreferences(private val context: Context) {
         val KEY_COOKIES_ENABLED = booleanPreferencesKey("cookies_enabled")
         val KEY_COOKIE_CONTENT = stringPreferencesKey("cookie_content")
         val KEY_ACCENT_COLOR = intPreferencesKey("accent_color")
+        val KEY_TINT_LOGO = booleanPreferencesKey("tint_logo")
     }
 
     val downloadPath: Flow<String> = context.dataStore.data.map { prefs ->
@@ -134,6 +135,10 @@ class UserPreferences(private val context: Context) {
 
     val accentColor: Flow<Int> = context.dataStore.data.map { prefs ->
         prefs[KEY_ACCENT_COLOR] ?: -1
+    }
+
+    val tintLogo: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_TINT_LOGO] ?: true
     }
 
     suspend fun setDownloadPath(path: String) {
@@ -243,6 +248,10 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setAccentColor(colorArgb: Int) {
         context.dataStore.edit { prefs -> prefs[KEY_ACCENT_COLOR] = colorArgb }
+    }
+
+    suspend fun setTintLogo(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_TINT_LOGO] = enabled }
     }
 
     suspend fun getAccentColorOnce(): Int = accentColor.first()

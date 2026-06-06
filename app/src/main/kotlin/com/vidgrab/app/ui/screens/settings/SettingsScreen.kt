@@ -81,6 +81,7 @@ fun SettingsScreen(
     val retries by viewModel.retries.collectAsStateWithLifecycle()
     val isDarkMode by themeViewModel.isDarkMode.collectAsStateWithLifecycle()
     val accentColor by themeViewModel.accentColor.collectAsStateWithLifecycle()
+    val tintLogo by themeViewModel.tintLogo.collectAsStateWithLifecycle()
     val updateStatus by viewModel.updateStatus.collectAsStateWithLifecycle()
     val isUpdating by viewModel.isUpdating.collectAsStateWithLifecycle()
 
@@ -150,6 +151,22 @@ fun SettingsScreen(
                         }
                     }
                 }
+                SettingsRow(
+                    title = "Tint logo with accent color",
+                    subtitle = "In-app otter logo matches accent",
+                    trailing = {
+                        Switch(
+                            checked = tintLogo,
+                            onCheckedChange = { themeViewModel.toggleTintLogo() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                            )
+                        )
+                    }
+                )
             }
 
             SettingsGroup(title = "Downloads") {
