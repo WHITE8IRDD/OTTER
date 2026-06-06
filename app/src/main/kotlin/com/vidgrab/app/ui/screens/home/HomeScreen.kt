@@ -199,27 +199,28 @@ fun HomeScreen(
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.otter_logo),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(72.dp)
                     .clip(CircleShape)
                     .clickable { showAboutDialog = true }
                     .graphicsLayer(scaleX = breatheScale, scaleY = breatheScale),
                 tint = logoTint
             )
-            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = "Otter",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontFamily = FredokaFamily
+                    fontFamily = FredokaFamily,
+                    fontSize = 38.sp
                 ),
                 fontWeight = FontWeight.Black,
                 color = accentColor
@@ -963,25 +964,34 @@ private fun AboutDialog(
                         .padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.otter_logo),
-                            contentDescription = null,
-                            modifier = Modifier.size(36.dp),
-                            tint = logoTint
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Otter",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Black,
-                            color = accentColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.otter_logo),
+                                contentDescription = null,
+                                modifier = Modifier.size(96.dp),
+                                tint = logoTint
+                            )
+                            Text(
+                                text = "Otter",
+                                style = MaterialTheme.typography.headlineLarge.copy(
+                                    fontFamily = FredokaFamily,
+                                    fontSize = 48.sp
+                                ),
+                                fontWeight = FontWeight.Black,
+                                color = accentColor
+                            )
+                        }
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .align(Alignment.TopEnd)
+                        ) {
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = "Close",

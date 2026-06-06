@@ -9,6 +9,7 @@ import com.vidgrab.app.data.datastore.UserPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -19,7 +20,7 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
     private val _isDarkMode = MutableStateFlow(false)
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
-    private val _accentColor = MutableStateFlow(Periwinkle)
+    private val _accentColor = MutableStateFlow(Color.Black)
     val accentColor: StateFlow<Color> = _accentColor.asStateFlow()
 
     private val _tintLogo = MutableStateFlow(true)
@@ -32,8 +33,17 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            preferences.accentColor.collect { argb ->
-                _accentColor.value = if (argb == -1) Periwinkle else Color(argb)
+            combine(
+                preferences.accentColor,
+                preferences.darkMode
+            ) { savedColor, isDark ->
+                if (savedColor == -1) {
+                    if (isDark) Color.White else Color.Black
+                } else {
+                    Color(savedColor)
+                }
+            }.collect { color ->
+                _accentColor.value = color
             }
         }
         viewModelScope.launch {
