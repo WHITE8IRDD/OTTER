@@ -67,9 +67,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val retries: StateFlow<Int> = prefs.retries
         .stateIn(viewModelScope, SharingStarted.Eagerly, 10)
 
-    val darkMode: StateFlow<Boolean> = prefs.darkMode
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
     val cookiesEnabled: StateFlow<Boolean> = prefs.cookiesEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 

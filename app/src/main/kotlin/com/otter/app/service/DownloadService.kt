@@ -19,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class DownloadService : Service() {
 
@@ -84,8 +83,7 @@ class DownloadService : Service() {
 
                 Log.i(TAG, "DownloadService START url=$url formatId=$formatId outputDir=$outputDir")
                 serviceScope.launch {
-                    withContext(Dispatchers.IO) {
-                        val downloadFn: suspend (String, String, (DownloadState) -> Unit) -> Unit =
+                    val downloadFn: suspend (String, String, (DownloadState) -> Unit) -> Unit =
                             { u, f, progress ->
                                 if (saveThumbnail) {
                                     repository.downloadWithThumbnail(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs)
@@ -94,9 +92,9 @@ class DownloadService : Service() {
                                 }
                             }
 
-                        downloadFn(url, formatId) { state ->
+                            downloadFn(url, formatId) { state ->
                             val now = System.currentTimeMillis()
-                            if (state is DownloadState.Downloading && now - lastStateUpdate < 100L) return@downloadFn
+                            if (state is DownloadState.Downloading && now - lastStateUpdate < 200L) return@downloadFn
                             if (state is DownloadState.Downloading) lastStateUpdate = now
                             DownloadStateHolder.update(state)
                             when (state) {
@@ -137,7 +135,6 @@ class DownloadService : Service() {
                         }
                     }
                 }
-            }
             ACTION_CANCEL_DOWNLOAD -> {
                 val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
                 repository.cancelDownload(url)

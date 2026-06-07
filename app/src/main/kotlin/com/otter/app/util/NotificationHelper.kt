@@ -38,7 +38,9 @@ object NotificationHelper {
                 "channel_download_v2", "channel_complete_v2",
                 "channel_dl_v3", "channel_cmpl_v3",
                 "channel_dl_v4", "channel_cmpl_v4")) {
-            try { manager.deleteNotificationChannel(oldId) } catch (_: Exception) {}
+            try { manager.deleteNotificationChannel(oldId) } catch (e: Exception) {
+                Log.v(TAG, "Failed to delete old channel $oldId: ${e.message}")
+            }
         }
 
         val soundUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)

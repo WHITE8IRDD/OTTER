@@ -9,7 +9,6 @@ import com.otter.app.data.model.VideoInfo
 import com.otter.app.util.Languages
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import com.yausername.youtubedl_android.YoutubeDLResponse
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers

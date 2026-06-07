@@ -23,7 +23,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,7 +74,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -183,62 +181,14 @@ fun HomeScreen(
                 .padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-    val headerBreathe = rememberInfiniteTransition(label = "header_breathe")
-    val breatheScale by headerBreathe.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathe_scale"
-    )
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.otter_logo),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .clickable { showAboutDialog = true }
-                    .graphicsLayer(scaleX = breatheScale, scaleY = breatheScale),
-                tint = logoTint
+            HomeScreenHeader(
+                logoColor = logoTint,
+                accentColor = accentColor,
+                isDarkMode = isDarkMode,
+                onLogoClick = { showAboutDialog = true },
+                onPaletteClick = { showPaletteSheet = true },
+                onToggleDarkMode = { themeViewModel.toggleDarkMode() }
             )
-            Text(
-                text = "OTTER",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = 38.sp
-                ),
-                fontWeight = FontWeight.Black,
-                color = accentColor
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = { showPaletteSheet = true }) {
-                        Icon(
-                            Icons.Default.Palette,
-                            contentDescription = "Accent color",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                    IconButton(onClick = { themeViewModel.toggleDarkMode() }) {
-                        Icon(
-                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = if (isDarkMode) "Light mode" else "Dark mode",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                }
-            }
 
             clipboardDetectedUrl?.let { url ->
                 if (urlInput.isEmpty()) {
@@ -1164,6 +1114,72 @@ private fun GithubIcon(modifier: Modifier = Modifier) {
             drawCircle(fgColor, radius = r * 0.32f, center = Offset(cx + r * 0.65f, cy - r * 0.65f), style = Stroke(width = strokeW))
             drawCircle(fgColor, radius = 1.2.dp.toPx(), center = Offset(cx - r * 0.28f, cy + r * 0.25f))
             drawCircle(fgColor, radius = 1.2.dp.toPx(), center = Offset(cx + r * 0.28f, cy + r * 0.25f))
+        }
+    }
+}
+
+@Composable
+private fun HomeScreenHeader(
+    logoColor: Color,
+    accentColor: Color,
+    isDarkMode: Boolean,
+    onLogoClick: () -> Unit,
+    onPaletteClick: () -> Unit,
+    onToggleDarkMode: () -> Unit
+) {
+    val headerBreathe = rememberInfiniteTransition(label = "header_breathe")
+    val breatheScale by headerBreathe.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathe_scale"
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.otter_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onLogoClick)
+                    .graphicsLayer(scaleX = breatheScale, scaleY = breatheScale),
+                tint = logoColor
+            )
+            Text(
+                text = "OTTER",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontSize = 38.sp
+                ),
+                fontWeight = FontWeight.Black,
+                color = accentColor
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            IconButton(onClick = onPaletteClick) {
+                Icon(
+                    Icons.Default.Palette,
+                    contentDescription = "Accent color",
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            IconButton(onClick = onToggleDarkMode) {
+                Icon(
+                    imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                    contentDescription = if (isDarkMode) "Light mode" else "Dark mode",
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
         }
     }
 }

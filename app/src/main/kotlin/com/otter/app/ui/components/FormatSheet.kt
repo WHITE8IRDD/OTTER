@@ -76,7 +76,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.otter.app.R
 import com.otter.app.data.model.AudioTrack
 import com.otter.app.data.model.SubtitleTrack
 import com.otter.app.data.model.VideoFormat

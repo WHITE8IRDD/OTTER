@@ -42,3 +42,8 @@ fun Long.toReadableFileSize(): String {
         else -> "$this B"
     }
 }
+
+fun String.extractUrlFromText(): String? {
+    val urlRegex = Regex("""https?://\S+""")
+    return urlRegex.find(this)?.value
+}

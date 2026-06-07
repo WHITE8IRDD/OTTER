@@ -90,9 +90,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            preferences.darkMode.collect { }
-        }
-        viewModelScope.launch {
             preferences.autoDownload.collect { auto ->
                 _autoDownload.value = auto
             }
@@ -420,7 +417,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         downloadObserverJob = viewModelScope.launch {
             DownloadStateHolder.state.collect { state ->
                 val now = System.currentTimeMillis()
-                if (state is DownloadState.Downloading && now - lastProgressUpdate < 100L) return@collect
+                if (state is DownloadState.Downloading && now - lastProgressUpdate < 200L) return@collect
                 if (state is DownloadState.Downloading) lastProgressUpdate = now
 
                 _downloadState.value = state

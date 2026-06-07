@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.otter.app.MainActivity
 import com.otter.app.ui.theme.OtterTheme
+import com.otter.app.util.extractUrlFromText
 import com.otter.app.util.isValidUrl
 
 class ShareActivity : ComponentActivity() {
@@ -66,7 +67,6 @@ class ShareActivity : ComponentActivity() {
     }
 
     private fun extractUrlFromText(text: String): String? {
-        val urlRegex = Regex("""https?://\S+""")
-        return urlRegex.find(text)?.value
+        return text.extractUrlFromText()
     }
 }

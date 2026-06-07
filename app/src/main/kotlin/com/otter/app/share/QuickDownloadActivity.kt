@@ -5,8 +5,10 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import com.otter.app.MainActivity
 import com.otter.app.data.repository.DownloadRepository
 import com.otter.app.service.DownloadService
+import com.otter.app.util.extractUrlFromText
 import com.otter.app.util.isValidUrl
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
@@ -52,6 +54,23 @@ class QuickDownloadActivity : ComponentActivity() {
 
         if (sharedUrl != null && sharedUrl.isValidUrl()) {
             Log.i(TAG, "QuickDownload received URL: $sharedUrl")
+            Log.i(TAG, "URL is TikTok? ${isTikTokUrl(sharedUrl)}")
+
+            // TikTok redirect: Quick Download doesn't work reliably for TikTok,
+            // so redirect to the normal share flow with format sheet
+            if (isTikTokUrl(sharedUrl)) {
+                Log.i(TAG, "Redirecting TikTok URL to normal flow via MainActivity")
+                Toast.makeText(this, "Quick Download not available for TikTok — opening normal flow", Toast.LENGTH_SHORT).show()
+                val mainIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra(ShareActivity.EXTRA_SHARED_URL, sharedUrl)
+                }
+                startActivity(mainIntent)
+                finish()
+                return
+            }
+
+            Log.i(TAG, "Non-TikTok URL, proceeding with Quick Download")
             scope.launch {
                 try {
                     ensureEngineReady()
@@ -108,7 +127,12 @@ class QuickDownloadActivity : ComponentActivity() {
     }
 
     private fun extractUrlFromText(text: String): String? {
-        val urlRegex = Regex("""https?://\S+""")
-        return urlRegex.find(text)?.value
+        return text.extractUrlFromText()
+    }
+
+    private fun isTikTokUrl(url: String): Boolean {
+        return url.contains("tiktok.com", ignoreCase = true) ||
+               url.contains("vm.tiktok.com", ignoreCase = true) ||
+               url.contains("vt.tiktok.com", ignoreCase = true)
     }
 }

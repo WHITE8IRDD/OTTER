@@ -516,7 +516,9 @@ class Downloader(private val context: Context) {
                         useCaches = false
                         try {
                             setFixedLengthStreamingMode(-1)
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) {
+                            Log.v(TAG, "setFixedLengthStreamingMode not supported: ${e.message}")
+                        }
                         connect()
 
                         if (responseCode !in 200..299) {

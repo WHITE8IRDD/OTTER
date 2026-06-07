@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
@@ -140,7 +141,7 @@ fun HistoryScreen(
                     ) { item ->
                         HistoryItemCard(
                             item = item,
-                            fileExists = viewModel.fileExists(item),
+                            fileExists = remember(item) { viewModel.fileExists(item) },
                             onOpen = { viewModel.openFile(context, item) },
                             onLocate = { viewModel.locateFile(context, item) },
                             onShare = { viewModel.shareFile(context, item) },
@@ -233,6 +234,7 @@ fun HistoryItemCard(
                         AsyncImage(
                             model = item.thumbnailUrl,
                             contentDescription = "Thumbnail",
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier.size(64.dp)
                         )
                     } else {
