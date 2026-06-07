@@ -170,17 +170,19 @@ object NotificationHelper {
             action = com.otter.app.receiver.DownloadNotificationReceiver.ACTION_PAUSE
             putExtra(DownloadService.EXTRA_URL, url)
         }
+        val pauseRequestCode = (url.hashCode() and 0xFFFFFF) * 10 + 1
         val pausePendingIntent = PendingIntent.getBroadcast(
-            context, 1, pauseIntent,
+            context, pauseRequestCode, pauseIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val cancelIntent = Intent(context, com.otter.app.receiver.DownloadNotificationReceiver::class.java).apply {
-            action = "com.otter.app.CANCEL_DOWNLOAD"
+            action = com.otter.app.receiver.DownloadNotificationReceiver.ACTION_CANCEL
             putExtra(DownloadService.EXTRA_URL, url)
         }
+        val cancelRequestCode = (url.hashCode() and 0xFFFFFF) * 10 + 2
         val cancelPendingIntent = PendingIntent.getBroadcast(
-            context, 2, cancelIntent,
+            context, cancelRequestCode, cancelIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -217,17 +219,19 @@ object NotificationHelper {
             action = com.otter.app.receiver.DownloadNotificationReceiver.ACTION_RESUME
             putExtra(DownloadService.EXTRA_URL, state.url)
         }
+        val resumeRequestCode = (state.url.hashCode() and 0xFFFFFF) * 10 + 3
         val resumePendingIntent = PendingIntent.getBroadcast(
-            context, 3, resumeIntent,
+            context, resumeRequestCode, resumeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val cancelIntent = Intent(context, com.otter.app.receiver.DownloadNotificationReceiver::class.java).apply {
-            action = "com.otter.app.CANCEL_DOWNLOAD"
+            action = com.otter.app.receiver.DownloadNotificationReceiver.ACTION_CANCEL
             putExtra(DownloadService.EXTRA_URL, state.url)
         }
+        val cancelRequestCode = (state.url.hashCode() and 0xFFFFFF) * 10 + 4
         val cancelPendingIntent = PendingIntent.getBroadcast(
-            context, 4, cancelIntent,
+            context, cancelRequestCode, cancelIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 

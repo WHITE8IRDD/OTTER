@@ -42,9 +42,10 @@ class DownloadRepository(private val context: Context) {
         subtitleLangs: String = "",
         embedSubtitles: Boolean = false,
         subtitleFormat: String = "srt",
-        autoCaptionLangs: String = ""
+        autoCaptionLangs: String = "",
+        title: String = ""
     ) {
-        downloader.download(url, formatId, outputDir, onProgress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs)
+        downloader.download(url, formatId, outputDir, onProgress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title)
     }
 
     suspend fun downloadThumbnailOnly(
@@ -63,9 +64,10 @@ class DownloadRepository(private val context: Context) {
         subtitleLangs: String = "",
         embedSubtitles: Boolean = false,
         subtitleFormat: String = "srt",
-        autoCaptionLangs: String = ""
+        autoCaptionLangs: String = "",
+        title: String = ""
     ) {
-        downloader.downloadWithThumbnail(url, formatId, outputDir, onProgress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs)
+        downloader.downloadWithThumbnail(url, formatId, outputDir, onProgress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title)
     }
 
     suspend fun downloadImages(

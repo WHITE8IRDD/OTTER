@@ -80,6 +80,8 @@ class Downloader(private val context: Context) {
         val formatId: String,
         val outputDir: String,
         val title: String,
+        val uploader: String = "",
+        val thumbnailUrl: String? = null,
         var lastProgress: Float = 0f,
         var lastDownloadedBytes: Long = 0L,
         var lastTotalBytes: Long = 0L
@@ -248,12 +250,13 @@ class Downloader(private val context: Context) {
         subtitleLangs: String = "",
         embedSubtitles: Boolean = false,
         subtitleFormat: String = "srt",
-        autoCaptionLangs: String = ""
+        autoCaptionLangs: String = "",
+        title: String = ""
     ) = withContext(Dispatchers.IO) {
         val settings = readSettings()
         var attempt = 0
         var lastError: Exception? = null
-        Log.i(TAG, "download START url=$url formatId=$formatId outputDir=$outputDir")
+        Log.i(TAG, "download START url=$url formatId=$formatId outputDir=$outputDir title=$title")
 
         while (attempt <= settings.retries) {
             attempt++
@@ -286,7 +289,7 @@ class Downloader(private val context: Context) {
 
                 val processId = url.hashCode().toUInt().toString()
                 activeDownloads[url] = processId
-                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, "")
+                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, title)
                 activeDownloadInfo[url] = activeInfo
                 resetSmoothing()
 
@@ -420,7 +423,8 @@ class Downloader(private val context: Context) {
         subtitleLangs: String = "",
         embedSubtitles: Boolean = false,
         subtitleFormat: String = "srt",
-        autoCaptionLangs: String = ""
+        autoCaptionLangs: String = "",
+        title: String = ""
     ) = withContext(Dispatchers.IO) {
         val settings = readSettings()
         var attempt = 0
@@ -460,7 +464,7 @@ class Downloader(private val context: Context) {
 
                 val processId = url.hashCode().toUInt().toString()
                 activeDownloads[url] = processId
-                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, "")
+                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, title)
                 activeDownloadInfo[url] = activeInfo
                 resetSmoothing()
 
@@ -718,34 +722,47 @@ class Downloader(private val context: Context) {
     }
 
     fun pauseDownload(url: String): ActiveDownload? {
-        val info = activeDownloadInfo[url] ?: return null
-        try {
-            YoutubeDL.getInstance().destroyProcessById(info.processId)
-            Log.i(TAG, "Download paused: $url at ${info.lastProgress * 100}%")
-            activeDownloads.remove(url)
-            activeDownloadInfo.remove(url)
-            return info
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to pause download", e)
+        Log.i(TAG, "pauseDownload: called for url=$url")
+        val info = activeDownloadInfo[url]
+        if (info == null) {
+            Log.w(TAG, "pauseDownload: no active download found for $url")
             return null
         }
+        // Snapshot state BEFORE killing the process
+        val snapshot = info.copy()
+        Log.i(TAG, "pauseDownload: snapshot taken progress=${snapshot.lastProgress * 100}% bytes=${snapshot.lastDownloadedBytes}/${snapshot.lastTotalBytes}")
+        // Kill the process
+        try {
+            YoutubeDL.getInstance().destroyProcessById(snapshot.processId)
+            Log.i(TAG, "pauseDownload: process ${snapshot.processId} destroyed for $url")
+        } catch (e: Throwable) {
+            Log.w(TAG, "pauseDownload: destroyProcessById threw: ${e.message}")
+        }
+        activeDownloads.remove(url)
+        activeDownloadInfo.remove(url)
+        Log.i(TAG, "pauseDownload: complete for $url")
+        return snapshot
     }
 
     fun stopDownload(url: String) {
+        Log.i(TAG, "stopDownload: called for url=$url")
         val info = activeDownloadInfo[url]
         val processId = activeDownloads[url]
         if (processId != null) {
             try {
                 YoutubeDL.getInstance().destroyProcessById(processId)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to stop download process", e)
+                Log.i(TAG, "stopDownload: process $processId destroyed")
+            } catch (e: Throwable) {
+                Log.w(TAG, "stopDownload: destroyProcessById threw: ${e.message}")
             }
         }
         activeDownloads.remove(url)
         activeDownloadInfo.remove(url)
         if (info != null) {
             cleanupPartialFiles(info.outputDir)
+            Log.i(TAG, "stopDownload: partial files cleaned up")
         }
+        Log.i(TAG, "stopDownload: complete for $url")
     }
 
     fun cancelDownload(url: String) {

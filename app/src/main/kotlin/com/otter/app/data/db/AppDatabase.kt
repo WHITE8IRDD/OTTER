@@ -9,7 +9,7 @@ import com.otter.app.data.model.DownloadItem
 
 @Database(
     entities = [DownloadItem::class, PausedDownload::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
