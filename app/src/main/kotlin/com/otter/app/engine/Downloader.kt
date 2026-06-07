@@ -9,6 +9,7 @@ import com.otter.app.data.model.DownloadState
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
@@ -73,6 +74,7 @@ class Downloader(private val context: Context) {
     private val preferences = UserPreferences(context)
     private val activeDownloads = ConcurrentHashMap<String, String>()
     private val activeDownloadInfo = ConcurrentHashMap<String, ActiveDownload>()
+    private val intentionallyCancelled = ConcurrentHashMap<String, Boolean>()
 
     data class ActiveDownload(
         val processId: String,
@@ -203,8 +205,23 @@ class Downloader(private val context: Context) {
 
     private fun copyToExternal(internalPath: String, outputDir: String): String {
         val srcFile = File(internalPath)
-        val destFile = File(outputDir, srcFile.name)
-        srcFile.copyTo(destFile, overwrite = true)
+        var destFile = File(outputDir, srcFile.name)
+        // Delete existing file at destination if present (more reliable than copyTo overwrite on some devices)
+        if (destFile.exists()) {
+            destFile.delete()
+        }
+        // If delete failed or file still exists, add a numeric suffix
+        if (destFile.exists()) {
+            var counter = 1
+            val name = srcFile.nameWithoutExtension
+            val ext = srcFile.extension
+            while (destFile.exists()) {
+                destFile = File(outputDir, "${name} ($counter).$ext")
+                counter++
+            }
+        }
+        srcFile.copyTo(destFile)
+        Log.i(TAG, "copyToExternal: $internalPath -> $destFile")
         com.otter.app.util.FileHelper.scanFile(context, destFile.absolutePath)
         return destFile.absolutePath
     }
@@ -255,7 +272,6 @@ class Downloader(private val context: Context) {
     ) = withContext(Dispatchers.IO) {
         val settings = readSettings()
         var attempt = 0
-        var lastError: Exception? = null
         Log.i(TAG, "download START url=$url formatId=$formatId outputDir=$outputDir title=$title")
 
         while (attempt <= settings.retries) {
@@ -344,10 +360,16 @@ class Downloader(private val context: Context) {
                 }
                 return@withContext
 
-            } catch (e: Exception) {
-                lastError = e
-                activeDownloads.remove(url)
+                } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 val msg = e.message ?: ""
+                // If process was killed intentionally by pause/stop, don't emit Error
+                if (intentionallyCancelled.remove(url) == true) {
+                    Log.i(TAG, "download cancelled intentionally for $url (pause/stop)")
+                    activeDownloads.remove(url)
+                    return@withContext
+                }
+                activeDownloads.remove(url)
 
                 if (!isRecoverableError(msg) || attempt > settings.retries) {
                     Log.e(TAG, "Non-recoverable or max retries reached for $url: $msg")
@@ -428,7 +450,6 @@ class Downloader(private val context: Context) {
     ) = withContext(Dispatchers.IO) {
         val settings = readSettings()
         var attempt = 0
-        var lastError: Exception? = null
 
         while (attempt <= settings.retries) {
             attempt++
@@ -523,10 +544,16 @@ class Downloader(private val context: Context) {
                 }
                 return@withContext
 
-            } catch (e: Exception) {
-                lastError = e
-                activeDownloads.remove(url)
+                } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 val msg = e.message ?: ""
+                // If process was killed intentionally by pause/stop, don't emit Error
+                if (intentionallyCancelled.remove(url) == true) {
+                    Log.i(TAG, "downloadWithThumbnail cancelled intentionally for $url (pause/stop)")
+                    activeDownloads.remove(url)
+                    return@withContext
+                }
+                activeDownloads.remove(url)
 
                 if (!isRecoverableError(msg) || attempt > settings.retries) {
                     val errorMsg = if (attempt > 1) context.getString(R.string.failed_after_retries, settings.retries, e.message ?: context.getString(R.string.download_failed_text))
@@ -672,7 +699,7 @@ class Downloader(private val context: Context) {
                         try {
                             setFixedLengthStreamingMode(-1)
                         } catch (e: Exception) {
-                            Log.v(TAG, "setFixedLengthStreamingMode not supported: ${e.message}")
+                            Log.d(TAG, "setFixedLengthStreamingMode not supported: ${e.message}")
                         }
                         connect()
 
@@ -728,6 +755,8 @@ class Downloader(private val context: Context) {
             Log.w(TAG, "pauseDownload: no active download found for $url")
             return null
         }
+        // Mark as intentionally cancelled
+        intentionallyCancelled[url] = true
         // Snapshot state BEFORE killing the process
         val snapshot = info.copy()
         Log.i(TAG, "pauseDownload: snapshot taken progress=${snapshot.lastProgress * 100}% bytes=${snapshot.lastDownloadedBytes}/${snapshot.lastTotalBytes}")
@@ -748,6 +777,7 @@ class Downloader(private val context: Context) {
         Log.i(TAG, "stopDownload: called for url=$url")
         val info = activeDownloadInfo[url]
         val processId = activeDownloads[url]
+        intentionallyCancelled[url] = true
         if (processId != null) {
             try {
                 YoutubeDL.getInstance().destroyProcessById(processId)
@@ -758,15 +788,19 @@ class Downloader(private val context: Context) {
         }
         activeDownloads.remove(url)
         activeDownloadInfo.remove(url)
-        if (info != null) {
-            cleanupPartialFiles(info.outputDir)
-            Log.i(TAG, "stopDownload: partial files cleaned up")
-        }
-        Log.i(TAG, "stopDownload: complete for $url")
+        // .part files are NOT deleted — preserved for potential resume from History
+        Log.i(TAG, "stopDownload: complete for $url (.part files preserved)")
     }
 
     fun cancelDownload(url: String) {
+        intentionallyCancelled[url] = true
         stopDownload(url)
+    }
+
+    fun getActiveDownload(url: String): ActiveDownload? = activeDownloadInfo[url]
+
+    fun wasIntentionallyCancelled(url: String): Boolean {
+        return intentionallyCancelled.containsKey(url)
     }
 
     fun cleanupPartialFiles(outputDir: String) {
@@ -776,6 +810,46 @@ class Downloader(private val context: Context) {
                 ?.forEach { it.delete(); Log.i(TAG, "Deleted partial: ${it.name}") }
         } catch (e: Exception) {
             Log.w(TAG, "cleanupPartialFiles error: ${e.message}")
+        }
+    }
+
+    fun cleanupPartialFile(outputDir: String, resolvedFilename: String) {
+        if (resolvedFilename.isBlank()) return
+        try {
+            val partFile = File(outputDir, "$resolvedFilename.part")
+            val ytdlFile = File(outputDir, "$resolvedFilename.ytdl")
+            if (partFile.exists()) { partFile.delete(); Log.i(TAG, "[CLEANUP] Deleted .part: ${partFile.absolutePath}") }
+            if (ytdlFile.exists()) { ytdlFile.delete(); Log.i(TAG, "[CLEANUP] Deleted .ytdl: ${ytdlFile.absolutePath}") }
+        } catch (e: Exception) {
+            Log.w(TAG, "cleanupPartialFile error: ${e.message}")
+        }
+    }
+
+    fun detectResolvedFilename(outputDir: String): String? {
+        return try {
+            val dir = File(outputDir)
+            val partFiles = dir.listFiles { f -> f.name.endsWith(".part") && f.length() > 0 }
+            if (partFiles.isNullOrEmpty()) return null
+            val latest = partFiles.maxByOrNull { it.lastModified() } ?: return null
+            latest.name.removeSuffix(".part").also {
+                Log.i(TAG, "[DETECT] Found recent .part file: ${latest.name} -> resolved=$it")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "detectResolvedFilename error: ${e.message}")
+            null
+        }
+    }
+
+    fun checkPartFileExists(outputDir: String, resolvedFilename: String): Boolean {
+        if (resolvedFilename.isBlank()) return false
+        return try {
+            val partFile = File(outputDir, "$resolvedFilename.part")
+            val exists = partFile.exists() && partFile.length() > 0
+            Log.i(TAG, "[CHECK-PART] ${partFile.absolutePath} exists=$exists size=${if (exists) partFile.length() else 0}")
+            exists
+        } catch (e: Exception) {
+            Log.w(TAG, "checkPartFileExists error: ${e.message}")
+            false
         }
     }
 

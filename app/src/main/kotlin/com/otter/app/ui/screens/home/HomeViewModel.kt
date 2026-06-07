@@ -13,6 +13,7 @@ import com.otter.app.data.model.VideoFormat
 import com.otter.app.data.model.VideoInfo
 import com.otter.app.data.model.AudioTrack
 import com.otter.app.data.repository.DownloadRepository
+import com.otter.app.service.ActiveDownloadStateHolder
 import com.otter.app.service.DownloadService
 import com.otter.app.service.DownloadStateHolder
 import com.otter.app.R
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -86,6 +88,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var fetchJob: Job? = null
     private var debounceJob: Job? = null
     private var lastProgressUpdate = 0L
+
+    // Observe shared active download state (mirrors from History-triggered downloads)
+    val activeDownloadState: StateFlow<DownloadState> = ActiveDownloadStateHolder.activeDownloadState
+    val activeDownloadTitle: StateFlow<String?> = ActiveDownloadStateHolder.activeDownloadTitle
+    val activeDownloadUrl: StateFlow<String?> = ActiveDownloadStateHolder.activeDownloadUrl
+
+    // Combined: show active download if present, otherwise local fetch/download state
+    val displayState: StateFlow<DownloadState> = combine(
+        activeDownloadState, _downloadState
+    ) { active, local ->
+        when {
+            active !is DownloadState.Idle -> active
+            else -> local
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, DownloadState.Idle)
 
     val downloadPath: StateFlow<String> = repository.downloadPath
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
@@ -427,9 +444,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 _downloadState.value = state
-                if (state is DownloadState.Paused) {
-                    downloadObserverJob?.cancel()
-                }
                 if (state is DownloadState.Success) {
                     FileHelper.scanFile(getApplication(), state.filePath)
                     if (_alsoSaveThumbnail.value) {
@@ -485,6 +499,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             putExtra(DownloadService.EXTRA_URL, url)
         }
         getApplication<Application>().startService(intent)
+        // Re-establish observer so progress bar updates after resume
+        downloadObserverJob?.cancel()
+        downloadObserverJob = viewModelScope.launch {
+            DownloadStateHolder.state.collect { state ->
+                if (state is DownloadState.Downloading) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastProgressUpdate < 200L) return@collect
+                    lastProgressUpdate = now
+                }
+                _downloadState.value = state
+            }
+        }
     }
 
     fun onStopDownload() {

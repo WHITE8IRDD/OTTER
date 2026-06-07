@@ -40,6 +40,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -126,6 +128,8 @@ fun HomeScreen(
     val context = LocalContext.current
     val urlInput by viewModel.urlInput.collectAsStateWithLifecycle()
     val downloadState by viewModel.downloadState.collectAsStateWithLifecycle()
+    val displayState by viewModel.displayState.collectAsStateWithLifecycle()
+    val activeDownloadTitle by viewModel.activeDownloadTitle.collectAsStateWithLifecycle()
     val showFormatSheet by viewModel.showFormatSheet.collectAsStateWithLifecycle()
     val currentVideoInfo by viewModel.currentVideoInfo.collectAsStateWithLifecycle()
     val alsoSaveThumbnail by viewModel.alsoSaveThumbnail.collectAsStateWithLifecycle()
@@ -174,6 +178,15 @@ fun HomeScreen(
         }
     }
 
+    val scrollState = rememberScrollState()
+
+    // Auto-scroll to top when active download appears
+    LaunchedEffect(displayState) {
+        if (displayState is DownloadState.Downloading || displayState is DownloadState.Paused) {
+            scrollState.animateScrollTo(0)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -182,7 +195,7 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 24.dp)
                 .padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -348,20 +361,42 @@ fun HomeScreen(
                 }
             }
 
-            if (urlInput.isEmpty() && downloadState is DownloadState.Idle && currentVideoInfo == null) {
-                MascotEmptyState(logoTint = logoTint)
-            }
+            // ─── PROGRESS / FETCHING / DOWNLOAD / PAUSE — FIXED POSITION ───────
+            // Always rendered right after URL input, regardless of trigger source
 
             AnimatedVisibility(
-                visible = downloadState is DownloadState.FetchingInfo,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut() + slideOutVertically()
+                visible = displayState is DownloadState.FetchingInfo ||
+                          displayState is DownloadState.Downloading ||
+                          displayState is DownloadState.Paused,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
             ) {
-                MascotFetchingState(
-                    logoTint = logoTint,
-                    message = fetchingMessage,
-                    onCancel = viewModel::cancelFetch
-                )
+                when (val state = displayState) {
+                    is DownloadState.FetchingInfo -> {
+                        MascotFetchingState(
+                            logoTint = logoTint,
+                            message = state.message,
+                            onCancel = viewModel::cancelFetch
+                        )
+                    }
+                    is DownloadState.Downloading, is DownloadState.Paused -> {
+                        ProgressCard(
+                            title = activeDownloadTitle ?: currentVideoInfo?.title ?: urlInput,
+                            state = state,
+                            onPause = { viewModel.onPauseDownload() },
+                            onResume = { viewModel.onResumeDownload() },
+                            onCancel = { viewModel.onStopDownload() }
+                        )
+                    }
+                    else -> {}
+                }
+            }
+
+            // ─── BELOW THE PROGRESS CARD ────────────────────────────────────────
+
+            if (urlInput.isEmpty() && downloadState is DownloadState.Idle && currentVideoInfo == null
+                && displayState is DownloadState.Idle) {
+                MascotEmptyState(logoTint = logoTint)
             }
 
             if (downloadState is DownloadState.InfoReady && currentVideoInfo != null) {
@@ -397,23 +432,6 @@ fun HomeScreen(
                             )
                         }
                     }
-                }
-            }
-
-            AnimatedVisibility(
-                visible = downloadState is DownloadState.Downloading || downloadState is DownloadState.Paused,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut() + slideOutVertically()
-            ) {
-                val state = downloadState
-                if (state is DownloadState.Downloading || state is DownloadState.Paused) {
-                    ProgressCard(
-                        title = currentVideoInfo?.title ?: urlInput,
-                        state = state,
-                        onPause = viewModel::onPauseDownload,
-                        onResume = viewModel::onResumeDownload,
-                        onCancel = viewModel::onStopDownload
-                    )
                 }
             }
 
@@ -596,6 +614,26 @@ private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -
         label = "search_rotate"
     )
 
+    // Stage progression for perceived speed
+    var stage by remember { mutableStateOf<Int>(0) }
+    val stageMessages = listOf(
+        message,
+        stringResource(R.string.fetch_stage_connecting),
+        stringResource(R.string.fetch_stage_reading),
+        stringResource(R.string.fetch_stage_parsing),
+        stringResource(R.string.fetch_stage_finishing)
+    )
+    LaunchedEffect(Unit) {
+        stage = 0
+        kotlinx.coroutines.delay(800)
+        if (stage == 0) stage = 1
+        kotlinx.coroutines.delay(1200)
+        if (stage == 1) stage = 2
+        kotlinx.coroutines.delay(1500)
+        if (stage == 2) stage = 3
+    }
+    LaunchedEffect(message) { stage = 0 }
+
     BrutalCard(
         modifier = Modifier.fillMaxWidth(),
         backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -619,7 +657,7 @@ private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -
                 tint = logoTint
             )
             Text(
-                text = message,
+                text = stageMessages.getOrElse(stage) { message },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
@@ -634,6 +672,8 @@ private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -
         }
     }
 }
+
+
 
 @Composable
 private fun MascotErrorState(

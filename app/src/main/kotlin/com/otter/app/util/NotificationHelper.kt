@@ -8,9 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.media.MediaPlayer
-import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
@@ -19,6 +17,7 @@ import android.os.Vibrator
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.otter.app.MainActivity
 import com.otter.app.R
 import com.otter.app.data.model.DownloadState
@@ -30,6 +29,7 @@ object NotificationHelper {
     const val CHANNEL_COMPLETE = "channel_cmpl_v5"
     const val NOTIFICATION_ID_DOWNLOAD = 1001
     const val NOTIFICATION_ID_COMPLETE = 1002
+    const val NOTIFICATION_ID_ERROR = 1003
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -40,7 +40,7 @@ object NotificationHelper {
                 "channel_dl_v3", "channel_cmpl_v3",
                 "channel_dl_v4", "channel_cmpl_v4")) {
             try { manager.deleteNotificationChannel(oldId) } catch (e: Exception) {
-                Log.v(TAG, "Failed to delete old channel $oldId: ${e.message}")
+                Log.d(TAG, "Failed to delete old channel $oldId: ${e.message}")
             }
         }
 
@@ -209,6 +209,23 @@ object NotificationHelper {
             .build()
     }
 
+    fun buildResumingNotification(
+        context: Context,
+        title: String,
+        largeIcon: Bitmap? = null
+    ): android.app.Notification {
+        return NotificationCompat.Builder(context, CHANNEL_DOWNLOAD)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(largeIcon)
+            .setContentTitle(title)
+            .setContentText(context.getString(R.string.resuming_download))
+            .setProgress(100, 0, true)
+            .setOngoing(true)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .build()
+    }
+
     fun buildPausedNotification(
         context: Context,
         title: String,
@@ -347,7 +364,15 @@ object NotificationHelper {
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID_COMPLETE + 1, notification)
+        manager.notify(NOTIFICATION_ID_ERROR, notification)
         playNotificationSound(context)
+    }
+
+    fun cancelErrorNotification(context: Context) {
+        try {
+            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_ERROR)
+        } catch (e: Throwable) {
+            Log.w(TAG, "cancelErrorNotification failed", e)
+        }
     }
 }

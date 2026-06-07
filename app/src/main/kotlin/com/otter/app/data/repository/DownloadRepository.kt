@@ -119,4 +119,24 @@ class DownloadRepository(private val context: Context) {
     fun stopDownload(url: String) {
         downloader.stopDownload(url)
     }
+
+    fun wasIntentionallyCancelled(url: String): Boolean {
+        return downloader.wasIntentionallyCancelled(url)
+    }
+
+    fun getActiveDownload(url: String): Downloader.ActiveDownload? {
+        return downloader.getActiveDownload(url)
+    }
+
+    fun cleanupPartialFiles(outputDir: String) {
+        downloader.cleanupPartialFiles(outputDir)
+    }
+
+    fun detectResolvedFilename(outputDir: String): String? {
+        return downloader.detectResolvedFilename(outputDir)
+    }
+
+    fun checkPartFileExists(outputDir: String, resolvedFilename: String): Boolean {
+        return downloader.checkPartFileExists(outputDir, resolvedFilename)
+    }
 }

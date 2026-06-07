@@ -184,13 +184,10 @@
 
     <!-- LoginActivity -->
     <string name="login_cookies_saved">تم حفظ الكوكيز!</string>
-    <string name="cookie_file_header"># Netscape HTTP Cookie File</string>
-    <string name="cookie_file_auto_gen"># تم الإنشاء تلقائياً بواسطة Otter</string>
+<string name="cookie_file_auto_gen"># تم الإنشاء تلقائياً بواسطة Otter</string>
 
     <!-- ProgressCard -->
-    <string name="downloading">جارٍ التنزيل…</string>
-
-    <!-- FormatSheet -->
+<!-- FormatSheet -->
     <string name="choose_quality">اختر الجودة</string>
     <string name="section_hashtags">الوسوم</string>
     <string name="section_tags">العلامات</string>
@@ -225,8 +222,7 @@
     <string name="no_valid_url">لم يتم العثور على رابط صالح</string>
 
     <!-- NotificationHelper -->
-    <string name="eta_seconds">%s • ثانية متبقية</string>
-    <string name="notif_cancel">إلغاء</string>
+<string name="notif_cancel">إلغاء</string>
     <string name="notif_open">فتح</string>
     <string name="notif_share">مشاركة</string>
     <string name="notif_show_folder">عرض في المجلد</string>
@@ -241,14 +237,12 @@
     <string name="default_video_title">فيديو</string>
 
     <!-- Downloader -->
-    <string name="retrying">إعادة المحاولة (%1$d/%2$d)</string>
-    <string name="download_file_missing">اكتمل التنزيل ولكن لم يتم العثور على الملف. تحقق من أذونات التخزين.</string>
+<string name="download_file_missing">اكتمل التنزيل ولكن لم يتم العثور على الملف. تحقق من أذونات التخزين.</string>
     <string name="failed_after_retries">فشل بعد %1$d محاولة: %2$s</string>
     <string name="download_failed_text">فشل التنزيل</string>
     <string name="thumbnail_download_failed">فشل تنزيل الصورة المصغرة</string>
     <string name="creating_output_dir_failed">فشل إنشاء مجلد الإخراج</string>
-    <string name="image_progress">%1$d/%2$d صور</string>
-    <string name="failed_all_images">فشل تنزيل جميع الصور</string>
+<string name="failed_all_images">فشل تنزيل جميع الصور</string>
 
     <!-- FileHelper -->
     <string name="open_with">فتح بواسطة</string>
@@ -258,16 +252,11 @@
     <string name="share_via">مشاركة عبر</string>
 
     <!-- FormatParser -->
-    <string name="instagram_default_title">منشور Instagram</string>
-    <string name="almost_there">تقريباً…</string>
-    <string name="one_more_try">محاولة أخرى…</string>
-    <string name="still_trying">لا يزال جارياً…</string>
-    <string name="unknown_format">غير معروف</string>
-    <string name="best_video">أفضل فيديو</string>
-    <string name="best_audio">أفضل صوت</string>
-    <string name="best_video_audio">أفضل فيديو + صوت (موصى به)</string>
-    <string name="muxed">مدمج</string>
-    <string name="best_available">الأفضل المتاح (موصى به)</string>
+<string name="almost_there">تقريباً…</string>
+<string name="still_trying">لا يزال جارياً…</string>
+<string name="best_video">أفضل فيديو</string>
+<string name="best_video_audio">أفضل فيديو + صوت (موصى به)</string>
+<string name="best_available">الأفضل المتاح (موصى به)</string>
 
     <!-- YtDlpUpdater -->
     <string name="update_checking">جارٍ التحقق من التحديثات…</string>
@@ -277,15 +266,36 @@
     <string name="update_unknown_error">خطأ غير معروف</string>
 
     <!-- VideoInfo Platform Names -->
-    <string name="platform_youtube">YouTube</string>
-    <string name="platform_twitter">تويتر/X</string>
-    <string name="platform_instagram">Instagram</string>
-    <string name="platform_tiktok">TikTok</string>
-    <string name="platform_facebook">Facebook</string>
-    <string name="platform_reddit">Reddit</string>
-    <string name="platform_twitch">Twitch</string>
-    <string name="platform_vimeo">Vimeo</string>
-    <string name="platform_soundcloud">SoundCloud</string>
-    <string name="platform_bandcamp">Bandcamp</string>
-    <string name="platform_generic">عام</string>
+<string name="platform_twitter">تويتر/X</string>
+<string name="platform_tiktok">TikTok</string>
+<string name="platform_reddit">Reddit</string>
+<string name="platform_vimeo">Vimeo</string>
+<string name="platform_bandcamp">Bandcamp</string>
+<!-- Progress -->
+    <string name="progress_preparing">جارٍ التجهيز…</string>
+    <string name="progress_downloading">جارٍ التنزيل</string>
+    <string name="progress_merging">جارٍ دمج الصوت والفيديو…</string>
+    <string name="progress_finalizing">جارٍ إنهاء…</string>
+    <string name="progress_finishing">أوشكنا على الانتهاء…</string>
+    <string name="progress_paused">متوقف مؤقتاً</string>
+    <string name="progress_eta">متبقي %s</string>
+    <string name="notif_progress_content">%d%% • %s</string>
+    <string name="notif_progress_sub">%s • متبقي %s</string>
+    <string name="notif_paused_title">%s (متوقف مؤقتاً)</string>
+    <string name="notif_paused_content">%d%% • اضغط استئناف للمتابعة</string>
+    <string name="pause">إيقاف مؤقت</string>
+    <string name="resume">استئناف</string>
+    <string name="stop">إيقاف</string>
+    <string name="paused_downloads">التنزيلات المتوقفة مؤقتاً</string>
+    <string name="tap_resume">اضغط استئناف للمتابعة</string>
+    <string name="retry_download">إعادة المحاولة</string>
+    <string name="stopped_at_percent">توقف عند %1$d%%</string>
+    <string name="failed">فشل</string>
+    <string name="resuming_download">جاري استئناف التنزيل…</string>
+    <string name="resume_error_title">فشل الاستئناف</string>
+    <string name="resume_error_unknown">تعذر استئناف التنزيل</string>
+    <string name="fetch_stage_connecting">جارٍ الاتصال…</string>
+    <string name="fetch_stage_reading">جارٍ قراءة معلومات الفيديو…</string>
+    <string name="fetch_stage_parsing">جارٍ تحليل التنسيقات…</string>
+    <string name="fetch_stage_finishing">على وشك الانتهاء…</string>
 </resources>

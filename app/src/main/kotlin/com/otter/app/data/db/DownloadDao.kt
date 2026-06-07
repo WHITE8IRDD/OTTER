@@ -30,4 +30,10 @@ interface DownloadDao {
 
     @Query("DELETE FROM downloads WHERE filePath = :filePath")
     suspend fun deleteByFilePath(filePath: String)
+
+    @Query("UPDATE downloads SET canResume = :canResume WHERE url = :url")
+    suspend fun updateCanResume(url: String, canResume: Boolean)
+
+    @Query("UPDATE downloads SET outputDir = :outputDir, resolvedFilename = :resolvedFilename, canResume = :canResume WHERE url = :url")
+    suspend fun updateResumeMetadata(url: String, outputDir: String, resolvedFilename: String, canResume: Boolean)
 }

@@ -50,21 +50,33 @@ class FormatParser(private val context: Context? = null) {
         suspend fun warmUpEngine(context: Context) {
             if (engineWarmed) return
             try {
-                Log.i(TAG, "Pre-warming 𝘈𝘝® engine...")
+                Log.i(TAG, "[WARMUP] Pre-warming engine start...")
                 YoutubeDL.getInstance().init(context)
-                val request = YoutubeDLRequest("https://www.youtube.com/watch?v=dQw4w9WgXcQ").apply {
-                    addOption("--skip-download")
-                    addOption("--no-warnings")
-                    addOption("--dump-json")
-                    addOption("--no-playlist")
-                    addOption("--socket-timeout", "5")
-                    addOption("--extractor-retries", "1")
+
+                // Step 1: Quick version check to load binary
+                val versionRequest = YoutubeDLRequest("").apply { addOption("--version") }
+                YoutubeDL.getInstance().execute(versionRequest)
+                Log.i(TAG, "[WARMUP] yt-dlp binary loaded")
+
+                // Step 2: Quick simulated YouTube fetch to pre-load extractors
+                try {
+                    val warmRequest = YoutubeDLRequest("https://www.youtube.com/watch?v=dQw4w9WgXcQ").apply {
+                        addOption("--skip-download")
+                        addOption("--no-warnings")
+                        addOption("--dump-json")
+                        addOption("--no-playlist")
+                        addOption("--socket-timeout", "5")
+                        addOption("--extractor-retries", "1")
+                    }
+                    YoutubeDL.getInstance().getInfo(warmRequest)
+                } catch (e: Exception) {
+                    Log.w(TAG, "[WARMUP] YouTube warmup failed (non-fatal)", e)
                 }
-                YoutubeDL.getInstance().getInfo(request)
+
                 engineWarmed = true
-                Log.i(TAG, "𝘈𝘝® engine pre-warmed successfully")
+                Log.i(TAG, "[WARMUP] Engine pre-warmed successfully")
             } catch (e: Exception) {
-                Log.w(TAG, "Engine pre-warm failed (ignored)", e)
+                Log.w(TAG, "[WARMUP] Engine pre-warm failed (ignored)", e)
             }
         }
     }
@@ -122,17 +134,13 @@ class FormatParser(private val context: Context? = null) {
             Log.i(TAG, "Scraper returned empty, falling back to yt-dlp")
         }
 
-        val delays = listOf(500L, 1000L, 2000L, 3000L)
+        val delays = listOf(500L, 2000L)
         val maxAttempts = 1 + delays.size
         var lastError: Exception? = null
 
         for (attempt in 1..maxAttempts) {
             if (attempt > 1) {
-                val msg = when (attempt) {
-                    2 -> "Almost there\u2026"
-                    3 -> "One more try\u2026"
-                    else -> "Still trying\u2026"
-                }
+                val msg = if (attempt == 2) "Retrying\u2026" else "Almost there\u2026"
                 onRetryMessage?.invoke(msg)
                 delay(delays[attempt - 2])
             }
@@ -147,11 +155,20 @@ class FormatParser(private val context: Context? = null) {
                     }
                     addOption("--skip-download")
                     addOption("--no-warnings")
+                    addOption("--no-call-home")
+                    addOption("--no-check-certificate")
                     addOption("--no-write-info-json")
                     addOption("--no-write-description")
                     addOption("--no-write-thumbnail")
-                    addOption("--socket-timeout", "8")
+                    addOption("--extractor-retries", "1")
                     addOption("--flat-playlist")
+
+                    // Platform-specific timeouts
+                    when {
+                        url.contains("instagram.com") -> addOption("--socket-timeout", "8")
+                        url.contains("facebook.com") || url.contains("fb.watch") -> addOption("--socket-timeout", "8")
+                        else -> addOption("--socket-timeout", "5")
+                    }
 
                     if (context != null) {
                         val cookieFile = File(context.filesDir, "cookies.txt")
@@ -161,13 +178,18 @@ class FormatParser(private val context: Context? = null) {
                     }
                 }
 
+                val ytExecStart = System.currentTimeMillis()
                 val ytResponse = YoutubeDL.getInstance().execute(request, null, null)
+                val ytExecTime = System.currentTimeMillis() - ytExecStart
+                Log.i(TAG, "[FETCH] yt-dlp execute returned in ${ytExecTime}ms attempt=$attempt")
                 val videoInfo = YoutubeDL.objectMapper.readValue(
                     ytResponse.out,
                     com.yausername.youtubedl_android.mapper.VideoInfo::class.java
                 )
+                val parseStart = System.currentTimeMillis()
                 val rawJson = JSONObject(ytResponse.out)
                 val playlistCount = rawJson.optInt("playlist_count", 0)
+                Log.i(TAG, "[FETCH] JSON parse took ${System.currentTimeMillis() - parseStart}ms")
 
                 val formats = parseFormats(videoInfo)
                 val subtitleTracks = parseSubtitleTracks(ytResponse.out)

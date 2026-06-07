@@ -184,13 +184,10 @@
 
     <!-- LoginActivity -->
     <string name="login_cookies_saved">Cookies enregistrés !</string>
-    <string name="cookie_file_header"># Netscape HTTP Cookie File</string>
-    <string name="cookie_file_auto_gen"># Généré automatiquement par Otter</string>
+<string name="cookie_file_auto_gen"># Généré automatiquement par Otter</string>
 
     <!-- ProgressCard -->
-    <string name="downloading">Téléchargement…</string>
-
-    <!-- FormatSheet -->
+<!-- FormatSheet -->
     <string name="choose_quality">CHOISIR LA QUALITÉ</string>
     <string name="section_hashtags">Hashtags</string>
     <string name="section_tags">Tags</string>
@@ -225,8 +222,7 @@
     <string name="no_valid_url">Aucune URL valide trouvée</string>
 
     <!-- NotificationHelper -->
-    <string name="eta_seconds">%s • s restantes</string>
-    <string name="notif_cancel">Annuler</string>
+<string name="notif_cancel">Annuler</string>
     <string name="notif_open">Ouvrir</string>
     <string name="notif_share">Partager</string>
     <string name="notif_show_folder">Afficher dans le dossier</string>
@@ -241,14 +237,12 @@
     <string name="default_video_title">Vidéo</string>
 
     <!-- Downloader -->
-    <string name="retrying">Nouvelle tentative (%1$d/%2$d)</string>
-    <string name="download_file_missing">Téléchargement terminé mais fichier introuvable. Vérifiez les autorisations de stockage.</string>
+<string name="download_file_missing">Téléchargement terminé mais fichier introuvable. Vérifiez les autorisations de stockage.</string>
     <string name="failed_after_retries">Échec après %1$d tentative(s) : %2$s</string>
     <string name="download_failed_text">Échec du téléchargement</string>
     <string name="thumbnail_download_failed">Échec du téléchargement de la miniature</string>
     <string name="creating_output_dir_failed">Impossible de créer le répertoire de sortie</string>
-    <string name="image_progress">%1$d/%2$d images</string>
-    <string name="failed_all_images">Échec du téléchargement de toutes les images</string>
+<string name="failed_all_images">Échec du téléchargement de toutes les images</string>
 
     <!-- FileHelper -->
     <string name="open_with">Ouvrir avec</string>
@@ -258,16 +252,11 @@
     <string name="share_via">Partager via</string>
 
     <!-- FormatParser -->
-    <string name="instagram_default_title">Publication Instagram</string>
-    <string name="almost_there">Presque…</string>
-    <string name="one_more_try">Encore un essai…</string>
-    <string name="still_trying">Toujours en cours…</string>
-    <string name="unknown_format">Inconnu</string>
-    <string name="best_video">Meilleure vidéo</string>
-    <string name="best_audio">Meilleur audio</string>
-    <string name="best_video_audio">Meilleure vidéo + audio (recommandé)</string>
-    <string name="muxed">Mixé</string>
-    <string name="best_available">Meilleur disponible (recommandé)</string>
+<string name="almost_there">Presque…</string>
+<string name="still_trying">Toujours en cours…</string>
+<string name="best_video">Meilleure vidéo</string>
+<string name="best_video_audio">Meilleure vidéo + audio (recommandé)</string>
+<string name="best_available">Meilleur disponible (recommandé)</string>
 
     <!-- YtDlpUpdater -->
     <string name="update_checking">Vérification des mises à jour…</string>
@@ -277,15 +266,36 @@
     <string name="update_unknown_error">Erreur inconnue</string>
 
     <!-- VideoInfo Platform Names -->
-    <string name="platform_youtube">YouTube</string>
-    <string name="platform_twitter">Twitter/X</string>
-    <string name="platform_instagram">Instagram</string>
-    <string name="platform_tiktok">TikTok</string>
-    <string name="platform_facebook">Facebook</string>
-    <string name="platform_reddit">Reddit</string>
-    <string name="platform_twitch">Twitch</string>
-    <string name="platform_vimeo">Vimeo</string>
-    <string name="platform_soundcloud">SoundCloud</string>
-    <string name="platform_bandcamp">Bandcamp</string>
-    <string name="platform_generic">Générique</string>
+<string name="platform_twitter">Twitter/X</string>
+<string name="platform_tiktok">TikTok</string>
+<string name="platform_reddit">Reddit</string>
+<string name="platform_vimeo">Vimeo</string>
+<string name="platform_bandcamp">Bandcamp</string>
+<!-- Progress -->
+    <string name="progress_preparing">Préparation…</string>
+    <string name="progress_downloading">Téléchargement</string>
+    <string name="progress_merging">Fusion audio+vidéo…</string>
+    <string name="progress_finalizing">Finalisation…</string>
+    <string name="progress_finishing">Presque terminé…</string>
+    <string name="progress_paused">En pause</string>
+    <string name="progress_eta">%s restant</string>
+    <string name="notif_progress_content">%d%% • %s</string>
+    <string name="notif_progress_sub">%s • %s restant</string>
+    <string name="notif_paused_title">%s (En pause)</string>
+    <string name="notif_paused_content">%d%% • Appuyez sur Reprendre</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Reprendre</string>
+    <string name="stop">Arrêter</string>
+    <string name="paused_downloads">Téléchargements en pause</string>
+    <string name="tap_resume">Appuyez sur Reprendre</string>
+    <string name="retry_download">Réessayer</string>
+    <string name="stopped_at_percent">Arrêté à %1$d%%</string>
+    <string name="failed">Échec</string>
+    <string name="resuming_download">Reprise du téléchargement…</string>
+    <string name="resume_error_title">Échec de la reprise</string>
+    <string name="resume_error_unknown">Impossible de reprendre le téléchargement</string>
+    <string name="fetch_stage_connecting">Connexion…</string>
+    <string name="fetch_stage_reading">Lecture des infos…</string>
+    <string name="fetch_stage_parsing">Analyse des formats…</string>
+    <string name="fetch_stage_finishing">Presque fini…</string>
 </resources>

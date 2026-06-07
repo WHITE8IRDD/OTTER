@@ -79,7 +79,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:icon="@mipmap/ic_launcher"
-            android:label="Quick Download"
+            android:label="@string/quick_download_title"
             android:launchMode="singleInstance"
             android:noHistory="true"
             android:theme="@style/Theme.Otter.Transparent">

@@ -21,7 +21,7 @@ class LocaleManager(base: Context) : ContextWrapper(base) {
 
         fun setPersistedLanguage(context: Context, lang: String) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit().putString(KEY_LANGUAGE, lang).commit()
+                .edit().putString(KEY_LANGUAGE, lang).apply()
         }
 
         fun applyLanguage(context: Context, language: String): ContextWrapper {
@@ -40,7 +40,7 @@ class LocaleManager(base: Context) : ContextWrapper(base) {
             val previous = prefs.getString(KEY_LANGUAGE, "none")
             Log.i(TAG, "STEP 2: Previous language: $previous")
 
-            prefs.edit().putString(KEY_LANGUAGE, languageCode).commit()
+            prefs.edit().putString(KEY_LANGUAGE, languageCode).apply()
             Log.i(TAG, "STEP 3: SharedPreferences committed: $languageCode")
 
             val verify = prefs.getString(KEY_LANGUAGE, "FAILED")
