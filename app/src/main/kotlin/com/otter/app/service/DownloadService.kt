@@ -11,6 +11,8 @@ import androidx.core.app.NotificationManagerCompat
 import coil.Coil
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.otter.app.data.db.PausedDownload
+import com.otter.app.data.model.DownloadPhase
 import com.otter.app.data.model.DownloadState
 import com.otter.app.data.repository.DownloadRepository
 import com.otter.app.R
@@ -32,6 +34,8 @@ class DownloadService : Service() {
     companion object {
         private const val TAG = "DownloadService"
         const val ACTION_START_DOWNLOAD = "com.otter.app.START_DOWNLOAD"
+        const val ACTION_PAUSE_DOWNLOAD = "com.otter.app.PAUSE_DOWNLOAD"
+        const val ACTION_RESUME_DOWNLOAD = "com.otter.app.RESUME_DOWNLOAD"
         const val ACTION_CANCEL_DOWNLOAD = "com.otter.app.CANCEL_DOWNLOAD"
         const val EXTRA_URL = "extra_url"
         const val EXTRA_FORMAT_ID = "extra_format_id"
@@ -66,7 +70,6 @@ class DownloadService : Service() {
                 val embedSubtitles = intent.getBooleanExtra(EXTRA_EMBED_SUBTITLES, false)
                 val subtitleFormat = intent.getStringExtra(EXTRA_SUBTITLE_FORMAT) ?: "srt"
 
-                // Load thumbnail in background if available
                 if (!thumbUrl.isNullOrEmpty()) {
                     serviceScope.launch {
                         thumbnailBitmap = loadThumbnail(thumbUrl)
@@ -74,59 +77,147 @@ class DownloadService : Service() {
                 }
 
                 val initialNotification = NotificationHelper.buildProgressNotification(
-                    this, title, 0, "", "", url = url
+                    this, title, DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING), url = url
                 )
                 startForeground(
                     NotificationHelper.NOTIFICATION_ID_DOWNLOAD,
                     initialNotification
                 )
-                DownloadStateHolder.update(DownloadState.Downloading(0f, "", ""))
+                DownloadStateHolder.update(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
                 Log.i(TAG, "DownloadService START url=$url formatId=$formatId outputDir=$outputDir")
                 serviceScope.launch {
                     val downloadFn: suspend (String, String, (DownloadState) -> Unit) -> Unit =
-                            { u, f, progress ->
-                                if (saveThumbnail) {
-                                    repository.downloadWithThumbnail(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs)
-                                } else {
-                                    repository.startDownload(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs)
-                                }
+                        { u, f, progress ->
+                            if (saveThumbnail) {
+                                repository.downloadWithThumbnail(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs)
+                            } else {
+                                repository.startDownload(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs)
                             }
+                        }
 
-                            downloadFn(url, formatId) { state ->
+                    downloadFn(url, formatId) { state ->
+                        val now = System.currentTimeMillis()
+                        if (state is DownloadState.Downloading && now - lastStateUpdate < 200L) return@downloadFn
+                        if (state is DownloadState.Downloading) lastStateUpdate = now
+                        DownloadStateHolder.update(state)
+                        when (state) {
+                            is DownloadState.Downloading -> {
+                                if (now - lastNotificationUpdate < NOTIFICATION_THROTTLE_MS) return@downloadFn
+                                lastNotificationUpdate = now
+
+                                val notification = NotificationHelper.buildProgressNotification(
+                                    this@DownloadService,
+                                    title,
+                                    state,
+                                    thumbnailBitmap,
+                                    url = url
+                                )
+                                NotificationManagerCompat.from(this@DownloadService)
+                                    .notify(NotificationHelper.NOTIFICATION_ID_DOWNLOAD, notification)
+                            }
+                            is DownloadState.Paused -> {
+                                val notification = NotificationHelper.buildPausedNotification(
+                                    this@DownloadService, title, state, thumbnailBitmap
+                                )
+                                NotificationManagerCompat.from(this@DownloadService)
+                                    .notify(NotificationHelper.NOTIFICATION_ID_DOWNLOAD, notification)
+                            }
+                            is DownloadState.Success -> {
+                                NotificationHelper.showCompleteNotification(
+                                    this@DownloadService, title, state.filePath, thumbnailBitmap
+                                )
+                                stopForeground(STOP_FOREGROUND_REMOVE)
+                                stopSelf()
+                            }
+                            is DownloadState.Error -> {
+                                NotificationHelper.showErrorNotification(
+                                    this@DownloadService, title, state.message
+                                )
+                                stopForeground(STOP_FOREGROUND_REMOVE)
+                                stopSelf()
+                            }
+                            else -> {}
+                        }
+                    }
+                }
+            }
+            ACTION_PAUSE_DOWNLOAD -> {
+                val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
+                serviceScope.launch {
+                    val activeInfo = repository.pauseDownload(url) ?: return@launch
+                    val pausedItem = PausedDownload(
+                        url = url,
+                        title = activeInfo.title,
+                        uploader = "",
+                        thumbnailUrl = null,
+                        formatId = activeInfo.formatId,
+                        outputDir = activeInfo.outputDir,
+                        progress = activeInfo.lastProgress,
+                        downloadedBytes = activeInfo.lastDownloadedBytes,
+                        totalBytes = activeInfo.lastTotalBytes
+                    )
+                    repository.savePausedDownload(pausedItem)
+                    val pausedState = DownloadState.Paused(
+                        progress = activeInfo.lastProgress,
+                        downloadedBytes = activeInfo.lastDownloadedBytes,
+                        totalBytes = activeInfo.lastTotalBytes,
+                        url = url,
+                        formatId = activeInfo.formatId,
+                        outputDir = activeInfo.outputDir,
+                        title = activeInfo.title
+                    )
+                    DownloadStateHolder.update(pausedState)
+                    val notification = NotificationHelper.buildPausedNotification(
+                        this@DownloadService, activeInfo.title, pausedState, thumbnailBitmap
+                    )
+                    NotificationManagerCompat.from(this@DownloadService)
+                        .notify(NotificationHelper.NOTIFICATION_ID_DOWNLOAD, notification)
+                }
+            }
+            ACTION_RESUME_DOWNLOAD -> {
+                val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
+                serviceScope.launch {
+                    val pausedItem = repository.getPausedByUrl(url) ?: return@launch
+                    thumbnailBitmap = pausedItem.thumbnailUrl?.let { loadThumbnail(it) }
+                    repository.deletePausedByUrl(url)
+
+                    val initialNotification = NotificationHelper.buildProgressNotification(
+                        this@DownloadService, pausedItem.title,
+                        DownloadState.Downloading(pausedItem.progress, phase = DownloadPhase.PREPARING),
+                        url = url
+                    )
+                    startForeground(NotificationHelper.NOTIFICATION_ID_DOWNLOAD, initialNotification)
+
+                    repository.startDownload(
+                        url = pausedItem.url,
+                        formatId = pausedItem.formatId,
+                        outputDir = pausedItem.outputDir,
+                        onProgress = { state ->
                             val now = System.currentTimeMillis()
-                            if (state is DownloadState.Downloading && now - lastStateUpdate < 200L) return@downloadFn
+                            if (state is DownloadState.Downloading && now - lastStateUpdate < 200L) return@startDownload
                             if (state is DownloadState.Downloading) lastStateUpdate = now
                             DownloadStateHolder.update(state)
                             when (state) {
                                 is DownloadState.Downloading -> {
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastNotificationUpdate < NOTIFICATION_THROTTLE_MS) return@downloadFn
+                                    if (now - lastNotificationUpdate < NOTIFICATION_THROTTLE_MS) return@startDownload
                                     lastNotificationUpdate = now
-
-                                    val progressPercent = (state.progress * 100).toInt()
                                     val notification = NotificationHelper.buildProgressNotification(
-                                        this@DownloadService,
-                                        title,
-                                        progressPercent,
-                                        state.speedText,
-                                        state.etaText,
-                                        thumbnailBitmap,
-                                        url = url
+                                        this@DownloadService, pausedItem.title, state, thumbnailBitmap, url = url
                                     )
                                     NotificationManagerCompat.from(this@DownloadService)
                                         .notify(NotificationHelper.NOTIFICATION_ID_DOWNLOAD, notification)
                                 }
                                 is DownloadState.Success -> {
                                     NotificationHelper.showCompleteNotification(
-                                        this@DownloadService, title, state.filePath, thumbnailBitmap
+                                        this@DownloadService, pausedItem.title, state.filePath, thumbnailBitmap
                                     )
                                     stopForeground(STOP_FOREGROUND_REMOVE)
                                     stopSelf()
                                 }
                                 is DownloadState.Error -> {
                                     NotificationHelper.showErrorNotification(
-                                        this@DownloadService, title, state.message
+                                        this@DownloadService, pausedItem.title, state.message
                                     )
                                     stopForeground(STOP_FOREGROUND_REMOVE)
                                     stopSelf()
@@ -134,11 +225,15 @@ class DownloadService : Service() {
                                 else -> {}
                             }
                         }
-                    }
+                    )
                 }
+            }
             ACTION_CANCEL_DOWNLOAD -> {
                 val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
-                repository.cancelDownload(url)
+                repository.stopDownload(url)
+                serviceScope.launch {
+                    repository.getPausedByUrl(url)?.let { repository.deletePausedDownload(it) }
+                }
                 DownloadStateHolder.update(DownloadState.Idle)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()

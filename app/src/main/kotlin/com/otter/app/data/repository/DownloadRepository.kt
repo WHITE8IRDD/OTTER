@@ -3,6 +3,7 @@ package com.otter.app.data.repository
 import android.content.Context
 import com.otter.app.data.datastore.UserPreferences
 import com.otter.app.data.db.AppDatabase
+import com.otter.app.data.db.PausedDownload
 import com.otter.app.data.model.DownloadItem
 import com.otter.app.data.model.DownloadState
 import com.otter.app.data.model.VideoInfo
@@ -14,11 +15,13 @@ class DownloadRepository(private val context: Context) {
 
     private val db = AppDatabase.getInstance(context)
     private val dao = db.downloadDao()
+    private val pausedDao = db.pausedDownloadDao()
     val preferences = UserPreferences(context)
     private val downloader = Downloader(context)
     private val formatParser = FormatParser(context)
 
     val allDownloads: Flow<List<DownloadItem>> = dao.getAllDownloads()
+    val pausedDownloads: Flow<List<PausedDownload>> = pausedDao.getAll()
     val downloadCount: Flow<Int> = dao.getDownloadCount()
     val downloadPath: Flow<String> = preferences.downloadPath
     val defaultQuality: Flow<String> = preferences.defaultQuality
@@ -74,6 +77,27 @@ class DownloadRepository(private val context: Context) {
         downloader.downloadImages(imageUrls, baseName, outputDir, onProgress)
     }
 
+    fun pauseDownload(url: String): Downloader.ActiveDownload? {
+        return downloader.pauseDownload(url)
+    }
+
+    suspend fun savePausedDownload(item: PausedDownload) {
+        pausedDao.insert(item)
+    }
+
+    suspend fun getPausedByUrl(url: String): PausedDownload? {
+        return pausedDao.getByUrl(url)
+    }
+
+    suspend fun deletePausedDownload(item: PausedDownload) {
+        downloader.cleanupPartialFiles(item.outputDir)
+        pausedDao.delete(item)
+    }
+
+    suspend fun deletePausedByUrl(url: String) {
+        pausedDao.deleteByUrl(url)
+    }
+
     suspend fun saveDownloadItem(item: DownloadItem): Long {
         return dao.insert(item)
     }
@@ -88,5 +112,9 @@ class DownloadRepository(private val context: Context) {
 
     fun cancelDownload(url: String) {
         downloader.cancelDownload(url)
+    }
+
+    fun stopDownload(url: String) {
+        downloader.stopDownload(url)
     }
 }

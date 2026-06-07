@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.otter.app.data.datastore.UserPreferences
 import com.otter.app.data.model.DownloadItem
+import com.otter.app.data.model.DownloadPhase
 import com.otter.app.data.model.DownloadState
 import com.otter.app.data.model.VideoFormat
 import com.otter.app.data.model.VideoInfo
@@ -221,7 +222,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val outputDir = repository.downloadPath.first()
-            _downloadState.value = DownloadState.Downloading(0f, "", "")
+            _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
             repository.downloadImages(selectedUrls, info.title, outputDir) { state ->
                 _downloadState.value = state
                 if (state is DownloadState.Success) {
@@ -358,7 +359,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val outputDir = repository.downloadPath.first()
-            _downloadState.value = DownloadState.Downloading(0f, "", "")
+            _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
             repository.downloadThumbnailOnly(url, outputDir) { state ->
                 _downloadState.value = state
                 if (state is DownloadState.Success) {
@@ -399,7 +400,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         ext: String,
         isAudioOnly: Boolean
     ) {
-        _downloadState.value = DownloadState.Downloading(0f, "", "")
+        _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
 
         val intent = Intent(getApplication(), DownloadService::class.java).apply {
             action = DownloadService.ACTION_START_DOWNLOAD
@@ -419,11 +420,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         downloadObserverJob?.cancel()
         downloadObserverJob = viewModelScope.launch {
             DownloadStateHolder.state.collect { state ->
-                val now = System.currentTimeMillis()
-                if (state is DownloadState.Downloading && now - lastProgressUpdate < 200L) return@collect
-                if (state is DownloadState.Downloading) lastProgressUpdate = now
+                if (state is DownloadState.Downloading) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastProgressUpdate < 200L) return@collect
+                    lastProgressUpdate = now
+                }
 
                 _downloadState.value = state
+                if (state is DownloadState.Paused) {
+                    downloadObserverJob?.cancel()
+                }
                 if (state is DownloadState.Success) {
                     FileHelper.scanFile(getApplication(), state.filePath)
                     if (_alsoSaveThumbnail.value) {
@@ -463,7 +469,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun onCancelDownload() {
+    fun onPauseDownload() {
+        val url = _urlInput.value.trim()
+        val intent = Intent(getApplication(), DownloadService::class.java).apply {
+            action = DownloadService.ACTION_PAUSE_DOWNLOAD
+            putExtra(DownloadService.EXTRA_URL, url)
+        }
+        getApplication<Application>().startService(intent)
+    }
+
+    fun onResumeDownload() {
+        val url = _urlInput.value.trim()
+        val intent = Intent(getApplication(), DownloadService::class.java).apply {
+            action = DownloadService.ACTION_RESUME_DOWNLOAD
+            putExtra(DownloadService.EXTRA_URL, url)
+        }
+        getApplication<Application>().startService(intent)
+    }
+
+    fun onStopDownload() {
         val url = _urlInput.value.trim()
         val intent = Intent(getApplication(), DownloadService::class.java).apply {
             action = DownloadService.ACTION_CANCEL_DOWNLOAD
@@ -472,6 +496,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>().startService(intent)
         downloadObserverJob?.cancel()
         _downloadState.value = DownloadState.Idle
+    }
+
+    fun onCancelDownload() {
+        onStopDownload()
     }
 
     fun resetState() {

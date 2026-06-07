@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.otter.app.R
 import com.otter.app.data.datastore.UserPreferences
+import com.otter.app.data.model.DownloadPhase
 import com.otter.app.data.model.DownloadState
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -27,10 +28,85 @@ class Downloader(private val context: Context) {
     companion object {
         private const val TAG = "Downloader"
         private const val OUTPUT_TEMPLATE_DEFAULT = "%(title).200B [%(id)s].%(ext)s"
+
+        private val progressRegex = Regex(
+            """\[download\]\s+(\d+\.?\d*)%\s+of\s+~?\s*(\d+\.?\d*)([KMG]i?B|B)\s+at\s+(\d+\.?\d*)([KMG]i?B|B)/s\s+ETA\s+(\d+):(\d+)(?::(\d+))?"""
+        )
+
+        private data class ParsedProgress(
+            val percent: Float,
+            val totalBytes: Long,
+            val speedBytesPerSec: Long,
+            val etaSeconds: Long
+        )
+
+        private fun parseProgressLine(line: String): ParsedProgress? {
+            val m = progressRegex.find(line) ?: return null
+            val pct = m.groupValues[1].toFloatOrNull() ?: return null
+            val sizeVal = m.groupValues[2].toDoubleOrNull() ?: 0.0
+            val sizeUnit = m.groupValues[3]
+            val speedVal = m.groupValues[4].toDoubleOrNull() ?: 0.0
+            val speedUnit = m.groupValues[5]
+            val h = if (m.groupValues[8].isNotEmpty()) m.groupValues[6].toInt() else 0
+            val mn = if (m.groupValues[8].isNotEmpty()) m.groupValues[7].toInt() else m.groupValues[6].toInt()
+            val s = if (m.groupValues[8].isNotEmpty()) m.groupValues[8].toInt() else m.groupValues[7].toInt()
+            return ParsedProgress(
+                percent = pct,
+                totalBytes = parseSize(sizeVal, sizeUnit),
+                speedBytesPerSec = parseSize(speedVal, speedUnit),
+                etaSeconds = (h * 3600L + mn * 60L + s)
+            )
+        }
+
+        private fun parseSize(value: Double, unit: String): Long {
+            return when {
+                unit.uppercase().startsWith("K") -> (value * 1024).toLong()
+                unit.uppercase().startsWith("M") -> (value * 1024 * 1024).toLong()
+                unit.uppercase().startsWith("G") -> (value * 1024 * 1024 * 1024).toLong()
+                unit.uppercase().startsWith("T") -> (value * 1024L * 1024 * 1024 * 1024).toLong()
+                unit.uppercase() == "B" -> value.toLong()
+                else -> value.toLong()
+            }
+        }
     }
 
     private val preferences = UserPreferences(context)
     private val activeDownloads = ConcurrentHashMap<String, String>()
+    private val activeDownloadInfo = ConcurrentHashMap<String, ActiveDownload>()
+
+    data class ActiveDownload(
+        val processId: String,
+        val url: String,
+        val formatId: String,
+        val outputDir: String,
+        val title: String,
+        var lastProgress: Float = 0f,
+        var lastDownloadedBytes: Long = 0L,
+        var lastTotalBytes: Long = 0L
+    )
+
+    private val speedSamples = ArrayDeque<Long>(10)
+    private var lastEmitTime = 0L
+    private var lastReportedProgress = 0f
+    private val emitIntervalMs = 250L
+
+    private fun resetSmoothing() {
+        speedSamples.clear()
+        lastEmitTime = 0L
+        lastReportedProgress = 0f
+    }
+
+    private fun smoothedSpeed(rawBps: Long): Long {
+        if (rawBps > 0) speedSamples.addLast(rawBps)
+        if (speedSamples.size > 10) speedSamples.removeFirst()
+        return if (speedSamples.isEmpty()) rawBps else speedSamples.average().toLong()
+    }
+
+    private fun monotonicProgress(raw: Float): Float {
+        val result = maxOf(raw, lastReportedProgress)
+        lastReportedProgress = result
+        return result
+    }
 
     private data class DownloadSettings(
         val playlist: Boolean,
@@ -183,7 +259,7 @@ class Downloader(private val context: Context) {
             attempt++
             if (attempt > 1) {
                 val waitMs = listOf(1000L, 2000L, 4000L, 8000L, 16000L).getOrElse(attempt - 2) { 16000L }
-                onProgress(DownloadState.Downloading(0f, "", context.getString(R.string.retrying, attempt, settings.retries)))
+                onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
                 Log.i(TAG, "Retry $attempt/${settings.retries} for $url (waiting ${waitMs}ms)")
                 delay(waitMs)
             }
@@ -202,7 +278,7 @@ class Downloader(private val context: Context) {
                     addOption("-P", workingDir.absolutePath)
                     addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
                     addOption("--no-mtime")
-                    addOption("--no-part")
+                    addOption("--continue")
                     addOption("--socket-timeout", "15")
                     applySettings(this, settings)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
@@ -210,16 +286,43 @@ class Downloader(private val context: Context) {
 
                 val processId = url.hashCode().toUInt().toString()
                 activeDownloads[url] = processId
+                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, "")
+                activeDownloadInfo[url] = activeInfo
+                resetSmoothing()
 
-                onProgress(DownloadState.Downloading(0f, "", ""))
+                onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
                 YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
-                    val speed = extractSpeed(line)
-                    val eta = formatEta(etaInSeconds)
-                    onProgress(DownloadState.Downloading(progress / 100f, speed, eta))
+                    val now = System.currentTimeMillis()
+                    if (now - lastEmitTime < emitIntervalMs) return@execute
+                    lastEmitTime = now
+
+                    val monoProgress = monotonicProgress(progress / 100f)
+                    val parsed = parseProgressLine(line ?: "")
+                    val rawBytes = if (parsed != null && parsed.totalBytes > 0) (parsed.totalBytes * monoProgress).toLong() else 0L
+                    val rawSpeed = parsed?.speedBytesPerSec ?: 0L
+                    val smoothSpeed = smoothedSpeed(rawSpeed)
+                    val totalBytes = parsed?.totalBytes ?: 0L
+                    val etaSec = if (smoothSpeed > 0 && totalBytes > 0) ((totalBytes - rawBytes) / smoothSpeed) else etaInSeconds
+
+                    activeInfo.lastProgress = monoProgress
+                    activeInfo.lastDownloadedBytes = rawBytes
+                    activeInfo.lastTotalBytes = totalBytes
+
+                    onProgress(
+                        DownloadState.Downloading(
+                            progress = monoProgress,
+                            downloadedBytes = rawBytes,
+                            totalBytes = totalBytes,
+                            speedBytesPerSec = smoothSpeed,
+                            etaSeconds = etaSec,
+                            phase = DownloadPhase.DOWNLOADING
+                        )
+                    )
                 }
 
                 activeDownloads.remove(url)
+                activeDownloadInfo.remove(url)
 
                 val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
                 if (subtitleLangs.isNotBlank()) {
@@ -288,7 +391,7 @@ class Downloader(private val context: Context) {
             val processId = "thumb_${url.hashCode().toUInt()}"
             activeDownloads[url] = processId
 
-            onProgress(DownloadState.Downloading(0.5f, "", ""))
+            onProgress(DownloadState.Downloading(0.5f, phase = DownloadPhase.DOWNLOADING))
 
             YoutubeDL.getInstance().execute(request, processId) { _, _, _ -> }
 
@@ -327,7 +430,7 @@ class Downloader(private val context: Context) {
             attempt++
             if (attempt > 1) {
                 val waitMs = listOf(1000L, 2000L, 4000L, 8000L, 16000L).getOrElse(attempt - 2) { 16000L }
-                onProgress(DownloadState.Downloading(0f, "", context.getString(R.string.retrying, attempt, settings.retries)))
+                onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
                 delay(waitMs)
             }
 
@@ -357,16 +460,43 @@ class Downloader(private val context: Context) {
 
                 val processId = url.hashCode().toUInt().toString()
                 activeDownloads[url] = processId
+                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, "")
+                activeDownloadInfo[url] = activeInfo
+                resetSmoothing()
 
-                onProgress(DownloadState.Downloading(0f, "", ""))
+                onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
                 YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
-                    val speed = extractSpeed(line)
-                    val eta = formatEta(etaInSeconds)
-                    onProgress(DownloadState.Downloading(progress / 100f, speed, eta))
+                    val now = System.currentTimeMillis()
+                    if (now - lastEmitTime < emitIntervalMs) return@execute
+                    lastEmitTime = now
+
+                    val monoProgress = monotonicProgress(progress / 100f)
+                    val parsed = parseProgressLine(line ?: "")
+                    val rawBytes = if (parsed != null && parsed.totalBytes > 0) (parsed.totalBytes * monoProgress).toLong() else 0L
+                    val rawSpeed = parsed?.speedBytesPerSec ?: 0L
+                    val smoothSpeed = smoothedSpeed(rawSpeed)
+                    val totalBytes = parsed?.totalBytes ?: 0L
+                    val etaSec = if (smoothSpeed > 0 && totalBytes > 0) ((totalBytes - rawBytes) / smoothSpeed) else etaInSeconds
+
+                    activeInfo.lastProgress = monoProgress
+                    activeInfo.lastDownloadedBytes = rawBytes
+                    activeInfo.lastTotalBytes = totalBytes
+
+                    onProgress(
+                        DownloadState.Downloading(
+                            progress = monoProgress,
+                            downloadedBytes = rawBytes,
+                            totalBytes = totalBytes,
+                            speedBytesPerSec = smoothSpeed,
+                            etaSeconds = etaSec,
+                            phase = DownloadPhase.DOWNLOADING
+                        )
+                    )
                 }
 
                 activeDownloads.remove(url)
+                activeDownloadInfo.remove(url)
 
                 val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
                 if (subtitleLangs.isNotBlank()) {
@@ -438,12 +568,32 @@ class Downloader(private val context: Context) {
 
             val processId = url.hashCode().toString()
             activeDownloads[url] = processId
-            onProgress(DownloadState.Downloading(0f, "", ""))
+            resetSmoothing()
+            onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
             YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
-                val speed = extractSpeed(line)
-                val eta = formatEta(etaInSeconds)
-                onProgress(DownloadState.Downloading(progress / 100f, speed, eta))
+                val now = System.currentTimeMillis()
+                if (now - lastEmitTime < emitIntervalMs) return@execute
+                lastEmitTime = now
+
+                val monoProgress = monotonicProgress(progress / 100f)
+                val parsed = parseProgressLine(line ?: "")
+                val rawBytes = if (parsed != null && parsed.totalBytes > 0) (parsed.totalBytes * monoProgress).toLong() else 0L
+                val rawSpeed = parsed?.speedBytesPerSec ?: 0L
+                val smoothSpeed = smoothedSpeed(rawSpeed)
+                val totalBytes = parsed?.totalBytes ?: 0L
+                val etaSec = if (smoothSpeed > 0 && totalBytes > 0) ((totalBytes - rawBytes) / smoothSpeed) else etaInSeconds
+
+                onProgress(
+                    DownloadState.Downloading(
+                        progress = monoProgress,
+                        downloadedBytes = rawBytes,
+                        totalBytes = totalBytes,
+                        speedBytesPerSec = smoothSpeed,
+                        etaSeconds = etaSec,
+                        phase = DownloadPhase.DOWNLOADING
+                    )
+                )
             }
 
             activeDownloads.remove(url)
@@ -548,7 +698,7 @@ class Downloader(private val context: Context) {
                     val done = savedCount.incrementAndGet()
 
                     val progress = done.toFloat() / total.toFloat()
-                    onProgress(DownloadState.Downloading(progress, "", context.getString(R.string.image_progress, done, total)))
+                    onProgress(DownloadState.Downloading(progress, phase = DownloadPhase.DOWNLOADING))
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to download image $index: $imageUrl", e)
                     errors.incrementAndGet()
@@ -567,29 +717,49 @@ class Downloader(private val context: Context) {
         }
     }
 
-    fun cancelDownload(url: String) {
+    fun pauseDownload(url: String): ActiveDownload? {
+        val info = activeDownloadInfo[url] ?: return null
+        try {
+            YoutubeDL.getInstance().destroyProcessById(info.processId)
+            Log.i(TAG, "Download paused: $url at ${info.lastProgress * 100}%")
+            activeDownloads.remove(url)
+            activeDownloadInfo.remove(url)
+            return info
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pause download", e)
+            return null
+        }
+    }
+
+    fun stopDownload(url: String) {
+        val info = activeDownloadInfo[url]
         val processId = activeDownloads[url]
         if (processId != null) {
             try {
                 YoutubeDL.getInstance().destroyProcessById(processId)
-                activeDownloads.remove(url)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to cancel download", e)
+                Log.e(TAG, "Failed to stop download process", e)
             }
+        }
+        activeDownloads.remove(url)
+        activeDownloadInfo.remove(url)
+        if (info != null) {
+            cleanupPartialFiles(info.outputDir)
         }
     }
 
-    private fun extractSpeed(line: String?): String {
-        if (line == null) return ""
-        val regex = Regex("""(\d+\.?\d*\s*[KMG]iB/s)""")
-        return regex.find(line)?.value ?: ""
+    fun cancelDownload(url: String) {
+        stopDownload(url)
     }
 
-    private fun formatEta(etaSeconds: Long): String {
-        if (etaSeconds <= 0) return ""
-        val minutes = etaSeconds / 60
-        val seconds = etaSeconds % 60
-        return if (minutes > 0) "${minutes}m ${seconds}s" else "${seconds}s"
+    fun cleanupPartialFiles(outputDir: String) {
+        try {
+            val dir = File(outputDir)
+            dir.listFiles { f -> f.name.endsWith(".part") || f.name.endsWith(".ytdl") }
+                ?.forEach { it.delete(); Log.i(TAG, "Deleted partial: ${it.name}") }
+        } catch (e: Exception) {
+            Log.w(TAG, "cleanupPartialFiles error: ${e.message}")
+        }
     }
 
     private fun findDownloadedFile(outputDir: String, url: String): String? {

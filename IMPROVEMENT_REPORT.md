@@ -1,4 +1,4 @@
-# VidGrab — Improvement Report
+# Otter — Improvement Report
 
 ## Part 1: Cleanup Completed
 
@@ -14,7 +14,7 @@
 
 | Area | Status | Detail |
 |------|--------|--------|
-| Pre-warm | ✅ | `VidGrabApplication.onCreate()` runs `initAVEngine()` + `warmUpEngine()` in parallel before first use |
+| Pre-warm | ✅ | `OtterApplication.onCreate()` runs `initAVEngine()` + `warmUpEngine()` in parallel before first use |
 | In-memory cache | ✅ | `ConcurrentHashMap` in `FormatParser` with 5-min TTL per URL |
 | Retry logic | ✅ | 3 silent retries (500ms–3s delays) with friendly "Almost there…" messages |
 | Non-recoverable fast-fail | ✅ | `No video formats found` and `Usage:` patterns skip retries instantly |
@@ -38,7 +38,7 @@
 ## Part 4: Top 5 Next Improvements (Informational)
 
 ### 1. Keystore Credentials in Build Script (CRITICAL)
-`app/build.gradle.kts` contains hardcoded keystore password (`vidgrab123`) and alias (`vidgrab`). Anyone with APK access can extract the signing key. Move to `keystore.properties` (gitignored) or environment variables.
+`app/build.gradle.kts` contains hardcoded keystore password (`otter123`) and alias (`otter`). Anyone with APK access can extract the signing key. Move to `keystore.properties` (gitignored) or environment variables.
 
 ### 2. APK Size — material-icons-extended (~5MB)
 The `material-icons-extended` dependency adds ~5MB to the APK. Replace with individual icon imports or `material-icons-core` for the ~15 icons actually used. Could reduce APK by ~40%.

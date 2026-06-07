@@ -288,4 +288,22 @@
     <string name="platform_soundcloud">SoundCloud</string>
     <string name="platform_bandcamp">Bandcamp</string>
     <string name="platform_generic">Generic</string>
+
+    <!-- Progress -->
+    <string name="progress_preparing">Preparing…</string>
+    <string name="progress_downloading">Downloading</string>
+    <string name="progress_merging">Merging audio + video…</string>
+    <string name="progress_finalizing">Finalizing…</string>
+    <string name="progress_finishing">Almost done…</string>
+    <string name="progress_paused">Paused</string>
+    <string name="progress_eta">%s left</string>
+    <string name="notif_progress_content">%d%% • %s</string>
+    <string name="notif_progress_sub">%s • %s left</string>
+    <string name="notif_paused_title">%s (Paused)</string>
+    <string name="notif_paused_content">%d%% • Tap Resume to continue</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="stop">Stop</string>
+    <string name="paused_downloads">Paused Downloads</string>
+    <string name="tap_resume">Tap Resume to continue</string>
 </resources>

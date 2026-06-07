@@ -21,6 +21,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.otter.app.MainActivity
 import com.otter.app.R
+import com.otter.app.data.model.DownloadState
 import com.otter.app.service.DownloadService
 
 object NotificationHelper {
@@ -161,37 +162,88 @@ object NotificationHelper {
     fun buildProgressNotification(
         context: Context,
         title: String,
-        progress: Int,
-        speedText: String,
-        etaText: String,
+        state: DownloadState.Downloading,
         largeIcon: Bitmap? = null,
         url: String = ""
     ): android.app.Notification {
+        val pauseIntent = Intent(context, com.otter.app.receiver.DownloadNotificationReceiver::class.java).apply {
+            action = com.otter.app.receiver.DownloadNotificationReceiver.ACTION_PAUSE
+            putExtra(DownloadService.EXTRA_URL, url)
+        }
+        val pausePendingIntent = PendingIntent.getBroadcast(
+            context, 1, pauseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val cancelIntent = Intent(context, com.otter.app.receiver.DownloadNotificationReceiver::class.java).apply {
             action = "com.otter.app.CANCEL_DOWNLOAD"
             putExtra(DownloadService.EXTRA_URL, url)
         }
         val cancelPendingIntent = PendingIntent.getBroadcast(
-            context, 0, cancelIntent,
+            context, 2, cancelIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val contentText = buildString {
-            append("$progress%")
-            if (speedText.isNotEmpty()) append(" \u2022 $speedText")
-            if (etaText.isNotEmpty()) append(context.getString(R.string.eta_seconds, etaText))
-        }
+        val percent = (state.progress * 100).toInt()
+        val contentText = context.getString(R.string.notif_progress_content, percent, state.sizeText)
+        val subText = context.getString(R.string.notif_progress_sub, state.speedText, state.etaText)
 
         return NotificationCompat.Builder(context, CHANNEL_DOWNLOAD)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(contentText)
-            .setProgress(100, progress, progress == 0)
+            .setSubText(subText)
+            .setProgress(100, percent, false)
             .setOngoing(true)
             .setSilent(true)
             .setLargeIcon(largeIcon)
             .setOnlyAlertOnce(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.notif_cancel), cancelPendingIntent)
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText("$contentText\n$subText")
+            )
+            .addAction(android.R.drawable.ic_media_pause, context.getString(R.string.pause), pausePendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.stop), cancelPendingIntent)
+            .build()
+    }
+
+    fun buildPausedNotification(
+        context: Context,
+        title: String,
+        state: DownloadState.Paused,
+        largeIcon: Bitmap? = null
+    ): android.app.Notification {
+        val resumeIntent = Intent(context, com.otter.app.receiver.DownloadNotificationReceiver::class.java).apply {
+            action = com.otter.app.receiver.DownloadNotificationReceiver.ACTION_RESUME
+            putExtra(DownloadService.EXTRA_URL, state.url)
+        }
+        val resumePendingIntent = PendingIntent.getBroadcast(
+            context, 3, resumeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val cancelIntent = Intent(context, com.otter.app.receiver.DownloadNotificationReceiver::class.java).apply {
+            action = "com.otter.app.CANCEL_DOWNLOAD"
+            putExtra(DownloadService.EXTRA_URL, state.url)
+        }
+        val cancelPendingIntent = PendingIntent.getBroadcast(
+            context, 4, cancelIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val percent = (state.progress * 100).toInt()
+
+        return NotificationCompat.Builder(context, CHANNEL_DOWNLOAD)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(largeIcon)
+            .setContentTitle(context.getString(R.string.notif_paused_title, title))
+            .setContentText(context.getString(R.string.notif_paused_content, percent))
+            .setProgress(100, percent, false)
+            .setOngoing(false)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .addAction(android.R.drawable.ic_media_play, context.getString(R.string.resume), resumePendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.stop), cancelPendingIntent)
             .build()
     }
 

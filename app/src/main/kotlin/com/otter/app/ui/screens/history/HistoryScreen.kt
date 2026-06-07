@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.otter.app.R
+import com.otter.app.data.db.PausedDownload
 import com.otter.app.data.model.DownloadItem
 import com.otter.app.ui.components.BrutalButton
 import com.otter.app.ui.components.BrutalCard
@@ -74,6 +75,7 @@ fun HistoryScreen(
 ) {
     val context = LocalContext.current
     val downloads by viewModel.downloads.collectAsStateWithLifecycle()
+    val pausedDownloads by viewModel.pausedDownloads.collectAsStateWithLifecycle()
     val isDarkMode by themeViewModel.isDarkMode.collectAsStateWithLifecycle()
     val tintLogo by themeViewModel.tintLogo.collectAsStateWithLifecycle()
     var showClearDialog by remember { mutableStateOf(false) }
@@ -124,7 +126,7 @@ fun HistoryScreen(
                 }
             }
 
-            if (downloads.isEmpty()) {
+            if (downloads.isEmpty() && pausedDownloads.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -136,6 +138,30 @@ fun HistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
+                    if (pausedDownloads.isNotEmpty()) {
+                        item(key = "paused_header") {
+                            Text(
+                                text = stringResource(R.string.paused_downloads),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                        items(
+                            items = pausedDownloads,
+                            key = { "paused_${it.url}" }
+                        ) { paused ->
+                            PausedDownloadCard(
+                                item = paused,
+                                onResume = { viewModel.resumePausedDownload(paused) },
+                                onDelete = { viewModel.deletePausedDownload(paused) }
+                            )
+                        }
+                        item(key = "paused_divider") {
+                            Spacer(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
                     items(
                         items = downloads,
                         key = { it.id }
@@ -330,9 +356,61 @@ fun HistoryItemCard(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onDelete) {
+                    IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.content_desc_delete), tint = MaterialTheme.colorScheme.error)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun PausedDownloadCard(
+    item: PausedDownload,
+    onResume: () -> Unit,
+    onDelete: () -> Unit
+) {
+    BrutalCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            if (item.downloadedBytes > 0 && item.totalBytes > 0) {
+                Text(
+                    text = "${item.downloadedBytes.toReadableFileSize()} / ${item.totalBytes.toReadableFileSize()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.tap_resume),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BrutalButton(
+                    text = stringResource(R.string.resume),
+                    onClick = onResume,
+                    backgroundColor = MaterialTheme.colorScheme.primary,
+                    textColor = MaterialTheme.colorScheme.onPrimary
+                )
+                BrutalButton(
+                    text = stringResource(R.string.stop),
+                    onClick = onDelete,
+                    backgroundColor = MaterialTheme.colorScheme.error,
+                    textColor = MaterialTheme.colorScheme.onError
+                )
             }
         }
     }

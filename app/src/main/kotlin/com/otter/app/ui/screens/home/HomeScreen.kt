@@ -401,18 +401,18 @@ fun HomeScreen(
             }
 
             AnimatedVisibility(
-                visible = downloadState is DownloadState.Downloading,
+                visible = downloadState is DownloadState.Downloading || downloadState is DownloadState.Paused,
                 enter = fadeIn() + slideInVertically(),
                 exit = fadeOut() + slideOutVertically()
             ) {
-                val state = downloadState as? DownloadState.Downloading
-                if (state != null) {
+                val state = downloadState
+                if (state is DownloadState.Downloading || state is DownloadState.Paused) {
                     ProgressCard(
                         title = currentVideoInfo?.title ?: urlInput,
-                        progress = state.progress,
-                        speedText = state.speedText,
-                        etaText = state.etaText,
-                        onCancel = viewModel::onCancelDownload
+                        state = state,
+                        onPause = viewModel::onPauseDownload,
+                        onResume = viewModel::onResumeDownload,
+                        onCancel = viewModel::onStopDownload
                     )
                 }
             }

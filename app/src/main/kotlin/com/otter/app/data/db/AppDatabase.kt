@@ -8,13 +8,14 @@ import androidx.room.TypeConverters
 import com.otter.app.data.model.DownloadItem
 
 @Database(
-    entities = [DownloadItem::class],
+    entities = [DownloadItem::class, PausedDownload::class],
     version = 1,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun downloadDao(): DownloadDao
+    abstract fun pausedDownloadDao(): PausedDownloadDao
 
     companion object {
         @Volatile
@@ -25,7 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
                 Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "vidgrab_database"
+                    "otter_database"
                 )
                     .fallbackToDestructiveMigration()
                     .build()
