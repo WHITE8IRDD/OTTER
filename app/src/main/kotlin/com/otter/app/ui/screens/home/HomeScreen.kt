@@ -1,7 +1,9 @@
 package com.otter.app.ui.screens.home
 
 import android.Manifest
+import android.app.Activity
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -46,6 +48,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
@@ -79,6 +82,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -106,6 +110,7 @@ import com.otter.app.ui.theme.OtterDimens
 import com.otter.app.R
 import com.otter.app.util.getClipboardText
 import com.otter.app.util.isValidUrl
+import com.otter.app.util.LocaleManager
 
 
 
@@ -142,6 +147,7 @@ fun HomeScreen(
 
     var showPaletteSheet by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showLanguageSheet by remember { mutableStateOf(false) }
     var clipboardDetectedUrl by remember { mutableStateOf<String?>(null) }
 
     val logoTint = when {
@@ -187,7 +193,8 @@ fun HomeScreen(
                 isDarkMode = isDarkMode,
                 onLogoClick = { showAboutDialog = true },
                 onPaletteClick = { showPaletteSheet = true },
-                onToggleDarkMode = { themeViewModel.toggleDarkMode() }
+                onToggleDarkMode = { themeViewModel.toggleDarkMode() },
+                onLanguageClick = { showLanguageSheet = true }
             )
 
             clipboardDetectedUrl?.let { url ->
@@ -209,7 +216,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Link detected",
+                                text = stringResource(R.string.link_detected),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f)
@@ -222,7 +229,7 @@ fun HomeScreen(
                                 contentPadding = androidx.compose.material3.ButtonDefaults.TextButtonContentPadding
                             ) {
                                 Text(
-                                    text = "USE",
+                                    text = stringResource(R.string.btn_use),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -233,7 +240,7 @@ fun HomeScreen(
                             ) {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Dismiss",
+                                    contentDescription = stringResource(R.string.content_desc_dismiss),
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -249,7 +256,7 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Paste a video link",
+                        text = stringResource(R.string.paste_video_link),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -259,7 +266,7 @@ fun HomeScreen(
                         onValueChange = viewModel::onUrlChanged,
                         placeholder = {
                             Text(
-                                text = "https://youtube.com/watch?v=\u2026",
+                                text = stringResource(R.string.url_placeholder),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -278,7 +285,7 @@ fun HomeScreen(
                                 IconButton(onClick = viewModel::clearUrlInput) {
                                     Icon(
                                         Icons.Default.Close,
-                                        contentDescription = "Clear",
+                                        contentDescription = stringResource(R.string.content_desc_clear),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -291,7 +298,7 @@ fun HomeScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ContentPaste,
-                                        contentDescription = "Paste",
+                                        contentDescription = stringResource(R.string.content_desc_paste),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -301,8 +308,8 @@ fun HomeScreen(
 
                     BrutalButton(
                         text = when (downloadState) {
-                            is DownloadState.FetchingInfo -> "FETCHING\u2026"
-                            else -> "FETCH & DOWNLOAD"
+                            is DownloadState.FetchingInfo -> stringResource(R.string.btn_fetching)
+                            else -> stringResource(R.string.btn_fetch_download)
                         },
                         onClick = { viewModel.fetchVideoInfo() },
                         modifier = Modifier.fillMaxWidth(),
@@ -317,12 +324,12 @@ fun HomeScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Quick download",
+                                text = stringResource(R.string.quick_download_label),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Skip quality picker",
+                                text = stringResource(R.string.quick_download_subtitle),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -376,7 +383,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = currentVideoInfo?.title?.take(60) ?: "Info loaded",
+                            text = currentVideoInfo?.title?.take(60) ?: stringResource(R.string.info_loaded),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
@@ -385,7 +392,7 @@ fun HomeScreen(
                         IconButton(onClick = { viewModel.fetchVideoInfo() }) {
                             Icon(
                                 Icons.Default.Refresh,
-                                contentDescription = "Re-fetch",
+                                contentDescription = stringResource(R.string.content_desc_refetch),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -433,13 +440,13 @@ fun HomeScreen(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "Download Complete!",
+                                text = stringResource(R.string.download_complete),
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         BrutalButton(
-                            text = "DOWNLOAD ANOTHER",
+                            text = stringResource(R.string.btn_download_another),
                             onClick = viewModel::resetState,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -454,7 +461,7 @@ fun HomeScreen(
             ) {
                 val errorState = downloadState as? DownloadState.Error
                 MascotErrorState(
-                    message = errorState?.message ?: "Unknown error",
+                    message = errorState?.message ?: stringResource(R.string.download_error_unknown),
                     onRetry = viewModel::fetchVideoInfo,
                     isCookieError = errorState?.message?.contains("Instagram") == true ||
                             errorState?.message?.contains("cookies") == true,
@@ -520,6 +527,12 @@ fun HomeScreen(
             onDismiss = { showAboutDialog = false }
         )
     }
+
+    if (showLanguageSheet) {
+        LanguagePickerSheet(
+            onDismiss = { showLanguageSheet = false }
+        )
+    }
 }
 
 @Composable
@@ -551,7 +564,7 @@ private fun MascotEmptyState(logoTint: Color) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         SpeechBubble(
-            text = "No videos here yet!\nFeed me some links!",
+            text = stringResource(R.string.empty_state_videos),
             modifier = Modifier
                 .fillMaxWidth(0.75f)
                 .height(80.dp),
@@ -613,7 +626,7 @@ private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -
             )
             TextButton(onClick = onCancel) {
                 Text(
-                    text = "CANCEL",
+                    text = stringResource(R.string.btn_cancel),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelLarge
                 )
@@ -665,7 +678,7 @@ private fun MascotErrorState(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Oops! Something went wrong",
+                    text = stringResource(R.string.error_state_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
@@ -687,13 +700,13 @@ private fun MascotErrorState(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 BrutalButton(
-                    text = "TRY AGAIN",
+                    text = stringResource(R.string.btn_try_again),
                     onClick = onRetry,
                     modifier = Modifier.weight(1f)
                 )
                 if (isCookieError) {
                     BrutalButton(
-                        text = "COOKIE SETTINGS",
+                        text = stringResource(R.string.btn_cookie_settings),
                         onClick = onNavigateToCookies,
                         modifier = Modifier.weight(1f),
                         backgroundColor = MaterialTheme.colorScheme.secondary,
@@ -708,7 +721,7 @@ private fun MascotErrorState(
 @Composable
 private fun PlatformsRow(modifier: Modifier = Modifier) {
     Text(
-        text = "YouTube \u2022 Instagram \u2022 Facebook \u2022 Tiktok is gay \u2022 X +1000 more \u2022\u2022\u2022",
+        text = stringResource(R.string.platforms_footer),
         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
         textAlign = TextAlign.Center,
@@ -742,7 +755,7 @@ private fun PaletteSheet(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                text = "Accent Color",
+                text = stringResource(R.string.palette_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -829,7 +842,7 @@ private fun PaletteSheet(
                             hexError = false
                         }
                     },
-                    placeholder = { Text("Hex code", style = MaterialTheme.typography.bodyMedium) },
+                    placeholder = { Text(stringResource(R.string.hex_input_placeholder), style = MaterialTheme.typography.bodyMedium) },
                     textStyle = MaterialTheme.typography.bodyMedium,
                     singleLine = true,
                     modifier = Modifier.weight(1f),
@@ -840,7 +853,7 @@ private fun PaletteSheet(
                         cursorColor = MaterialTheme.colorScheme.primary,
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     ),
-                    prefix = { Text("#", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    prefix = { Text(stringResource(R.string.hex_prefix), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     isError = hexError
                 )
                 if (hexInput.length == 6 && !hexError) {
@@ -863,7 +876,7 @@ private fun PaletteSheet(
             }
             if (hexError) {
                 Text(
-                    text = "Invalid hex — use format FF5722",
+                    text = stringResource(R.string.hex_error),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -934,7 +947,7 @@ private fun AboutDialog(
                                 tint = logoTint
                             )
                             Text(
-                                text = "OTTER",
+                                text = stringResource(R.string.about_app_name),
                                 style = MaterialTheme.typography.headlineLarge.copy(
                                     fontSize = 48.sp
                                 ),
@@ -950,7 +963,7 @@ private fun AboutDialog(
                         ) {
                             Icon(
                                 Icons.Default.Close,
-                                contentDescription = "Close",
+                                contentDescription = stringResource(R.string.content_desc_close),
                                 modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -958,7 +971,7 @@ private fun AboutDialog(
                     }
 
                     Text(
-                        text = "Open-source media downloader for Android. Powered by the 𝘈𝘝® engine.",
+                        text = stringResource(R.string.about_description),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -966,13 +979,13 @@ private fun AboutDialog(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Otter lets you download video, audio, images, and subtitles from 1000+ platforms — YouTube, TikTok, Instagram, Facebook, Twitter/X, and more.",
+                        text = stringResource(R.string.about_description2),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                     )
 
                     Text(
-                        text = "Built with Jetpack Compose. Lightweight, fast, and fully open source.",
+                        text = stringResource(R.string.about_description3),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                     )
@@ -993,13 +1006,13 @@ private fun AboutDialog(
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text(
-                                text = "Instagram",
+                                text = stringResource(R.string.social_instagram),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Black,
                                 color = accentColor
                             )
                             Text(
-                                text = "@acee.visuals",
+                                text = stringResource(R.string.social_instagram_handle),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1020,13 +1033,13 @@ private fun AboutDialog(
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text(
-                                text = "GitHub",
+                                text = stringResource(R.string.social_github),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Black,
                                 color = accentColor
                             )
                             Text(
-                                text = "/Acevisuals",
+                                text = stringResource(R.string.social_github_handle),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1040,7 +1053,7 @@ private fun AboutDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "2026",
+                            text = stringResource(R.string.about_year),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
@@ -1125,7 +1138,8 @@ private fun HomeScreenHeader(
     isDarkMode: Boolean,
     onLogoClick: () -> Unit,
     onPaletteClick: () -> Unit,
-    onToggleDarkMode: () -> Unit
+    onToggleDarkMode: () -> Unit,
+    onLanguageClick: () -> Unit = {}
 ) {
     val headerBreathe = rememberInfiniteTransition(label = "header_breathe")
     val breatheScale by headerBreathe.animateFloat(
@@ -1157,7 +1171,7 @@ private fun HomeScreenHeader(
                 tint = logoColor
             )
             Text(
-                text = "OTTER",
+                text = stringResource(R.string.header_app_name),
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontSize = 38.sp
                 ),
@@ -1165,21 +1179,112 @@ private fun HomeScreenHeader(
                 color = accentColor
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = onPaletteClick) {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onLanguageClick, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Default.Language,
+                    contentDescription = stringResource(R.string.content_desc_language),
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+            }
+            IconButton(onClick = onPaletteClick, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Default.Palette,
-                    contentDescription = "Accent color",
-                    tint = MaterialTheme.colorScheme.onBackground
+                    contentDescription = stringResource(R.string.content_desc_palette),
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
             }
-            IconButton(onClick = onToggleDarkMode) {
+            IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(36.dp)) {
                 Icon(
                     imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                    contentDescription = if (isDarkMode) "Light mode" else "Dark mode",
-                    tint = MaterialTheme.colorScheme.onBackground
+                    contentDescription = if (isDarkMode) stringResource(R.string.content_desc_light_mode) else stringResource(R.string.content_desc_dark_mode),
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LanguagePickerSheet(currentLanguage: String = "", onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val current = if (currentLanguage.isNotEmpty()) currentLanguage else LocaleManager.getPersistedLanguage(context)
+    val languages = listOf(
+        "en" to stringResource(R.string.language_en),
+        "ar" to stringResource(R.string.language_ar),
+        "fr" to stringResource(R.string.language_fr)
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.language_picker_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            languages.forEach { (code, displayName) ->
+                val isSelected = code == current
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onDismiss()
+                            if (activity != null) {
+                                LocaleManager.persistAndRestart(activity, code)
+                            }
+                        },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Text(
+                                text = displayName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Text(
+                            text = code.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

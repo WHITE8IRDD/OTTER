@@ -14,6 +14,7 @@ import com.otter.app.data.model.AudioTrack
 import com.otter.app.data.repository.DownloadRepository
 import com.otter.app.service.DownloadService
 import com.otter.app.service.DownloadStateHolder
+import com.otter.app.R
 import com.otter.app.util.FileHelper
 import com.otter.app.util.isValidUrl
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +55,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _autoDownload = MutableStateFlow(false)
     val autoDownload: StateFlow<Boolean> = _autoDownload.asStateFlow()
 
-    private val _fetchingMessage = MutableStateFlow("Fetching video info\u2026")
+    private val _fetchingMessage = MutableStateFlow("")
     val fetchingMessage: StateFlow<String> = _fetchingMessage.asStateFlow()
 
     private val _selectedCarouselIndices = MutableStateFlow<Set<Int>>(emptySet())
@@ -89,6 +90,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     init {
+        _fetchingMessage.value = getApplication<Application>().getString(R.string.fetching_video_info)
         viewModelScope.launch {
             preferences.autoDownload.collect { auto ->
                 _autoDownload.value = auto
@@ -223,11 +225,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             repository.downloadImages(selectedUrls, info.title, outputDir) { state ->
                 _downloadState.value = state
                 if (state is DownloadState.Success) {
-                    Toast.makeText(
-                        getApplication(),
-                        "${selectedUrls.size} image${if (selectedUrls.size > 1) "s" else ""} saved",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    val toastMsg = if (selectedUrls.size == 1) {
+                        getApplication<Application>().getString(R.string.image_saved)
+                    } else {
+                        getApplication<Application>().getString(R.string.images_saved, selectedUrls.size)
+                    }
+                    Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -236,12 +239,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun fetchVideoInfo(onConsumed: () -> Unit = {}) {
         val url = _urlInput.value.trim()
         if (!url.isValidUrl()) {
-            _downloadState.value = DownloadState.Error("Please enter a valid URL")
+            _downloadState.value = DownloadState.Error(getApplication<Application>().getString(R.string.enter_valid_url))
             return
         }
 
         fetchJob?.cancel()
-        val initialMsg = if (url.contains("instagram.com")) "Fetching post\u2026" else "Fetching video info\u2026"
+        val initialMsg = if (url.contains("instagram.com")) getApplication<Application>().getString(R.string.fetching_post) else getApplication<Application>().getString(R.string.fetching_video_info)
         _fetchingMessage.value = initialMsg
         _downloadState.value = DownloadState.FetchingInfo(initialMsg)
         _currentVideoInfo.value = null
@@ -276,7 +279,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 onFailure = { error ->
                     _showFormatSheet.value = false
-                    val msg = error.message ?: "Failed to fetch video info"
+                    val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
                     val friendly = buildFriendlyError(msg, url)
                     _downloadState.value = DownloadState.Error(friendly)
                     onConsumed()
@@ -294,12 +297,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun quickDownload() {
         val url = _urlInput.value.trim()
         if (!url.isValidUrl()) {
-            _downloadState.value = DownloadState.Error("Please enter a valid URL")
+            _downloadState.value = DownloadState.Error(getApplication<Application>().getString(R.string.enter_valid_url))
             return
         }
 
         fetchJob?.cancel()
-        val initialMsg = if (url.contains("instagram.com")) "Fetching post\u2026" else "Fetching video info\u2026"
+        val initialMsg = if (url.contains("instagram.com")) getApplication<Application>().getString(R.string.fetching_post) else getApplication<Application>().getString(R.string.fetching_video_info)
         _fetchingMessage.value = initialMsg
         _downloadState.value = DownloadState.FetchingInfo(initialMsg)
 
@@ -321,7 +324,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 },
                 onFailure = { error ->
-                    val msg = error.message ?: "Failed to fetch video info"
+                    val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
                     _downloadState.value = DownloadState.Error(buildFriendlyError(msg, url))
                 }
             )
@@ -344,7 +347,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 startDownloadService(url, safeFormatId, outputDir, info, bestFormat.formatId, bestFormat.ext, bestFormat.isAudioOnly)
             }
         } else {
-            _downloadState.value = DownloadState.Error("No suitable format found")
+            _downloadState.value = DownloadState.Error(getApplication<Application>().getString(R.string.no_suitable_format))
         }
     }
 
@@ -426,7 +429,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     if (_alsoSaveThumbnail.value) {
                         Toast.makeText(
                             getApplication(),
-                            "Video + Thumbnail saved",
+                            getApplication<Application>().getString(R.string.video_thumbnail_saved),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -483,15 +486,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             msg.contains("Instagram API is not granting access") ||
             msg.contains("empty media response") ||
             msg.contains("instagram") && (msg.contains("login") || msg.contains("cookies")) ->
-                "Instagram requires login to download this content. Please add your browser cookies in Settings \u2192 Site Cookies."
+                getApplication<Application>().getString(R.string.error_instagram_cookies)
             msg.contains("sign in") && msg.contains("YouTube") ->
-                "This YouTube video requires login. Please add your browser cookies in Settings \u2192 Site Cookies."
+                getApplication<Application>().getString(R.string.error_youtube_login)
             (url.contains("facebook.com") || url.contains("fb.watch") || url.contains("fb.com")) &&
                     (msg.contains("generic") || msg.contains("fallback") || msg.contains("extractor")) ->
-                "Facebook download failed. Please update the engine in Settings or add Facebook cookies if this is a private video."
+                getApplication<Application>().getString(R.string.error_facebook)
             (url.contains("tiktok.com") || url.contains("vm.tiktok.com") || url.contains("vt.tiktok.com")) &&
                     (msg.contains("impersonat") || msg.contains("not available") || msg.contains("status code 0")) ->
-                "TikTok download failed. This video may be region-locked or require login. Try adding TikTok cookies in Settings \u2192 Site Cookies."
+                getApplication<Application>().getString(R.string.error_tiktok)
             else -> msg
         }
     }

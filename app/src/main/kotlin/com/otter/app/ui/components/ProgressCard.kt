@@ -31,7 +31,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.otter.app.R
 import com.otter.app.ui.theme.OtterDimens
 
 @Composable
@@ -66,7 +68,7 @@ fun ProgressCard(
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = "Downloading\u2026",
+                text = stringResource(R.string.downloading),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -168,7 +170,7 @@ fun ProgressCard(
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
             ) {
-                Text(text = "CANCEL", style = MaterialTheme.typography.labelLarge)
+                Text(text = stringResource(R.string.btn_cancel), style = MaterialTheme.typography.labelLarge)
             }
         }
     }

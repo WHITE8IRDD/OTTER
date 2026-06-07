@@ -9,6 +9,7 @@ import android.provider.DocumentsContract
 import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.otter.app.R
 import java.io.File
 
 object FileHelper {
@@ -33,7 +34,7 @@ object FileHelper {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-            context.startActivity(Intent.createChooser(intent, "Open with").apply {
+            context.startActivity(Intent.createChooser(intent, context.getString(R.string.open_with)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         } catch (e: Exception) {
@@ -45,16 +46,16 @@ object FileHelper {
         val folder = try {
             val f = File(filePath)
             if (!f.exists()) {
-                Toast.makeText(context, "File not found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.file_not_found), Toast.LENGTH_SHORT).show()
                 return
             }
             f.parentFile ?: run {
-                Toast.makeText(context, "Cannot locate folder", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.cannot_locate_folder), Toast.LENGTH_SHORT).show()
                 return
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to resolve parent for: $filePath", e)
-            Toast.makeText(context, "Could not open file location", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.cannot_open_location), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -115,7 +116,7 @@ object FileHelper {
         }
 
         Log.w(TAG, "All locate attempts failed for: $filePath")
-        Toast.makeText(context, "Could not open file location", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.cannot_open_location), Toast.LENGTH_SHORT).show()
     }
 
     fun shareFile(context: Context, filePath: String) {
@@ -136,7 +137,7 @@ object FileHelper {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            context.startActivity(Intent.createChooser(intent, "Share via").apply {
+            context.startActivity(Intent.createChooser(intent, context.getString(R.string.share_via)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         } catch (e: Exception) {

@@ -13,6 +13,7 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.otter.app.data.model.DownloadState
 import com.otter.app.data.repository.DownloadRepository
+import com.otter.app.R
 import com.otter.app.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +58,7 @@ class DownloadService : Service() {
                 val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
                 val formatId = intent.getStringExtra(EXTRA_FORMAT_ID) ?: "best"
                 val outputDir = intent.getStringExtra(EXTRA_OUTPUT_DIR) ?: ""
-                val title = intent.getStringExtra(EXTRA_TITLE) ?: "Video"
+                val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.default_video_title)
                 val thumbUrl = intent.getStringExtra(EXTRA_THUMBNAIL_URL)
                 val saveThumbnail = intent.getBooleanExtra(EXTRA_SAVE_THUMBNAIL, false)
                 val subtitleLangs = intent.getStringExtra(EXTRA_SUBTITLE_LANGS) ?: ""

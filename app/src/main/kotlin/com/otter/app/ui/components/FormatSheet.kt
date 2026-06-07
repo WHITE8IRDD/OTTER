@@ -71,11 +71,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.otter.app.R
 import com.otter.app.data.model.AudioTrack
 import com.otter.app.data.model.SubtitleTrack
 import com.otter.app.data.model.VideoFormat
@@ -276,7 +278,7 @@ private fun FormatSheetContent(
 
         item(key = "format_header") {
             Text(
-                text = "CHOOSE QUALITY",
+                text = stringResource(R.string.choose_quality),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
@@ -303,7 +305,7 @@ private fun VideoInfoHeader(videoInfo: VideoInfo) {
         if (videoInfo.thumbnailUrl != null) {
             AsyncImage(
                 model = videoInfo.thumbnailUrl,
-                contentDescription = "Thumbnail",
+                contentDescription = stringResource(R.string.content_desc_thumbnail),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(80.dp)
@@ -333,7 +335,7 @@ private fun VideoInfoHeader(videoInfo: VideoInfo) {
                     ) {
                         Icon(
                             Icons.Default.ContentCopy,
-                            contentDescription = "Copy uploader",
+                            contentDescription = stringResource(R.string.content_desc_copy_uploader),
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                         )
@@ -355,7 +357,7 @@ private fun VideoInfoHeader(videoInfo: VideoInfo) {
         ) {
             Icon(
                 Icons.Default.ContentCopy,
-                contentDescription = "Copy title",
+                contentDescription = stringResource(R.string.content_desc_copy_title),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         }
@@ -369,7 +371,7 @@ private fun TagsSection(videoInfo: VideoInfo) {
 
     if (videoInfo.hashtags.isNotEmpty()) {
         Text(
-            text = "Hashtags",
+            text = stringResource(R.string.section_hashtags),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
@@ -399,7 +401,7 @@ private fun TagsSection(videoInfo: VideoInfo) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             Icons.Default.ContentCopy,
-                            contentDescription = "Copy",
+                            contentDescription = stringResource(R.string.content_desc_copy),
                             modifier = Modifier.size(12.dp),
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                         )
@@ -412,7 +414,7 @@ private fun TagsSection(videoInfo: VideoInfo) {
 
     if (videoInfo.tags.isNotEmpty()) {
         Text(
-            text = "Tags",
+            text = stringResource(R.string.section_tags),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
@@ -442,7 +444,7 @@ private fun TagsSection(videoInfo: VideoInfo) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             Icons.Default.ContentCopy,
-                            contentDescription = "Copy",
+                            contentDescription = stringResource(R.string.content_desc_copy),
                             modifier = Modifier.size(12.dp),
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                         )
@@ -460,7 +462,7 @@ private fun DescriptionSection(description: String) {
     val isLong = description.length > 150
 
     Text(
-        text = "Description",
+            text = stringResource(R.string.section_description),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     )
@@ -478,7 +480,7 @@ private fun DescriptionSection(description: String) {
         ) {
             Icon(
                 Icons.Default.ContentCopy,
-                contentDescription = "Copy description",
+                contentDescription = stringResource(R.string.content_desc_copy_description),
                 modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
             )
@@ -492,11 +494,11 @@ private fun DescriptionSection(description: String) {
         ) {
             Icon(
                 imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (expanded) "Show less" else "Show more",
+                contentDescription = if (expanded) stringResource(R.string.show_less) else stringResource(R.string.show_more),
                 modifier = Modifier.size(16.dp)
             )
             Text(
-                text = if (expanded) "Show less" else "Show more",
+                text = if (expanded) stringResource(R.string.show_less) else stringResource(R.string.show_more),
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -523,7 +525,7 @@ private fun ThumbnailOptionsSection(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "DOWNLOAD THUMBNAIL ONLY",
+                stringResource(R.string.btn_download_thumbnail),
                 style = MaterialTheme.typography.labelLarge
             )
         }
@@ -541,7 +543,7 @@ private fun ThumbnailOptionsSection(
                 modifier = Modifier.padding(end = 12.dp)
             )
             Text(
-                text = "Also save thumbnail with video",
+                text = stringResource(R.string.toggle_save_thumbnail),
                 style = MaterialTheme.typography.bodyMedium
             )
         }
@@ -581,13 +583,13 @@ private fun CarouselGalleryContent(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "No carousel images available",
+                        text = stringResource(R.string.carousel_empty),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Add Instagram cookies in Settings to view and download carousel images",
+                        text = stringResource(R.string.carousel_empty_sub),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                         textAlign = TextAlign.Center
@@ -605,16 +607,16 @@ private fun CarouselGalleryContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${selectedIndices.size}/${videoInfo.carouselImages.size} selected",
+                    text = stringResource(R.string.carousel_selected, selectedIndices.size, videoInfo.carouselImages.size),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onSelectAll) {
-                        Text("SELECT ALL", style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.btn_select_all), style = MaterialTheme.typography.labelLarge)
                     }
                     TextButton(onClick = onDeselectAll) {
-                        Text("CLEAR", style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.btn_clear_format), style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -658,7 +660,7 @@ private fun CarouselGalleryContent(
                             Box(modifier = Modifier.fillMaxWidth()) {
                                 AsyncImage(
                                     model = imageUrl,
-                                    contentDescription = "Image ${index + 1}",
+                                    contentDescription = stringResource(R.string.content_desc_image, index + 1),
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -705,7 +707,7 @@ private fun CarouselGalleryContent(
             Spacer(modifier = Modifier.height(8.dp))
 
             BrutalButton(
-                text = "Download Selected (${selectedIndices.size})",
+                text = stringResource(R.string.btn_download_selected, selectedIndices.size),
                 onClick = onDownload,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -882,12 +884,12 @@ private fun AudioLanguageSection(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "AUDIO LANGUAGE",
+                text = stringResource(R.string.audio_language),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "(${audioTracks.size} available)",
+                text = stringResource(R.string.audio_available, audioTracks.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
@@ -977,7 +979,7 @@ private fun EnhancedSubtitleSection(
             )
             Column {
                 Text(
-                    text = "Download subtitles with video",
+                    text = stringResource(R.string.toggle_download_subtitles),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -986,7 +988,7 @@ private fun EnhancedSubtitleSection(
                 val parts = mutableListOf<String>()
                 if (manualCount > 0) parts.add("$manualCount manual")
                 if (autoCount > 0) parts.add("$autoCount auto-generated")
-                val label = if (parts.isNotEmpty()) "Subtitles available: ${parts.joinToString(", ")}" else ""
+                val label = if (parts.isNotEmpty()) stringResource(R.string.subtitles_available, parts.joinToString(", ")) else ""
                 if (label.isNotEmpty()) {
                     Text(
                         text = label,
@@ -1039,7 +1041,7 @@ private fun EnhancedSubtitleSection(
                     BrutalTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = "Search languages\u2026",
+                        placeholder = stringResource(R.string.search_languages),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1051,7 +1053,7 @@ private fun EnhancedSubtitleSection(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${selectedLangs.size}/${currentTracks.size} selected",
+                        text = stringResource(R.string.subtitle_selected, selectedLangs.size, currentTracks.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
@@ -1061,12 +1063,12 @@ private fun EnhancedSubtitleSection(
                                 if (!selectedLangs.contains(t.languageCode)) onToggle(t.languageCode)
                             }
                         }) {
-                            Text("SELECT ALL", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.btn_select_all), style = MaterialTheme.typography.labelSmall)
                         }
                         TextButton(onClick = {
                             selectedLangs.toList().forEach { onToggle(it) }
                         }) {
-                            Text("CLEAR", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.btn_clear_format), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -1142,7 +1144,7 @@ private fun EnhancedSubtitleSection(
                             modifier = Modifier.padding(end = 12.dp)
                         )
                         Text(
-                            text = "Embed subtitles in video",
+                            text = stringResource(R.string.toggle_embed_subtitles),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -1152,7 +1154,7 @@ private fun EnhancedSubtitleSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Format:",
+                            text = stringResource(R.string.format_label),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             modifier = Modifier.padding(end = 8.dp)
@@ -1184,7 +1186,7 @@ private fun EnhancedSubtitleSection(
 
                     // Summary
                     Text(
-                        text = "Will download: $totalSelected subtitle${if (totalSelected != 1) "s" else ""} + video",
+                        text = if (totalSelected == 1) stringResource(R.string.subtitle_summary_single) else stringResource(R.string.subtitle_summary, totalSelected),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
@@ -1257,5 +1259,5 @@ private fun copyToClipboard(context: Context, text: String, label: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
     val clip = ClipData.newPlainText(label, text)
     clipboard.setPrimaryClip(clip)
-    Toast.makeText(context, "${label} copied", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.copied_toast, label), Toast.LENGTH_SHORT).show()
 }

@@ -1,9 +1,12 @@
 package com.otter.app
 
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,8 +23,14 @@ import com.otter.app.ui.navigation.NavGraph
 import com.otter.app.ui.theme.ThemeViewModel
 import com.otter.app.ui.theme.OtterTheme
 import com.otter.app.util.FileHelper
+import com.otter.app.util.LocaleManager
 
 class MainActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        val lang = LocaleManager.getPersistedLanguage(newBase)
+        super.attachBaseContext(LocaleManager.applyLanguage(newBase, lang))
+    }
 
     companion object {
         const val EXTRA_NAVIGATE_TO = "navigate_to"
@@ -37,6 +46,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        val currentLocale = resources.configuration.locales[0]
+        val isRtl = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        Log.i(TAG, "Current locale: ${currentLocale.language} | LayoutDirection RTL: $isRtl")
 
         _sharedUrl.value = intent?.getStringExtra(ShareActivity.EXTRA_SHARED_URL)
         val navigateTo = intent?.getStringExtra(EXTRA_NAVIGATE_TO)
@@ -64,6 +77,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        val lang = LocaleManager.getPersistedLanguage(this)
+        newConfig.setLayoutDirection(java.util.Locale.forLanguageTag(lang))
+        super.onConfigurationChanged(newConfig)
     }
 
     override fun onNewIntent(intent: Intent) {

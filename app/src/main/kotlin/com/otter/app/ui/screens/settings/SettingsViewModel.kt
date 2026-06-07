@@ -3,6 +3,7 @@ package com.otter.app.ui.screens.settings
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.otter.app.R
 import com.otter.app.data.repository.DownloadRepository
 import com.otter.app.engine.YtDlpUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,6 +82,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     val ytDlpVersion: String
         get() = updater.getVersion()
+
+    val appVersion: String
+        get() = try {
+            getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0).versionName ?: "1.1.0"
+        } catch (e: Exception) { "1.1.0" }
 
     fun setAutoDownload(enabled: Boolean) {
         viewModelScope.launch { prefs.setAutoDownload(enabled) }
@@ -161,14 +167,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         if (_isUpdating.value) return
         viewModelScope.launch {
             _isUpdating.value = true
-            _updateStatus.value = "Checking for updates\u2026"
+            _updateStatus.value = getApplication<Application>().getString(R.string.checking_updates)
             val result = updater.update { progress ->
                 _updateStatus.value = progress
             }
             _updateStatus.value = when (result) {
-                is YtDlpUpdater.UpdateResult.Updated -> "Updated to ${result.version}"
-                is YtDlpUpdater.UpdateResult.AlreadyUpToDate -> "Already up to date"
-                is YtDlpUpdater.UpdateResult.Failed -> "Failed: ${result.error}"
+                is YtDlpUpdater.UpdateResult.Updated -> getApplication<Application>().getString(R.string.updated_to, result.version)
+                is YtDlpUpdater.UpdateResult.AlreadyUpToDate -> getApplication<Application>().getString(R.string.already_up_to_date)
+                is YtDlpUpdater.UpdateResult.Failed -> getApplication<Application>().getString(R.string.update_failed, result.error)
             }
             _isUpdating.value = false
         }

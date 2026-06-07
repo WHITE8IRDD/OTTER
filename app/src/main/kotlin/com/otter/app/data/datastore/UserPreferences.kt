@@ -43,6 +43,7 @@ class UserPreferences(private val context: Context) {
         val KEY_COOKIE_CONTENT = stringPreferencesKey("cookie_content")
         val KEY_ACCENT_COLOR = intPreferencesKey("accent_color")
         val KEY_TINT_LOGO = booleanPreferencesKey("tint_logo")
+        val KEY_LANGUAGE = stringPreferencesKey("app_language")
     }
 
     val downloadPath: Flow<String> = context.dataStore.data.map { prefs ->
@@ -139,6 +140,10 @@ class UserPreferences(private val context: Context) {
 
     val tintLogo: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_TINT_LOGO] ?: true
+    }
+
+    val language: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LANGUAGE] ?: "en"
     }
 
     suspend fun setDownloadPath(path: String) {
@@ -254,6 +259,12 @@ class UserPreferences(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[KEY_TINT_LOGO] = enabled }
     }
 
+    suspend fun setLanguage(lang: String) {
+        context.dataStore.edit { prefs -> prefs[KEY_LANGUAGE] = lang }
+        context.getSharedPreferences("otter_shared_prefs", Context.MODE_PRIVATE)
+            .edit().putString("app_language", lang).apply()
+    }
+
     suspend fun getAccentColorOnce(): Int = accentColor.first()
 
     fun getDefaultDownloadPath(): String {
@@ -279,4 +290,5 @@ class UserPreferences(private val context: Context) {
     suspend fun getUseAria2cOnce(): Boolean = useAria2c.first()
     suspend fun getCookiesEnabledOnce(): Boolean = cookiesEnabled.first()
     suspend fun getCookieContentOnce(): String = cookieContent.first()
+    suspend fun getLanguageOnce(): String = language.first()
 }

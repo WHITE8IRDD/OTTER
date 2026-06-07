@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.webkit.*
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import com.otter.app.R
 import com.otter.app.data.cookies.CookieManager
 import java.net.URLDecoder
 
@@ -74,7 +75,7 @@ class LoginActivity : ComponentActivity() {
             cm.flush()
             captured = true
             runOnUiThread {
-                Toast.makeText(this, "Cookies saved!", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.login_cookies_saved), Toast.LENGTH_LONG).show()
             }
             webView.postDelayed({ finish() }, 1500)
         }

@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -102,20 +103,20 @@ fun HistoryScreen(
             ) {
                 Column {
                     Text(
-                        text = "History",
+                        text = stringResource(R.string.history_title),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Your downloaded videos",
+                        text = stringResource(R.string.history_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 if (downloads.isNotEmpty()) {
                     BrutalButton(
-                        text = "CLEAR ALL",
+                        text = stringResource(R.string.btn_clear_all),
                         onClick = { showClearDialog = true },
                         backgroundColor = MaterialTheme.colorScheme.error,
                         textColor = MaterialTheme.colorScheme.onError
@@ -156,19 +157,19 @@ fun HistoryScreen(
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            title = { Text("Clear History") },
-            text = { Text("Remove all download history? This won't delete the actual files.") },
+            title = { Text(stringResource(R.string.clear_history_title)) },
+            text = { Text(stringResource(R.string.clear_history_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearAllHistory()
                     showClearDialog = false
                 }) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.btn_clear), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.btn_cancel))
                 }
             }
         )
@@ -201,7 +202,7 @@ private fun MascotHistoryEmptyState(logoTint: Color) {
             tint = logoTint
         )
         SpeechBubble(
-            text = "No videos here yet!\nFeed me some links!",
+            text = stringResource(R.string.empty_state_videos),
             modifier = Modifier
                 .fillMaxWidth(0.75f)
                 .height(80.dp),
@@ -219,7 +220,7 @@ fun HistoryItemCard(
     onShare: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+    val dateFormat = SimpleDateFormat.getDateInstance(SimpleDateFormat.MEDIUM, Locale.getDefault())
 
     BrutalCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -233,7 +234,7 @@ fun HistoryItemCard(
                     if (item.thumbnailUrl != null) {
                         AsyncImage(
                             model = item.thumbnailUrl,
-                            contentDescription = "Thumbnail",
+                            contentDescription = stringResource(R.string.content_desc_thumbnail),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.size(64.dp)
                         )
@@ -256,7 +257,7 @@ fun HistoryItemCard(
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
-                                text = "CC",
+                                text = stringResource(R.string.badge_subtitle),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimary,
                                 fontWeight = FontWeight.Bold
@@ -319,18 +320,18 @@ fun HistoryItemCard(
             ) {
                 if (fileExists) {
                     IconButton(onClick = onOpen) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.content_desc_play), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onLocate) {
-                        Icon(Icons.Default.Folder, contentDescription = "Show in folder", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.Folder, contentDescription = stringResource(R.string.content_desc_show_folder), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onShare) {
-                        Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.Share, contentDescription = stringResource(R.string.content_desc_share), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.content_desc_delete), tint = MaterialTheme.colorScheme.error)
                 }
             }
         }

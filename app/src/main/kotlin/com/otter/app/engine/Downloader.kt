@@ -2,6 +2,7 @@ package com.otter.app.engine
 
 import android.content.Context
 import android.util.Log
+import com.otter.app.R
 import com.otter.app.data.datastore.UserPreferences
 import com.otter.app.data.model.DownloadState
 import com.yausername.youtubedl_android.YoutubeDL
@@ -182,7 +183,7 @@ class Downloader(private val context: Context) {
             attempt++
             if (attempt > 1) {
                 val waitMs = listOf(1000L, 2000L, 4000L, 8000L, 16000L).getOrElse(attempt - 2) { 16000L }
-                onProgress(DownloadState.Downloading(0f, "", "Retrying ($attempt/${settings.retries})"))
+                onProgress(DownloadState.Downloading(0f, "", context.getString(R.string.retrying, attempt, settings.retries)))
                 Log.i(TAG, "Retry $attempt/${settings.retries} for $url (waiting ${waitMs}ms)")
                 delay(waitMs)
             }
@@ -192,7 +193,7 @@ class Downloader(private val context: Context) {
 
                 val outputFile = File(outputDir)
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
-                    throw IOException("Failed to create output directory: $outputDir")
+                    throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
 
                 val request = YoutubeDLRequest(url).apply {
@@ -233,7 +234,7 @@ class Downloader(private val context: Context) {
                     onProgress(DownloadState.Success(externalPath))
                 } else {
                     Log.e(TAG, "download claimed success but no file found in $outputDir")
-                    onProgress(DownloadState.Error("Download completed but file not found. Check storage permissions."))
+                    onProgress(DownloadState.Error(context.getString(R.string.download_file_missing)))
                 }
                 return@withContext
 
@@ -245,8 +246,8 @@ class Downloader(private val context: Context) {
                 if (!isRecoverableError(msg) || attempt > settings.retries) {
                     Log.e(TAG, "Non-recoverable or max retries reached for $url: $msg")
                     onProgress(DownloadState.Error(
-                        if (attempt > 1) "Failed after ${settings.retries} retries: ${e.message ?: "Download failed"}"
-                        else e.message ?: "Download failed"
+                        if (attempt > 1) context.getString(R.string.failed_after_retries, settings.retries, e.message ?: context.getString(R.string.download_failed_text))
+                        else e.message ?: context.getString(R.string.download_failed_text)
                     ))
                     return@withContext
                 }
@@ -304,7 +305,7 @@ class Downloader(private val context: Context) {
 
         } catch (e: Exception) {
             activeDownloads.remove(url)
-            onProgress(DownloadState.Error(e.message ?: "Thumbnail download failed"))
+            onProgress(DownloadState.Error(e.message ?: context.getString(R.string.thumbnail_download_failed)))
         }
     }
 
@@ -326,7 +327,7 @@ class Downloader(private val context: Context) {
             attempt++
             if (attempt > 1) {
                 val waitMs = listOf(1000L, 2000L, 4000L, 8000L, 16000L).getOrElse(attempt - 2) { 16000L }
-                onProgress(DownloadState.Downloading(0f, "", "Retrying ($attempt/${settings.retries})"))
+                onProgress(DownloadState.Downloading(0f, "", context.getString(R.string.retrying, attempt, settings.retries)))
                 delay(waitMs)
             }
 
@@ -335,7 +336,7 @@ class Downloader(private val context: Context) {
 
                 val outputFile = File(outputDir)
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
-                    throw IOException("Failed to create output directory: $outputDir")
+                    throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
 
                 val request = YoutubeDLRequest(url).apply {
@@ -384,7 +385,7 @@ class Downloader(private val context: Context) {
                     onProgress(DownloadState.Success(externalPath))
                 } else {
                     Log.e(TAG, "downloadWithThumbnail claimed success but no file found in $outputDir")
-                    onProgress(DownloadState.Error("Download completed but file not found. Check storage permissions."))
+                    onProgress(DownloadState.Error(context.getString(R.string.download_file_missing)))
                 }
                 return@withContext
 
@@ -394,8 +395,8 @@ class Downloader(private val context: Context) {
                 val msg = e.message ?: ""
 
                 if (!isRecoverableError(msg) || attempt > settings.retries) {
-                    val errorMsg = if (attempt > 1) "Failed after ${settings.retries} retries: ${e.message ?: "Download failed"}"
-                    else e.message ?: "Download failed"
+                    val errorMsg = if (attempt > 1) context.getString(R.string.failed_after_retries, settings.retries, e.message ?: context.getString(R.string.download_failed_text))
+                    else e.message ?: context.getString(R.string.download_failed_text)
                     onProgress(DownloadState.Error(errorMsg))
                     return@withContext
                 }
@@ -455,12 +456,12 @@ class Downloader(private val context: Context) {
                 onProgress(DownloadState.Success(externalPath))
             } else {
                 Log.e(TAG, "downloadWithOptions claimed success but no file found in $outputDir")
-                onProgress(DownloadState.Error("Download completed but file not found. Check storage permissions."))
+                onProgress(DownloadState.Error(context.getString(R.string.download_file_missing)))
             }
 
         } catch (e: Exception) {
             activeDownloads.remove(url)
-            onProgress(DownloadState.Error(e.message ?: "Download failed"))
+            onProgress(DownloadState.Error(e.message ?: context.getString(R.string.download_failed_text)))
         }
     }
 
@@ -472,7 +473,7 @@ class Downloader(private val context: Context) {
     ) = withContext(Dispatchers.IO) {
         val outputFile = File(outputDir)
         if (!outputFile.exists() && !outputFile.mkdirs()) {
-            onProgress(DownloadState.Error("Failed to create output directory"))
+            onProgress(DownloadState.Error(context.getString(R.string.creating_output_dir_failed)))
             return@withContext
         }
 
@@ -547,7 +548,7 @@ class Downloader(private val context: Context) {
                     val done = savedCount.incrementAndGet()
 
                     val progress = done.toFloat() / total.toFloat()
-                    onProgress(DownloadState.Downloading(progress, "", "$done/$total images"))
+                    onProgress(DownloadState.Downloading(progress, "", context.getString(R.string.image_progress, done, total)))
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to download image $index: $imageUrl", e)
                     errors.incrementAndGet()
@@ -558,7 +559,7 @@ class Downloader(private val context: Context) {
         awaitAll(*jobs.toTypedArray())
 
         if (savedPaths.isEmpty()) {
-            onProgress(DownloadState.Error("Failed to download any images"))
+            onProgress(DownloadState.Error(context.getString(R.string.failed_all_images)))
         } else if (savedPaths.size == 1) {
             onProgress(DownloadState.Success(savedPaths.first()))
         } else {

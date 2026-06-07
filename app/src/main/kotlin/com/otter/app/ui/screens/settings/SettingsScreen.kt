@@ -1,5 +1,6 @@
 package com.otter.app.ui.screens.settings
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
@@ -24,29 +25,40 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.otter.app.R
 import com.otter.app.data.model.VideoInfo
 import com.otter.app.ui.components.ColorDot
 import com.otter.app.ui.components.SettingsClickableRow
@@ -54,6 +66,7 @@ import com.otter.app.ui.components.SettingsGroup
 import com.otter.app.ui.components.SettingsRow
 import com.otter.app.ui.theme.ACCENT_PRESETS
 import com.otter.app.ui.theme.ThemeViewModel
+import com.otter.app.util.LocaleManager
 import com.otter.app.util.NotificationHelper
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -99,22 +112,22 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
             ) {
                 Text(
-                    text = "Settings",
+                    text = stringResource(R.string.settings_title),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "App preferences and configuration",
+                    text = stringResource(R.string.settings_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            SettingsGroup(title = "Appearance") {
+            SettingsGroup(title = stringResource(R.string.settings_appearance)) {
                 SettingsRow(
-                    title = "Dark mode",
-                    subtitle = "Use dark theme",
+                    title = stringResource(R.string.setting_dark_mode),
+                    subtitle = stringResource(R.string.setting_dark_mode_sub),
                     trailing = {
                         Switch(
                             checked = isDarkMode,
@@ -130,7 +143,7 @@ fun SettingsScreen(
                 )
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                     Text(
-                        text = "Accent color",
+                        text = stringResource(R.string.setting_accent_color),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -150,8 +163,8 @@ fun SettingsScreen(
                     }
                 }
                 SettingsRow(
-                    title = "Tint logo with accent color",
-                    subtitle = "In-app otter logo matches accent",
+                    title = stringResource(R.string.setting_tint_logo),
+                    subtitle = stringResource(R.string.setting_tint_logo_sub),
                     trailing = {
                         Switch(
                             checked = tintLogo,
@@ -167,10 +180,10 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsGroup(title = "Downloads") {
+            SettingsGroup(title = stringResource(R.string.settings_downloads)) {
                 SettingsRow(
-                    title = "Auto-download",
-                    subtitle = "Skip quality picker",
+                    title = stringResource(R.string.setting_auto_download),
+                    subtitle = stringResource(R.string.setting_auto_download_sub),
                     trailing = {
                         Switch(
                             checked = autoDownload,
@@ -185,8 +198,8 @@ fun SettingsScreen(
                     }
                 )
                 SettingsRow(
-                    title = "Download playlist",
-                    subtitle = "Download entire playlist when detected",
+                    title = stringResource(R.string.setting_download_playlist),
+                    subtitle = stringResource(R.string.setting_download_playlist_sub),
                     trailing = {
                         Switch(
                             checked = playlist,
@@ -201,8 +214,8 @@ fun SettingsScreen(
                     }
                 )
                 SettingsRow(
-                    title = "Extract audio only",
-                    subtitle = "Download audio without video",
+                    title = stringResource(R.string.setting_extract_audio),
+                    subtitle = stringResource(R.string.setting_extract_audio_sub),
                     trailing = {
                         Switch(
                             checked = extractAudio,
@@ -217,8 +230,8 @@ fun SettingsScreen(
                     }
                 )
                 SettingsRow(
-                    title = "Embed thumbnail",
-                    subtitle = "Embed thumbnail in file",
+                    title = stringResource(R.string.setting_embed_thumbnail),
+                    subtitle = stringResource(R.string.setting_embed_thumbnail_sub),
                     trailing = {
                         Switch(
                             checked = embedThumbnail,
@@ -233,8 +246,8 @@ fun SettingsScreen(
                     }
                 )
                 SettingsRow(
-                    title = "Embed metadata",
-                    subtitle = "Embed title, artist, etc.",
+                    title = stringResource(R.string.setting_embed_metadata),
+                    subtitle = stringResource(R.string.setting_embed_metadata_sub),
                     trailing = {
                         Switch(
                             checked = embedMetadata,
@@ -250,8 +263,8 @@ fun SettingsScreen(
                     showDivider = true
                 )
                 SettingsRow(
-                    title = "Download subtitles",
-                    subtitle = "Include subtitles with Quick Download",
+                    title = stringResource(R.string.setting_download_subtitles),
+                    subtitle = stringResource(R.string.setting_download_subtitles_sub),
                     trailing = {
                         Switch(
                             checked = downloadSubtitles,
@@ -268,10 +281,10 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsGroup(title = "Performance") {
+            SettingsGroup(title = stringResource(R.string.settings_performance)) {
                 SettingsRow(
-                    title = "Use Aria2c",
-                    subtitle = "Faster downloads with Aria2",
+                    title = stringResource(R.string.setting_use_aria2c),
+                    subtitle = stringResource(R.string.setting_use_aria2c_sub),
                     trailing = {
                         Switch(
                             checked = useAria2c,
@@ -286,8 +299,8 @@ fun SettingsScreen(
                     }
                 )
                 SettingsRow(
-                    title = "Rate limit",
-                    subtitle = "Limit download speed",
+                    title = stringResource(R.string.setting_rate_limit),
+                    subtitle = stringResource(R.string.setting_rate_limit_sub),
                     trailing = {
                         Switch(
                             checked = rateLimit,
@@ -304,10 +317,10 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsGroup(title = "Notifications") {
+            SettingsGroup(title = stringResource(R.string.settings_notifications)) {
                 val context = LocalContext.current
                 SettingsRow(
-                    title = "Test notification sound",
+                    title = stringResource(R.string.setting_test_notification),
                     onClick = { NotificationHelper.playTestSound(context) },
                     trailing = {
                         Text(
@@ -318,7 +331,7 @@ fun SettingsScreen(
                     }
                 )
                 SettingsRow(
-                    title = "Notification settings",
+                    title = stringResource(R.string.setting_notification_settings),
                     onClick = { NotificationHelper.openNotificationSettings(context) },
                     trailing = {
                         Text(
@@ -331,15 +344,34 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsGroup(title = "Site Cookies") {
+            SettingsGroup(title = stringResource(R.string.settings_app_language)) {
+                val context = LocalContext.current
+                var showLangPicker by remember { mutableStateOf(false) }
                 SettingsClickableRow(
-                    title = "Manage Cookies",
-                    subtitle = "Required for Instagram, private YouTube, and age-restricted content",
+                    title = stringResource(R.string.settings_app_language),
+                    subtitle = when (LocaleManager.getPersistedLanguage(context)) {
+                        "ar" -> stringResource(R.string.language_ar)
+                        "fr" -> stringResource(R.string.language_fr)
+                        else -> stringResource(R.string.language_en)
+                    },
+                    onClick = { showLangPicker = true }
+                )
+                if (showLangPicker) {
+                    LanguageSettingsPickerSheet(
+                        onDismiss = { showLangPicker = false }
+                    )
+                }
+            }
+
+            SettingsGroup(title = stringResource(R.string.settings_site_cookies)) {
+                SettingsClickableRow(
+                    title = stringResource(R.string.setting_manage_cookies),
+                    subtitle = stringResource(R.string.setting_manage_cookies_sub),
                     onClick = onSiteCookies
                 )
             }
 
-            SettingsGroup(title = "Download Engine") {
+            SettingsGroup(title = stringResource(R.string.settings_download_engine)) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -348,7 +380,7 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "𝘈𝘝® engine version",
+                                text = stringResource(R.string.setting_engine_version),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -371,7 +403,7 @@ fun SettingsScreen(
                             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                         ) {
                             Text(
-                                text = if (isUpdating) "Updating\u2026" else "Update",
+                                text = if (isUpdating) stringResource(R.string.btn_checking_updates) else stringResource(R.string.btn_update),
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
@@ -398,7 +430,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsGroup(title = "Download Location") {
+            SettingsGroup(title = stringResource(R.string.settings_download_location)) {
                 val context = LocalContext.current
                 val folderLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocumentTree()
@@ -417,9 +449,9 @@ fun SettingsScreen(
                 val defaultPath = remember {
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/Otter/"
                 }
-                val displayPath = remember(downloadPath) {
+                val displayPath = remember(downloadPath, context) {
                     when {
-                        downloadPath.isEmpty() || downloadPath == defaultPath -> "Default (Downloads/Otter)"
+                        downloadPath.isEmpty() || downloadPath == defaultPath -> context.getString(R.string.setting_default_path)
                         else -> downloadPath.substringAfterLast("/").let {
                             if (it.length > 30) it.take(30) + "…" else it
                         }
@@ -427,7 +459,7 @@ fun SettingsScreen(
                 }
 
                 SettingsRow(
-                    title = "Save to",
+                    title = stringResource(R.string.setting_save_to),
                     subtitle = displayPath,
                     onClick = { folderLauncher.launch(null) },
                     trailing = {
@@ -445,7 +477,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
                     ) {
                         Text(
-                            text = "Reset to default",
+                            text = stringResource(R.string.btn_reset_default),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -453,34 +485,34 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsGroup(title = "Supported Platforms") {
+            SettingsGroup(title = stringResource(R.string.settings_supported_platforms)) {
                 SettingsRow(
-                    title = "1000+ platforms supported",
+                    title = stringResource(R.string.setting_platforms_count),
                     subtitle = VideoInfo.SUPPORTED_PLATFORMS.joinToString(" \u2022 "),
                     trailing = {},
                     showDivider = false
                 )
             }
 
-            SettingsGroup(title = "Legal") {
+            SettingsGroup(title = stringResource(R.string.settings_legal)) {
                 SettingsRow(
-                    title = "Legal Notice",
-                    subtitle = "Please only download content you have the right to save. Respect copyright and platform terms of service.",
+                    title = stringResource(R.string.setting_legal_notice),
+                    subtitle = stringResource(R.string.setting_legal_notice_sub),
                     trailing = {},
                     showDivider = false
                 )
             }
 
-            SettingsGroup(title = "About") {
+            SettingsGroup(title = stringResource(R.string.settings_about)) {
                 SettingsRow(
-                    title = "Otter",
-                    subtitle = "Version 1.1.0 \u2022 Powered by 𝘈𝘝® engine \u2022 Built with Jetpack Compose",
+                    title = stringResource(R.string.setting_app_name),
+                    subtitle = stringResource(R.string.setting_version_info, viewModel.appVersion),
                     trailing = {},
                     showDivider = true
                 )
                 SettingsRow(
-                    title = "Engine",
-                    subtitle = "Powered by 𝘈𝘝® engine \u2014 ultra-fast media extraction for 1000+ platforms",
+                    title = stringResource(R.string.setting_engine_info),
+                    subtitle = stringResource(R.string.setting_engine_info_sub),
                     trailing = {},
                     showDivider = false
                 )
@@ -500,5 +532,86 @@ private fun resolveSafPath(uri: Uri): String? {
         "${Environment.getExternalStorageDirectory()}/$relativePath"
     } else {
         "/storage/$type/$relativePath"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LanguageSettingsPickerSheet(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val current = LocaleManager.getPersistedLanguage(context)
+    val languages = listOf(
+        "en" to stringResource(R.string.language_en),
+        "ar" to stringResource(R.string.language_ar),
+        "fr" to stringResource(R.string.language_fr)
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.language_picker_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            languages.forEach { (code, displayName) ->
+                val isSelected = code == current
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onDismiss()
+                            if (activity != null) {
+                                LocaleManager.persistAndRestart(activity, code)
+                            }
+                        },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Text(
+                                text = displayName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Text(
+                            text = code.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }

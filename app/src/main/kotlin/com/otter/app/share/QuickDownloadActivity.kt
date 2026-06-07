@@ -6,6 +6,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import com.otter.app.MainActivity
+import com.otter.app.R
 import com.otter.app.data.repository.DownloadRepository
 import com.otter.app.service.DownloadService
 import com.otter.app.util.extractUrlFromText
@@ -60,7 +61,7 @@ class QuickDownloadActivity : ComponentActivity() {
             // so redirect to the normal share flow with format sheet
             if (isTikTokUrl(sharedUrl)) {
                 Log.i(TAG, "Redirecting TikTok URL to normal flow via MainActivity")
-                Toast.makeText(this, "Quick Download not available for TikTok — opening normal flow", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.tiktok_normal_flow), Toast.LENGTH_SHORT).show()
                 val mainIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     putExtra(ShareActivity.EXTRA_SHARED_URL, sharedUrl)
@@ -86,7 +87,7 @@ class QuickDownloadActivity : ComponentActivity() {
                         putExtra(DownloadService.EXTRA_URL, sharedUrl)
                         putExtra(DownloadService.EXTRA_FORMAT_ID, "bestvideo+bestaudio/best")
                         putExtra(DownloadService.EXTRA_OUTPUT_DIR, outputDir)
-                        putExtra(DownloadService.EXTRA_TITLE, "Quick Download")
+                        putExtra(DownloadService.EXTRA_TITLE, getString(R.string.quick_download_title))
                         putExtra(DownloadService.EXTRA_THUMBNAIL_URL, "")
                         putExtra(DownloadService.EXTRA_SAVE_THUMBNAIL, false)
                         putExtra(DownloadService.EXTRA_SUBTITLE_LANGS, subLang)
@@ -97,14 +98,14 @@ class QuickDownloadActivity : ComponentActivity() {
                     Log.i(TAG, "QuickDownload starting service...")
                     startForegroundService(serviceIntent)
                     Log.i(TAG, "QuickDownload service started, finishing activity")
-                    Toast.makeText(this@QuickDownloadActivity, "Quick download started", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickDownloadActivity, getString(R.string.quick_download_started), Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    Toast.makeText(this@QuickDownloadActivity, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@QuickDownloadActivity, getString(R.string.quick_download_failed, e.message), Toast.LENGTH_LONG).show()
                 }
                 finish()
             }
         } else {
-            Toast.makeText(this, "No valid URL found", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.no_valid_url), Toast.LENGTH_SHORT).show()
             finish()
         }
     }

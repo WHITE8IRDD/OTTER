@@ -2,6 +2,7 @@ package com.otter.app.engine
 
 import android.content.Context
 import android.util.Log
+import com.otter.app.R
 import com.yausername.youtubedl_android.YoutubeDL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,7 +25,7 @@ class YtDlpUpdater(private val context: Context) {
         onProgress: (String) -> Unit = {}
     ): UpdateResult = withContext(Dispatchers.IO) {
         try {
-            onProgress("Checking for updates...")
+            onProgress(context.getString(R.string.update_checking))
             val result = YoutubeDL.getInstance().updateYoutubeDL(
                 context,
                 YoutubeDL.UpdateChannel.NIGHTLY
@@ -33,23 +34,23 @@ class YtDlpUpdater(private val context: Context) {
                 YoutubeDL.UpdateStatus.DONE -> {
                     val version = getVersion()
                     saveUpdateTime()
-                    onProgress("Updated to $version")
+                    onProgress(context.getString(R.string.update_success, version))
                     Log.i(TAG, "yt-dlp updated to $version (nightly)")
                     UpdateResult.Updated(version)
                 }
                 YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE -> {
                     saveUpdateTime()
-                    onProgress("Already up to date")
+                    onProgress(context.getString(R.string.update_already))
                     Log.i(TAG, "yt-dlp already up to date")
                     UpdateResult.AlreadyUpToDate
                 }
                 else -> {
-                    UpdateResult.Failed("Update failed with status: $result")
+                    UpdateResult.Failed(context.getString(R.string.update_failed_status, result))
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Update failed", e)
-            UpdateResult.Failed(e.message ?: "Unknown error")
+            UpdateResult.Failed(e.message ?: context.getString(R.string.update_unknown_error))
         }
     }
 

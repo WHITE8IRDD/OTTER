@@ -179,7 +179,7 @@ object NotificationHelper {
         val contentText = buildString {
             append("$progress%")
             if (speedText.isNotEmpty()) append(" \u2022 $speedText")
-            if (etaText.isNotEmpty()) append(" \u2022 ${etaText}s left")
+            if (etaText.isNotEmpty()) append(context.getString(R.string.eta_seconds, etaText))
         }
 
         return NotificationCompat.Builder(context, CHANNEL_DOWNLOAD)
@@ -191,7 +191,7 @@ object NotificationHelper {
             .setSilent(true)
             .setLargeIcon(largeIcon)
             .setOnlyAlertOnce(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.notif_cancel), cancelPendingIntent)
             .build()
     }
 
@@ -251,9 +251,9 @@ object NotificationHelper {
             .setSound(soundUri)
             .setVibrate(longArrayOf(0, 200, 100, 200))
             .setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
-            .addAction(android.R.drawable.ic_menu_zoom, "Open", openFilePendingIntent)
-            .addAction(android.R.drawable.ic_menu_share, "Share", sharePendingIntent)
-            .addAction(android.R.drawable.ic_menu_directions, "Show in Folder", locatePendingIntent)
+            .addAction(android.R.drawable.ic_menu_zoom, context.getString(R.string.notif_open), openFilePendingIntent)
+            .addAction(android.R.drawable.ic_menu_share, context.getString(R.string.notif_share), sharePendingIntent)
+            .addAction(android.R.drawable.ic_menu_directions, context.getString(R.string.notif_show_folder), locatePendingIntent)
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -287,7 +287,7 @@ object NotificationHelper {
             .setSound(soundUri)
             .setVibrate(longArrayOf(0, 200, 100, 200))
             .setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
-            .addAction(android.R.drawable.ic_menu_revert, "Retry", retryPendingIntent)
+            .addAction(android.R.drawable.ic_menu_revert, context.getString(R.string.notif_retry), retryPendingIntent)
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

@@ -29,15 +29,17 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.otter.app.ui.screens.cookies.CookiesScreen
 import com.otter.app.ui.screens.history.HistoryScreen
+import androidx.compose.ui.res.stringResource
+import com.otter.app.R
 import com.otter.app.ui.screens.home.HomeScreen
 import com.otter.app.ui.screens.settings.SettingsScreen
 import com.otter.app.ui.theme.ThemeViewModel
 
-sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
-    object Home : Screen("home", "Home", Icons.Default.Download)
-    object History : Screen("history", "History", Icons.Default.History)
-    object Settings : Screen("settings", "Settings", Icons.Default.Settings)
-    object Cookies : Screen("cookies", "Cookies", Icons.Default.Settings)
+sealed class Screen(val route: String, val labelResId: Int, val icon: ImageVector) {
+    object Home : Screen("home", R.string.nav_home, Icons.Default.Download)
+    object History : Screen("history", R.string.nav_history, Icons.Default.History)
+    object Settings : Screen("settings", R.string.nav_settings, Icons.Default.Settings)
+    object Cookies : Screen("cookies", R.string.nav_settings, Icons.Default.Settings)
 }
 
 val bottomNavScreens = listOf(Screen.Home, Screen.History, Screen.Settings)
@@ -70,10 +72,10 @@ fun NavGraph(
                         icon = {
                             Icon(
                                 imageVector = screen.icon,
-                                contentDescription = screen.label
+                                contentDescription = stringResource(screen.labelResId)
                             )
                         },
-                        label = { Text(screen.label) },
+                        label = { Text(stringResource(screen.labelResId)) },
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {

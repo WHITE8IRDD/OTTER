@@ -1,10 +1,291 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- App -->
     <string name="app_name">Otter</string>
-    <string name="download_complete">Download Complete!</string>
-    <string name="download_failed">Download Failed</string>
+
+    <!-- Notification Channels -->
     <string name="notification_channel_download">Downloads</string>
     <string name="notification_channel_download_desc">Shows progress for active downloads</string>
     <string name="notification_channel_complete">Download Complete</string>
     <string name="notification_channel_complete_desc">Notifies when a download finishes</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Language picker -->
+    <string name="language_en">English</string>
+    <string name="language_ar">العربية</string>
+    <string name="language_fr">Français</string>
+    <string name="language_picker_title">App Language</string>
+
+    <!-- HomeScreen -->
+    <string name="link_detected">Link detected</string>
+    <string name="btn_use">USE</string>
+    <string name="paste_video_link">Paste a video link</string>
+    <string name="url_placeholder">https://youtube.com/watch?v=…</string>
+    <string name="btn_fetching">FETCHING…</string>
+    <string name="btn_fetch_download">FETCH &amp; DOWNLOAD</string>
+    <string name="quick_download_label">Quick download</string>
+    <string name="quick_download_subtitle">Skip quality picker</string>
+    <string name="info_loaded">Info loaded</string>
+    <string name="btn_download_another">DOWNLOAD ANOTHER</string>
+    <string name="empty_state_videos">No videos here yet!\nFeed me some links!</string>
+    <string name="btn_cancel">CANCEL</string>
+    <string name="error_state_title">Oops! Something went wrong</string>
+    <string name="btn_try_again">TRY AGAIN</string>
+    <string name="btn_cookie_settings">COOKIE SETTINGS</string>
+    <string name="platforms_footer">YouTube • Instagram • Facebook • Tiktok • X +1000 more •••</string>
+
+    <!-- HomeScreen - Palette -->
+    <string name="palette_title">Accent Color</string>
+    <string name="hex_input_placeholder">Hex code</string>
+    <string name="hex_prefix">#</string>
+    <string name="hex_error">Invalid hex — use format FF5722</string>
+
+    <!-- HomeScreen - About -->
+    <string name="about_app_name">OTTER</string>
+    <string name="about_description">Open-source media downloader for Android. Powered by the •AV® engine.</string>
+    <string name="about_description2">Otter lets you download video, audio, images, and subtitles from 1000+ platforms — YouTube, TikTok, Instagram, Facebook, Twitter/X, and more.</string>
+    <string name="about_description3">Built with Jetpack Compose. Lightweight, fast, and fully open source.</string>
+    <string name="social_instagram">Instagram</string>
+    <string name="social_instagram_handle">@acee.visuals</string>
+    <string name="social_github">GitHub</string>
+    <string name="social_github_handle">/Acevisuals</string>
+    <string name="about_year">2026</string>
+
+    <!-- HomeScreen - Header -->
+    <string name="header_app_name">OTTER</string>
+    <string name="content_desc_palette">Accent color</string>
+    <string name="content_desc_light_mode">Light mode</string>
+    <string name="content_desc_dark_mode">Dark mode</string>
+    <string name="content_desc_language">Change language</string>
+
+    <!-- HomeViewModel -->
+    <string name="fetching_video_info">Fetching video info…</string>
+    <string name="images_saved">%d images saved</string>
+    <string name="image_saved">1 image saved</string>
+    <string name="enter_valid_url">Please enter a valid URL</string>
+    <string name="fetching_post">Fetching post…</string>
+    <string name="failed_fetch_video">Failed to fetch video info</string>
+    <string name="no_suitable_format">No suitable format found</string>
+    <string name="video_thumbnail_saved">Video + Thumbnail saved</string>
+    <string name="error_instagram_cookies">Instagram requires login to download this content. Please add your browser cookies in Settings → Site Cookies.</string>
+    <string name="error_youtube_login">This YouTube video requires login. Please add your browser cookies in Settings → Site Cookies.</string>
+    <string name="error_facebook">Facebook download failed. Please update the engine in Settings or add Facebook cookies if this is a private video.</string>
+    <string name="error_tiktok">TikTok download failed. This video may be region-locked or require login. Try adding TikTok cookies in Settings → Site Cookies.</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">App preferences and configuration</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="setting_dark_mode">Dark mode</string>
+    <string name="setting_dark_mode_sub">Use dark theme</string>
+    <string name="setting_accent_color">Accent color</string>
+    <string name="setting_tint_logo">Tint logo with accent color</string>
+    <string name="setting_tint_logo_sub">In-app otter logo matches accent</string>
+    <string name="settings_downloads">Downloads</string>
+    <string name="setting_auto_download">Auto-download</string>
+    <string name="setting_auto_download_sub">Skip quality picker</string>
+    <string name="setting_download_playlist">Download playlist</string>
+    <string name="setting_download_playlist_sub">Download entire playlist when detected</string>
+    <string name="setting_extract_audio">Extract audio only</string>
+    <string name="setting_extract_audio_sub">Download audio without video</string>
+    <string name="setting_embed_thumbnail">Embed thumbnail</string>
+    <string name="setting_embed_thumbnail_sub">Embed thumbnail in file</string>
+    <string name="setting_embed_metadata">Embed metadata</string>
+    <string name="setting_embed_metadata_sub">Embed title, artist, etc.</string>
+    <string name="setting_download_subtitles">Download subtitles</string>
+    <string name="setting_download_subtitles_sub">Include subtitles with Quick Download</string>
+    <string name="settings_performance">Performance</string>
+    <string name="setting_use_aria2c">Use Aria2c</string>
+    <string name="setting_use_aria2c_sub">Faster downloads with Aria2</string>
+    <string name="setting_rate_limit">Rate limit</string>
+    <string name="setting_rate_limit_sub">Limit download speed</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="setting_test_notification">Test notification sound</string>
+    <string name="setting_notification_settings">Notification settings</string>
+    <string name="settings_site_cookies">Site Cookies</string>
+    <string name="setting_manage_cookies">Manage Cookies</string>
+    <string name="setting_manage_cookies_sub">Required for Instagram, private YouTube, and age-restricted content</string>
+    <string name="settings_download_engine">Download Engine</string>
+    <string name="setting_engine_version">•AV® engine version</string>
+    <string name="btn_checking_updates">Updating…</string>
+    <string name="btn_update">Update</string>
+    <string name="settings_download_location">Download Location</string>
+    <string name="setting_default_path">Default (Downloads/Otter)</string>
+    <string name="setting_save_to">Save to</string>
+    <string name="btn_reset_default">Reset to default</string>
+    <string name="settings_supported_platforms">Supported Platforms</string>
+    <string name="setting_platforms_count">1000+ platforms supported</string>
+    <string name="settings_legal">Legal</string>
+    <string name="setting_legal_notice">Legal Notice</string>
+    <string name="setting_legal_notice_sub">Please only download content you have the right to save. Respect copyright and platform terms of service.</string>
+    <string name="settings_about">About</string>
+    <string name="setting_app_name">Otter</string>
+    <string name="setting_version_info">Version %s • Powered by •AV® engine • Built with Jetpack Compose</string>
+    <string name="setting_engine_info">Engine</string>
+    <string name="setting_engine_info_sub">Powered by •AV® engine — ultra-fast media extraction for 1000+ platforms</string>
+    <string name="settings_app_language">App Language</string>
+
+    <!-- SettingsViewModel -->
+    <string name="checking_updates">Checking for updates…</string>
+    <string name="updated_to">Updated to %s</string>
+    <string name="already_up_to_date">Already up to date</string>
+    <string name="update_failed">Failed: %s</string>
+
+    <!-- HistoryScreen -->
+    <string name="history_title">History</string>
+    <string name="history_subtitle">Your downloaded videos</string>
+    <string name="btn_clear_all">CLEAR ALL</string>
+    <string name="clear_history_title">Clear History</string>
+    <string name="clear_history_message">Remove all download history? This won\'t delete the actual files.</string>
+    <string name="btn_clear">Clear</string>
+    <string name="badge_subtitle">CC</string>
+
+    <!-- Content descriptions -->
+    <string name="content_desc_dismiss">Dismiss</string>
+    <string name="content_desc_clear">Clear</string>
+    <string name="content_desc_paste">Paste</string>
+    <string name="content_desc_refetch">Re-fetch</string>
+    <string name="content_desc_close">Close</string>
+    <string name="content_desc_thumbnail">Thumbnail</string>
+    <string name="content_desc_play">Play</string>
+    <string name="content_desc_show_folder">Show in folder</string>
+    <string name="content_desc_share">Share</string>
+    <string name="content_desc_delete">Delete</string>
+    <string name="content_desc_copy_uploader">Copy uploader</string>
+    <string name="content_desc_copy_title">Copy title</string>
+    <string name="content_desc_copy">Copy</string>
+    <string name="content_desc_copy_description">Copy description</string>
+    <string name="content_desc_image">Image %d</string>
+
+    <!-- CookiesScreen -->
+    <string name="cookies_title">Site Cookies</string>
+    <string name="cookies_instructions_header">How to get your cookies:</string>
+    <string name="cookies_step1">1. Install a browser extension: "Get cookies.txt LOCALLY" for Chrome or "cookies.txt" for Firefox</string>
+    <string name="cookies_step2">2. Log into Instagram (or other site) in your browser</string>
+    <string name="cookies_step3">3. Use the extension to export cookies and copy them</string>
+    <string name="cookies_step4">4. Paste the full cookies.txt content below and tap Save</string>
+    <string name="cookies_placeholder">Paste your cookies.txt here…</string>
+    <string name="btn_import_file">Import from file</string>
+    <string name="btn_save">Save</string>
+    <string name="btn_back">Back</string>
+
+    <!-- CookiesViewModel -->
+    <string name="cookies_empty_error">Cannot save empty cookies</string>
+    <string name="cookies_saved">Cookies saved successfully!</string>
+    <string name="cookies_save_failed">Failed to save: %s</string>
+    <string name="cookies_cleared">Cookies cleared</string>
+    <string name="file_empty">File is empty</string>
+    <string name="cookies_loaded">Cookies loaded from file. Tap Save to apply.</string>
+    <string name="file_read_failed">Failed to read file: %s</string>
+
+    <!-- LoginActivity -->
+    <string name="login_cookies_saved">Cookies saved!</string>
+    <string name="cookie_file_header"># Netscape HTTP Cookie File</string>
+    <string name="cookie_file_auto_gen"># Auto-generated by Otter Login</string>
+
+    <!-- ProgressCard -->
+    <string name="downloading">Downloading…</string>
+
+    <!-- FormatSheet -->
+    <string name="choose_quality">CHOOSE QUALITY</string>
+    <string name="section_hashtags">Hashtags</string>
+    <string name="section_tags">Tags</string>
+    <string name="section_description">Description</string>
+    <string name="show_less">Show less</string>
+    <string name="show_more">Show more</string>
+    <string name="btn_download_thumbnail">DOWNLOAD THUMBNAIL ONLY</string>
+    <string name="toggle_save_thumbnail">Also save thumbnail with video</string>
+    <string name="carousel_empty">No carousel images available</string>
+    <string name="carousel_empty_sub">Add Instagram cookies in Settings to view and download carousel images</string>
+    <string name="carousel_selected">%1$d/%2$d selected</string>
+    <string name="btn_select_all">SELECT ALL</string>
+    <string name="btn_clear_format">CLEAR</string>
+    <string name="btn_download_selected">Download Selected (%d)</string>
+    <string name="audio_language">AUDIO LANGUAGE</string>
+    <string name="audio_available">(%d available)</string>
+    <string name="toggle_download_subtitles">Download subtitles with video</string>
+    <string name="subtitles_available">Subtitles available: %s</string>
+    <string name="search_languages">Search languages…</string>
+    <string name="subtitle_selected">%1$d/%2$d selected</string>
+    <string name="toggle_embed_subtitles">Embed subtitles in video</string>
+    <string name="format_label">Format:</string>
+    <string name="subtitle_summary">Will download: %d subtitles + video</string>
+    <string name="subtitle_summary_single">Will download: 1 subtitle + video</string>
+    <string name="copied_toast">%s copied</string>
+
+    <!-- QuickDownloadActivity -->
+    <string name="tiktok_normal_flow">Quick Download not available for TikTok — opening normal flow</string>
+    <string name="quick_download_title">Quick Download</string>
+    <string name="quick_download_started">Quick download started</string>
+    <string name="quick_download_failed">Failed: %s</string>
+    <string name="no_valid_url">No valid URL found</string>
+
+    <!-- NotificationHelper -->
+    <string name="eta_seconds">%s • s left</string>
+    <string name="notif_cancel">Cancel</string>
+    <string name="notif_open">Open</string>
+    <string name="notif_share">Share</string>
+    <string name="notif_show_folder">Show in Folder</string>
+    <string name="notif_retry">Retry</string>
+
+    <!-- Notifications (existing) -->
+    <string name="download_complete">Download Complete!</string>
+    <string name="download_failed">Download Failed</string>
+    <string name="download_error_unknown">Unknown error</string>
+
+    <!-- DownloadService -->
+    <string name="default_video_title">Video</string>
+
+    <!-- Downloader -->
+    <string name="retrying">Retrying (%1$d/%2$d)</string>
+    <string name="download_file_missing">Download completed but file not found. Check storage permissions.</string>
+    <string name="failed_after_retries">Failed after %1$d retries: %2$s</string>
+    <string name="download_failed_text">Download failed</string>
+    <string name="thumbnail_download_failed">Thumbnail download failed</string>
+    <string name="creating_output_dir_failed">Failed to create output directory</string>
+    <string name="image_progress">%1$d/%2$d images</string>
+    <string name="failed_all_images">Failed to download any images</string>
+
+    <!-- FileHelper -->
+    <string name="open_with">Open with</string>
+    <string name="file_not_found">File not found</string>
+    <string name="cannot_locate_folder">Cannot locate folder</string>
+    <string name="cannot_open_location">Could not open file location</string>
+    <string name="share_via">Share via</string>
+
+    <!-- FormatParser -->
+    <string name="instagram_default_title">Instagram Post</string>
+    <string name="almost_there">Almost there…</string>
+    <string name="one_more_try">One more try…</string>
+    <string name="still_trying">Still trying…</string>
+    <string name="unknown_format">Unknown</string>
+    <string name="best_video">Best Video</string>
+    <string name="best_audio">Best Audio</string>
+    <string name="best_video_audio">Best Video + Audio (recommended)</string>
+    <string name="muxed">Muxed</string>
+    <string name="best_available">Best Available (recommended)</string>
+
+    <!-- YtDlpUpdater -->
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_success">Updated to %s</string>
+    <string name="update_already">Already up to date</string>
+    <string name="update_failed_status">Update failed with status: %s</string>
+    <string name="update_unknown_error">Unknown error</string>
+
+    <!-- VideoInfo Platform Names -->
+    <string name="platform_youtube">YouTube</string>
+    <string name="platform_twitter">Twitter/X</string>
+    <string name="platform_instagram">Instagram</string>
+    <string name="platform_tiktok">TikTok</string>
+    <string name="platform_facebook">Facebook</string>
+    <string name="platform_reddit">Reddit</string>
+    <string name="platform_twitch">Twitch</string>
+    <string name="platform_vimeo">Vimeo</string>
+    <string name="platform_soundcloud">SoundCloud</string>
+    <string name="platform_bandcamp">Bandcamp</string>
+    <string name="platform_generic">Generic</string>
 </resources>

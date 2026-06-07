@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.otter.app.R
 import com.otter.app.data.cookies.CookieManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +40,7 @@ class CookiesViewModel(application: Application) : AndroidViewModel(application)
     fun save() {
         val text = _cookieText.value.trim()
         if (text.isEmpty()) {
-            _status.value = "Cannot save empty cookies"
+            _status.value = getApplication<Application>().getString(R.string.cookies_empty_error)
             isError = true
             return
         }
@@ -47,10 +48,10 @@ class CookiesViewModel(application: Application) : AndroidViewModel(application)
             try {
                 cookieManager.save(text)
                 _hasCookies.value = true
-                _status.value = "Cookies saved successfully!"
+                _status.value = getApplication<Application>().getString(R.string.cookies_saved)
                 isError = false
             } catch (e: Exception) {
-                _status.value = "Failed to save: ${e.message}"
+                _status.value = getApplication<Application>().getString(R.string.cookies_save_failed, e.message)
                 isError = true
             }
         }
@@ -60,7 +61,7 @@ class CookiesViewModel(application: Application) : AndroidViewModel(application)
         cookieManager.delete()
         _cookieText.value = ""
         _hasCookies.value = false
-        _status.value = "Cookies cleared"
+        _status.value = getApplication<Application>().getString(R.string.cookies_cleared)
         isError = false
     }
 
@@ -70,15 +71,15 @@ class CookiesViewModel(application: Application) : AndroidViewModel(application)
                 val inputStream = getApplication<Application>().contentResolver.openInputStream(uri)
                 val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
                 if (text.isBlank()) {
-                    _status.value = "File is empty"
+                    _status.value = getApplication<Application>().getString(R.string.file_empty)
                     isError = true
                     return@launch
                 }
                 _cookieText.value = text
-                _status.value = "Cookies loaded from file. Tap Save to apply."
+                _status.value = getApplication<Application>().getString(R.string.cookies_loaded)
                 isError = false
             } catch (e: Exception) {
-                _status.value = "Failed to read file: ${e.message}"
+                _status.value = getApplication<Application>().getString(R.string.file_read_failed, e.message)
                 isError = true
             }
         }

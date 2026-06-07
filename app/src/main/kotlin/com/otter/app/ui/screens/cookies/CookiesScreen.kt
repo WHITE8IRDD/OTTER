@@ -19,8 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.otter.app.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.otter.app.ui.components.BrutalButton
 import com.otter.app.ui.components.BrutalCard
@@ -49,7 +51,7 @@ fun CookiesScreen(
             .padding(horizontal = 20.dp)
     ) {
         Text(
-            text = "Site Cookies",
+            text = stringResource(R.string.cookies_title),
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
@@ -61,28 +63,28 @@ fun CookiesScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "How to get your cookies:",
+                    text = stringResource(R.string.cookies_instructions_header),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "1. Install a browser extension: \"Get cookies.txt LOCALLY\" for Chrome or \"cookies.txt\" for Firefox",
+                    text = stringResource(R.string.cookies_step1),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Text(
-                    text = "2. Log into Instagram (or other site) in your browser",
+                    text = stringResource(R.string.cookies_step2),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Text(
-                    text = "3. Use the extension to export cookies and copy them",
+                    text = stringResource(R.string.cookies_step3),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Text(
-                    text = "4. Paste the full cookies.txt content below and tap Save",
+                    text = stringResource(R.string.cookies_step4),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
@@ -94,7 +96,7 @@ fun CookiesScreen(
         BrutalMultilineTextField(
             value = cookieText,
             onValueChange = viewModel::onCookieTextChanged,
-            placeholder = "Paste your cookies.txt here...",
+            placeholder = stringResource(R.string.cookies_placeholder),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(300.dp),
@@ -119,7 +121,7 @@ fun CookiesScreen(
         }
 
         BrutalButton(
-            text = "Import from file",
+            text = stringResource(R.string.btn_import_file),
             onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
             backgroundColor = MaterialTheme.colorScheme.primaryContainer,
             modifier = Modifier.fillMaxWidth()
@@ -132,21 +134,21 @@ fun CookiesScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             BrutalButton(
-                text = "Save",
+                text = stringResource(R.string.btn_save),
                 onClick = viewModel::save,
                 backgroundColor = MaterialTheme.colorScheme.secondaryContainer,
                 modifier = Modifier.weight(1f)
             )
             if (hasCookies) {
                 BrutalButton(
-                    text = "Clear",
+                    text = stringResource(R.string.btn_clear),
                     onClick = viewModel::clear,
                     backgroundColor = MaterialTheme.colorScheme.error,
                     modifier = Modifier.weight(1f)
                 )
             }
             BrutalButton(
-                text = "Back",
+                text = stringResource(R.string.btn_back),
                 onClick = onBack,
                 backgroundColor = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.weight(1f)

@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="ar">
+    <!-- App -->
+    <string name="app_name">Otter</string>
+
+    <!-- Notification Channels -->
+    <string name="notification_channel_download">التنزيلات</string>
+    <string name="notification_channel_download_desc">عرض التقدم للتنزيلات النشطة</string>
+    <string name="notification_channel_complete">اكتمل التنزيل</string>
+    <string name="notification_channel_complete_desc">إشعار عند انتهاء التنزيل</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_history">السجل</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- Language picker -->
+    <string name="language_en">الإنجليزية</string>
+    <string name="language_ar">العربية</string>
+    <string name="language_fr">الفرنسية</string>
+    <string name="language_picker_title">لغة التطبيق</string>
+
+    <!-- HomeScreen -->
+    <string name="link_detected">تم اكتشاف رابط</string>
+    <string name="btn_use">استخدام</string>
+    <string name="paste_video_link">ألصق رابط فيديو</string>
+    <string name="url_placeholder">https://youtube.com/watch?v=…</string>
+    <string name="btn_fetching">جارٍ الجلب…</string>
+    <string name="btn_fetch_download">جلب وتنزيل</string>
+    <string name="quick_download_label">تنزيل سريع</string>
+    <string name="quick_download_subtitle">تخطي اختيار الجودة</string>
+    <string name="info_loaded">تم تحميل المعلومات</string>
+    <string name="btn_download_another">تنزيل آخر</string>
+    <string name="empty_state_videos">لا توجد فيديوهات بعد!\nأضف بعض الروابط!</string>
+    <string name="btn_cancel">إلغاء</string>
+    <string name="error_state_title">عذراً! حدث خطأ ما</string>
+    <string name="btn_try_again">حاول مرة أخرى</string>
+    <string name="btn_cookie_settings">إعدادات الكوكيز</string>
+    <string name="platforms_footer">YouTube • Instagram • Facebook • Tiktok • X +1000 منصة أخرى •••</string>
+
+    <!-- HomeScreen - Palette -->
+    <string name="palette_title">لون التمييز</string>
+    <string name="hex_input_placeholder">الرمز السداسي</string>
+    <string name="hex_prefix">#</string>
+    <string name="hex_error">رمز سداسي غير صالح — استخدم الصيغة FF5722</string>
+
+    <!-- HomeScreen - About -->
+    <string name="about_app_name">OTTER</string>
+    <string name="about_description">برنامج تنزيل وسائط مفتوح المصدر لنظام Android. مدعوم بمحرك •AV®.</string>
+    <string name="about_description2">Otter يتيح لك تنزيل الفيديو والصوت والصور والترجمة من أكثر من 1000 منصة — YouTube وTikTok وInstagram وFacebook وTwitter/X والمزيد.</string>
+    <string name="about_description3">مبني بـ Jetpack Compose. خفيف وسريع ومفتوح المصدر بالكامل.</string>
+    <string name="social_instagram">Instagram</string>
+    <string name="social_instagram_handle">@acee.visuals</string>
+    <string name="social_github">GitHub</string>
+    <string name="social_github_handle">/Acevisuals</string>
+    <string name="about_year">2026</string>
+
+    <!-- HomeScreen - Header -->
+    <string name="header_app_name">OTTER</string>
+    <string name="content_desc_palette">لون التمييز</string>
+    <string name="content_desc_light_mode">الوضع النهاري</string>
+    <string name="content_desc_dark_mode">الوضع الليلي</string>
+    <string name="content_desc_language">تغيير اللغة</string>
+
+    <!-- HomeViewModel -->
+    <string name="fetching_video_info">جارٍ جلب معلومات الفيديو…</string>
+    <string name="images_saved">%d صورة محفوظة</string>
+    <string name="image_saved">تم حفظ صورة واحدة</string>
+    <string name="enter_valid_url">الرجاء إدخال رابط صالح</string>
+    <string name="fetching_post">جارٍ جلب المنشور…</string>
+    <string name="failed_fetch_video">فشل في جلب معلومات الفيديو</string>
+    <string name="no_suitable_format">لم يتم العثور على صيغة مناسبة</string>
+    <string name="video_thumbnail_saved">تم حفظ الفيديو والصورة المصغرة</string>
+    <string name="error_instagram_cookies">يتطلب Instagram تسجيل الدخول لتنزيل هذا المحتوى. الرجاء إضافة كوكيز المتصفح في الإعدادات ← Site Cookies.</string>
+    <string name="error_youtube_login">يتطلب فيديو YouTube هذا تسجيل الدخول. الرجاء إضافة كوكيز المتصفح في الإعدادات ← Site Cookies.</string>
+    <string name="error_facebook">فشل تنزيل Facebook. الرجاء تحديث المحرك في الإعدادات أو إضافة كوكيز Facebook إذا كان هذا فيديو خاصاً.</string>
+    <string name="error_tiktok">فشل تنزيل TikTok. قد يكون هذا الفيديو مقيداً حسب المنطقة أو يتطلب تسجيل الدخول. جرب إضافة كوكيز TikTok في الإعدادات ← Site Cookies.</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_subtitle">خيارات التطبيق والتكوين</string>
+    <string name="settings_appearance">المظهر</string>
+    <string name="setting_dark_mode">الوضع الليلي</string>
+    <string name="setting_dark_mode_sub">استخدام المظهر الداكن</string>
+    <string name="setting_accent_color">لون التمييز</string>
+    <string name="setting_tint_logo">تلوين الشعار بلون التمييز</string>
+    <string name="setting_tint_logo_sub">شعار Otter داخل التطبيق يتناسب مع لون التمييز</string>
+    <string name="settings_downloads">التنزيلات</string>
+    <string name="setting_auto_download">تنزيل تلقائي</string>
+    <string name="setting_auto_download_sub">تخطي اختيار الجودة</string>
+    <string name="setting_download_playlist">تنزيل قائمة التشغيل</string>
+    <string name="setting_download_playlist_sub">تنزيل قائمة التشغيل بالكامل عند اكتشافها</string>
+    <string name="setting_extract_audio">استخراج الصوت فقط</string>
+    <string name="setting_extract_audio_sub">تنزيل الصوت بدون فيديو</string>
+    <string name="setting_embed_thumbnail">تضمين الصورة المصغرة</string>
+    <string name="setting_embed_thumbnail_sub">تضمين الصورة المصغرة في الملف</string>
+    <string name="setting_embed_metadata">تضمين البيانات الوصفية</string>
+    <string name="setting_embed_metadata_sub">تضمين العنوان والفنان وما إلى ذلك</string>
+    <string name="setting_download_subtitles">تنزيل الترجمة</string>
+    <string name="setting_download_subtitles_sub">تضمين الترجمة مع التنزيل السريع</string>
+    <string name="settings_performance">الأداء</string>
+    <string name="setting_use_aria2c">استخدام Aria2c</string>
+    <string name="setting_use_aria2c_sub">تنزيل أسرع مع Aria2</string>
+    <string name="setting_rate_limit">تحديد السرعة</string>
+    <string name="setting_rate_limit_sub">تحديد سرعة التنزيل</string>
+    <string name="settings_notifications">الإشعارات</string>
+    <string name="setting_test_notification">اختبار صوت الإشعار</string>
+    <string name="setting_notification_settings">إعدادات الإشعارات</string>
+    <string name="settings_site_cookies">كوكيز المواقع</string>
+    <string name="setting_manage_cookies">إدارة الكوكيز</string>
+    <string name="setting_manage_cookies_sub">مطلوب لـ Instagram و YouTube الخاص والمحتوى المقيد بالعمر</string>
+    <string name="settings_download_engine">محرك التنزيل</string>
+    <string name="setting_engine_version">إصدار محرك •AV®</string>
+    <string name="btn_checking_updates">جارٍ التحديث…</string>
+    <string name="btn_update">تحديث</string>
+    <string name="settings_download_location">موقع التنزيل</string>
+    <string name="setting_default_path">الافتراضي (Downloads/Otter)</string>
+    <string name="setting_save_to">حفظ في</string>
+    <string name="btn_reset_default">إعادة للافتراضي</string>
+    <string name="settings_supported_platforms">المنصات المدعومة</string>
+    <string name="setting_platforms_count">أكثر من 1000 منصة مدعومة</string>
+    <string name="settings_legal">قانوني</string>
+    <string name="setting_legal_notice">إشعار قانوني</string>
+    <string name="setting_legal_notice_sub">يرجى تنزيل المحتوى الذي يحق لك حفظه فقط. احترم حقوق النشر وشروط خدمة المنصات.</string>
+    <string name="settings_about">حول</string>
+    <string name="setting_app_name">Otter</string>
+    <string name="setting_version_info">الإصدار %s • مدعوم بمحرك •AV® • مبني بـ Jetpack Compose</string>
+    <string name="setting_engine_info">المحرك</string>
+    <string name="setting_engine_info_sub">مدعوم بمحرك •AV® — استخراج وسائط فائق السرعة لأكثر من 1000 منصة</string>
+    <string name="settings_app_language">لغة التطبيق</string>
+
+    <!-- SettingsViewModel -->
+    <string name="checking_updates">جارٍ التحقق من التحديثات…</string>
+    <string name="updated_to">تم التحديث إلى %s</string>
+    <string name="already_up_to_date">محدث بالفعل</string>
+    <string name="update_failed">فشل: %s</string>
+
+    <!-- HistoryScreen -->
+    <string name="history_title">السجل</string>
+    <string name="history_subtitle">فيديوهاتك التي تم تنزيلها</string>
+    <string name="btn_clear_all">مسح الكل</string>
+    <string name="clear_history_title">مسح السجل</string>
+    <string name="clear_history_message">إزالة سجل التنزيل بالكامل؟ لن يتم حذف الملفات الفعلية.</string>
+    <string name="btn_clear">مسح</string>
+    <string name="badge_subtitle">ترجمة</string>
+
+    <!-- Content descriptions -->
+    <string name="content_desc_dismiss">تجاهل</string>
+    <string name="content_desc_clear">مسح</string>
+    <string name="content_desc_paste">لصق</string>
+    <string name="content_desc_refetch">إعادة جلب</string>
+    <string name="content_desc_close">إغلاق</string>
+    <string name="content_desc_thumbnail">صورة مصغرة</string>
+    <string name="content_desc_play">تشغيل</string>
+    <string name="content_desc_show_folder">عرض في المجلد</string>
+    <string name="content_desc_share">مشاركة</string>
+    <string name="content_desc_delete">حذف</string>
+    <string name="content_desc_copy_uploader">نسخ اسم الناشر</string>
+    <string name="content_desc_copy_title">نسخ العنوان</string>
+    <string name="content_desc_copy">نسخ</string>
+    <string name="content_desc_copy_description">نسخ الوصف</string>
+    <string name="content_desc_image">صورة %d</string>
+
+    <!-- CookiesScreen -->
+    <string name="cookies_title">كوكيز المواقع</string>
+    <string name="cookies_instructions_header">كيف تحصل على الكوكيز:</string>
+    <string name="cookies_step1">1. ثبت إضافة متصفح: "Get cookies.txt LOCALLY" لـ Chrome أو "cookies.txt" لـ Firefox</string>
+    <string name="cookies_step2">2. سجل الدخول إلى Instagram (أو أي موقع آخر) في متصفحك</string>
+    <string name="cookies_step3">3. استخدم الإضافة لتصدير الكوكيز ونسخها</string>
+    <string name="cookies_step4">4. ألصق محتوى cookies.txt بالكامل أدناه واضغط حفظ</string>
+    <string name="cookies_placeholder">ألصق cookies.txt هنا…</string>
+    <string name="btn_import_file">استيراد من ملف</string>
+    <string name="btn_save">حفظ</string>
+    <string name="btn_back">رجوع</string>
+
+    <!-- CookiesViewModel -->
+    <string name="cookies_empty_error">لا يمكن حفظ كوكيز فارغة</string>
+    <string name="cookies_saved">تم حفظ الكوكيز بنجاح!</string>
+    <string name="cookies_save_failed">فشل الحفظ: %s</string>
+    <string name="cookies_cleared">تم مسح الكوكيز</string>
+    <string name="file_empty">الملف فارغ</string>
+    <string name="cookies_loaded">تم تحميل الكوكيز من الملف. اضغط حفظ للتطبيق.</string>
+    <string name="file_read_failed">فشل قراءة الملف: %s</string>
+
+    <!-- LoginActivity -->
+    <string name="login_cookies_saved">تم حفظ الكوكيز!</string>
+    <string name="cookie_file_header"># Netscape HTTP Cookie File</string>
+    <string name="cookie_file_auto_gen"># تم الإنشاء تلقائياً بواسطة Otter</string>
+
+    <!-- ProgressCard -->
+    <string name="downloading">جارٍ التنزيل…</string>
+
+    <!-- FormatSheet -->
+    <string name="choose_quality">اختر الجودة</string>
+    <string name="section_hashtags">الوسوم</string>
+    <string name="section_tags">العلامات</string>
+    <string name="section_description">الوصف</string>
+    <string name="show_less">عرض أقل</string>
+    <string name="show_more">عرض أكثر</string>
+    <string name="btn_download_thumbnail">تنزيل الصورة المصغرة فقط</string>
+    <string name="toggle_save_thumbnail">حفظ الصورة المصغرة مع الفيديو أيضاً</string>
+    <string name="carousel_empty">لا توجد صور متاحة في العرض الدوار</string>
+    <string name="carousel_empty_sub">أضف كوكيز Instagram في الإعدادات لعرض وتنزيل صور العرض الدوار</string>
+    <string name="carousel_selected">%1$d/%2$d محدد</string>
+    <string name="btn_select_all">تحديد الكل</string>
+    <string name="btn_clear_format">مسح</string>
+    <string name="btn_download_selected">تنزيل المحدد (%d)</string>
+    <string name="audio_language">اللغة الصوتية</string>
+    <string name="audio_available">(%d متوفرة)</string>
+    <string name="toggle_download_subtitles">تنزيل الترجمة مع الفيديو</string>
+    <string name="subtitles_available">الترجمة متوفرة: %s</string>
+    <string name="search_languages">ابحث عن لغات…</string>
+    <string name="subtitle_selected">%1$d/%2$d محدد</string>
+    <string name="toggle_embed_subtitles">تضمين الترجمة في الفيديو</string>
+    <string name="format_label">الصيغة:</string>
+    <string name="subtitle_summary">سيتم تنزيل: %d ترجمة + فيديو</string>
+    <string name="subtitle_summary_single">سيتم تنزيل: ترجمة واحدة + فيديو</string>
+    <string name="copied_toast">تم نسخ %s</string>
+
+    <!-- QuickDownloadActivity -->
+    <string name="tiktok_normal_flow">التنزيل السريع غير متاح لـ TikTok — جارٍ فتح التدفق العادي</string>
+    <string name="quick_download_title">تنزيل سريع</string>
+    <string name="quick_download_started">بدأ التنزيل السريع</string>
+    <string name="quick_download_failed">فشل: %s</string>
+    <string name="no_valid_url">لم يتم العثور على رابط صالح</string>
+
+    <!-- NotificationHelper -->
+    <string name="eta_seconds">%s • ثانية متبقية</string>
+    <string name="notif_cancel">إلغاء</string>
+    <string name="notif_open">فتح</string>
+    <string name="notif_share">مشاركة</string>
+    <string name="notif_show_folder">عرض في المجلد</string>
+    <string name="notif_retry">إعادة المحاولة</string>
+
+    <!-- Notifications (existing) -->
+    <string name="download_complete">اكتمل التنزيل!</string>
+    <string name="download_failed">فشل التنزيل</string>
+    <string name="download_error_unknown">خطأ غير معروف</string>
+
+    <!-- DownloadService -->
+    <string name="default_video_title">فيديو</string>
+
+    <!-- Downloader -->
+    <string name="retrying">إعادة المحاولة (%1$d/%2$d)</string>
+    <string name="download_file_missing">اكتمل التنزيل ولكن لم يتم العثور على الملف. تحقق من أذونات التخزين.</string>
+    <string name="failed_after_retries">فشل بعد %1$d محاولة: %2$s</string>
+    <string name="download_failed_text">فشل التنزيل</string>
+    <string name="thumbnail_download_failed">فشل تنزيل الصورة المصغرة</string>
+    <string name="creating_output_dir_failed">فشل إنشاء مجلد الإخراج</string>
+    <string name="image_progress">%1$d/%2$d صور</string>
+    <string name="failed_all_images">فشل تنزيل جميع الصور</string>
+
+    <!-- FileHelper -->
+    <string name="open_with">فتح بواسطة</string>
+    <string name="file_not_found">الملف غير موجود</string>
+    <string name="cannot_locate_folder">لا يمكن العثور على المجلد</string>
+    <string name="cannot_open_location">تعذر فتح موقع الملف</string>
+    <string name="share_via">مشاركة عبر</string>
+
+    <!-- FormatParser -->
+    <string name="instagram_default_title">منشور Instagram</string>
+    <string name="almost_there">تقريباً…</string>
+    <string name="one_more_try">محاولة أخرى…</string>
+    <string name="still_trying">لا يزال جارياً…</string>
+    <string name="unknown_format">غير معروف</string>
+    <string name="best_video">أفضل فيديو</string>
+    <string name="best_audio">أفضل صوت</string>
+    <string name="best_video_audio">أفضل فيديو + صوت (موصى به)</string>
+    <string name="muxed">مدمج</string>
+    <string name="best_available">الأفضل المتاح (موصى به)</string>
+
+    <!-- YtDlpUpdater -->
+    <string name="update_checking">جارٍ التحقق من التحديثات…</string>
+    <string name="update_success">تم التحديث إلى %s</string>
+    <string name="update_already">محدث بالفعل</string>
+    <string name="update_failed_status">فشل التحديث بالحالة: %s</string>
+    <string name="update_unknown_error">خطأ غير معروف</string>
+
+    <!-- VideoInfo Platform Names -->
+    <string name="platform_youtube">YouTube</string>
+    <string name="platform_twitter">تويتر/X</string>
+    <string name="platform_instagram">Instagram</string>
+    <string name="platform_tiktok">TikTok</string>
+    <string name="platform_facebook">Facebook</string>
+    <string name="platform_reddit">Reddit</string>
+    <string name="platform_twitch">Twitch</string>
+    <string name="platform_vimeo">Vimeo</string>
+    <string name="platform_soundcloud">SoundCloud</string>
+    <string name="platform_bandcamp">Bandcamp</string>
+    <string name="platform_generic">عام</string>
+</resources>
