@@ -60,7 +60,7 @@ fun CookiesScreen(
 
         OtterCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+            containerColor = MaterialTheme.colorScheme.primary
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -109,7 +109,7 @@ fun CookiesScreen(
         if (status != null) {
             OtterCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = if (viewModel.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer)
+                containerColor = if (viewModel.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
             ) {
                 Text(
                     text = status!!,

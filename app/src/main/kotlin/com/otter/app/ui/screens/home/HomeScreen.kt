@@ -230,49 +230,56 @@ fun HomeScreen(
 
             clipboardDetectedUrl?.let { url ->
                 if (urlInput.isEmpty()) {
-                    OtterCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 0.dp)
+                            .shadow(
+                                elevation = 6.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            ),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "\uD83D\uDCCB",
-                                style = MaterialTheme.typography.bodyMedium
+                            Icon(
+                                Icons.Default.ContentPaste,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(Modifier.width(12.dp))
                             Text(
-                                text = stringResource(R.string.link_detected),
-                                style = MaterialTheme.typography.bodyMedium,
+                                "Link detected",
+                                style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(
-                                onClick = {
-                                    viewModel.onPasteClicked(url)
-                                    clipboardDetectedUrl = null
-                                },
-                                contentPadding = androidx.compose.material3.ButtonDefaults.TextButtonContentPadding
-                            ) {
+                            TextButton(onClick = {
+                                viewModel.onPasteClicked(url)
+                                clipboardDetectedUrl = null
+                            }) {
                                 Text(
-                                    text = stringResource(R.string.btn_use),
+                                    "USE",
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.primary,
+                                    letterSpacing = 1.sp
                                 )
                             }
-                            IconButton(
-                                onClick = { clipboardDetectedUrl = null },
-                                modifier = Modifier.size(20.dp)
-                            ) {
+                            IconButton(onClick = { clipboardDetectedUrl = null }, modifier = Modifier.size(40.dp)) {
                                 Icon(
                                     Icons.Default.Close,
                                     contentDescription = stringResource(R.string.content_desc_dismiss),
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -439,7 +446,7 @@ fun HomeScreen(
             if (downloadState is DownloadState.InfoReady && currentVideoInfo != null) {
                 OtterCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Row(
                         modifier = Modifier
@@ -479,7 +486,7 @@ fun HomeScreen(
             ) {
                 OtterCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Column(
                         modifier = Modifier.padding(20.dp),
@@ -527,9 +534,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(60.dp))
         }
 
-        PlatformsRow(
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
+        // PlatformsRow removed
     }
 
     if (showFormatSheet) {
@@ -642,38 +647,43 @@ private fun MascotEmptyState(logoTint: Color) {
         label = "idle_scale"
     )
 
+    val parts = stringResource(R.string.empty_state_videos).split("\n")
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
         Icon(
             painter = painterResource(id = R.drawable.otter_logo),
             contentDescription = null,
             modifier = Modifier
-                .size(96.dp)
+                .size(80.dp)
                 .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
-            tint = logoTint
+            tint = Color.Unspecified
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.75f)
-                .shadow(2.dp, shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
-                .background(
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
-                )
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.empty_state_videos),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Spacer(Modifier.height(12.dp))
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.shadow(
+                elevation = 4.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = Color.Black.copy(alpha = 0.06f)
             )
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Text(
+                    text = parts.getOrElse(0) { "" },
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = parts.getOrElse(1) { "" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -723,7 +733,7 @@ private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: R
 
     OtterCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Row(
             modifier = Modifier
@@ -771,7 +781,7 @@ private fun MascotErrorState(
 ) {
     OtterCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+        containerColor = MaterialTheme.colorScheme.errorContainer
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -825,19 +835,6 @@ private fun MascotErrorState(
             }
         }
     }
-}
-
-@Composable
-private fun PlatformsRow(modifier: Modifier = Modifier) {
-    Text(
-        text = stringResource(R.string.platforms_footer),
-        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-        textAlign = TextAlign.Center,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp)
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1034,7 +1031,7 @@ private fun AboutDialog(
                         scaleY = popScale.value,
                         alpha = popScale.value.coerceIn(0f, 1f)
                     ),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                containerColor = MaterialTheme.colorScheme.surface
             ) {
                 Column(
                     modifier = Modifier
