@@ -7,7 +7,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -47,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -228,13 +231,15 @@ private fun MascotHistoryEmptyState(logoTint: Color) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        Icon(
+        Image(
             painter = painterResource(R.drawable.mascot_dreamer),
             contentDescription = stringResource(R.string.history_empty_title),
             modifier = Modifier
-                .size(80.dp)
+                .height(52.dp)
+                .aspectRatio(768.85f / 505.61f)
                 .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
-            tint = MaterialTheme.colorScheme.onSurface
+            contentScale = ContentScale.FillBounds,
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Box(

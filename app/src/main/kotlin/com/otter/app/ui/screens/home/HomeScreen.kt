@@ -30,6 +30,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -88,6 +89,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -498,12 +500,14 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
-                            Icon(
+                            Image(
                                 painter = painterResource(id = R.drawable.mascot_archer),
                                 contentDescription = null,
                                 modifier = Modifier
-                                    .size(48.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                                    .height(48.dp)
+                                    .aspectRatio(785.18f / 547.39f),
+                                contentScale = ContentScale.FillBounds,
+                                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
                             )
                             Text(
                                 text = stringResource(R.string.download_complete),
@@ -750,11 +754,13 @@ private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: R
                 painter = painterResource(id = R.drawable.mascot_pounce),
                 contentDescription = null,
                 modifier = Modifier
-                    .height(64.dp)
+                    .height(36.dp)
+                    .aspectRatio(713.63f / 314.77f)
                     .graphicsLayer {
                         translationY = bounceY
                         rotationZ = searchRotate
                     },
+                contentScale = ContentScale.FillBounds,
                 colorFilter = ColorFilter.tint(logoTint)
             )
             Text(
