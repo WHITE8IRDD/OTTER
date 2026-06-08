@@ -190,7 +190,8 @@ class FormatParser(private val context: Context? = null) {
 
     suspend fun fetchVideoInfo(
         url: String,
-        onRetryMessage: ((String) -> Unit)? = null
+        onRetryMessage: ((String) -> Unit)? = null,
+        onRetryStatus: ((Int, Int) -> Unit)? = null
     ): Result<VideoInfo> = withContext(Dispatchers.IO) {
         Log.i(TAG, "fetchVideoInfo START url=$url")
         val resolvedUrl = resolveTikTokShortUrl(url)
@@ -250,6 +251,7 @@ class FormatParser(private val context: Context? = null) {
                 onRetryMessage?.invoke(msg)
                 delay(delays[attempt - 2])
             }
+            onRetryStatus?.invoke(attempt, maxAttempts)
 
             try {
                 val targetUrl = if (url.contains("tiktok.com") || url.contains("vm.tiktok.com") || url.contains("vt.tiktok.com")) resolvedUrl else url

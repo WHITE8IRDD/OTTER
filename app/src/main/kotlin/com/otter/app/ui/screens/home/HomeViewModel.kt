@@ -62,6 +62,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _fetchingMessage = MutableStateFlow("")
     val fetchingMessage: StateFlow<String> = _fetchingMessage.asStateFlow()
 
+    private val _retryStatus = MutableStateFlow(RetryStatus())
+    val retryStatus: StateFlow<RetryStatus> = _retryStatus.asStateFlow()
+
     private val _selectedCarouselIndices = MutableStateFlow<Set<Int>>(emptySet())
     val selectedCarouselIndices: StateFlow<Set<Int>> = _selectedCarouselIndices.asStateFlow()
 
@@ -269,12 +272,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _downloadState.value = DownloadState.FetchingInfo(initialMsg)
         _currentVideoInfo.value = null
         _showFormatSheet.value = false
+        _retryStatus.value = RetryStatus(attempt = 1, maxAttempts = 3, isRetrying = false)
 
         fetchJob = viewModelScope.launch {
-            val result = repository.fetchVideoInfo(url) { msg ->
-                _fetchingMessage.value = msg
-                _downloadState.value = DownloadState.FetchingInfo(msg)
-            }
+            val result = repository.fetchVideoInfo(
+                url,
+                onRetryMessage = { msg ->
+                    _fetchingMessage.value = msg
+                    _downloadState.value = DownloadState.FetchingInfo(msg)
+                },
+                onRetryStatus = { attempt, maxAttempts ->
+                    _retryStatus.value = RetryStatus(attempt = attempt, maxAttempts = maxAttempts, isRetrying = attempt > 1)
+                    if (attempt > 1) {
+                        val retryMsg = getApplication<Application>().getString(R.string.fetching_attempt, attempt, maxAttempts)
+                        _fetchingMessage.value = retryMsg
+                        _downloadState.value = DownloadState.FetchingInfo(retryMsg)
+                    }
+                }
+            )
             result.fold(
                 onSuccess = { info ->
                     _currentVideoInfo.value = info
@@ -300,7 +315,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 onFailure = { error ->
                     _showFormatSheet.value = false
                     val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
-                    val friendly = buildFriendlyError(msg, url)
+                    val friendly = friendlyErrorMessage(msg, url)
                     Log.w("HomeViewModel", "[ERROR-STATE] error shown to user: $friendly")
                     _downloadState.value = DownloadState.Error(friendly)
                     onConsumed()
@@ -328,10 +343,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _downloadState.value = DownloadState.FetchingInfo(initialMsg)
 
         fetchJob = viewModelScope.launch {
-            val result = repository.fetchVideoInfo(url) { msg ->
-                _fetchingMessage.value = msg
-                _downloadState.value = DownloadState.FetchingInfo(msg)
-            }
+            _retryStatus.value = RetryStatus(attempt = 1, maxAttempts = 3, isRetrying = false)
+            val result = repository.fetchVideoInfo(
+                url,
+                onRetryMessage = { msg ->
+                    _fetchingMessage.value = msg
+                    _downloadState.value = DownloadState.FetchingInfo(msg)
+                },
+                onRetryStatus = { attempt, maxAttempts ->
+                    _retryStatus.value = RetryStatus(attempt = attempt, maxAttempts = maxAttempts, isRetrying = attempt > 1)
+                    if (attempt > 1) {
+                        val retryMsg = getApplication<Application>().getString(R.string.fetching_attempt, attempt, maxAttempts)
+                        _fetchingMessage.value = retryMsg
+                        _downloadState.value = DownloadState.FetchingInfo(retryMsg)
+                    }
+                }
+            )
             result.fold(
                 onSuccess = { info ->
                     _currentVideoInfo.value = info
@@ -346,7 +373,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 onFailure = { error ->
                     val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
-                    _downloadState.value = DownloadState.Error(buildFriendlyError(msg, url))
+                    _downloadState.value = DownloadState.Error(friendlyErrorMessage(msg, url))
                 }
             )
         }
@@ -447,9 +474,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     lastProgressUpdate = now
                 }
 
-                _downloadState.value = state
                 if (state is DownloadState.Error) {
-                    Log.w("HomeViewModel", "[ERROR-STATE] download error shown to user: ${state.message}")
+                    val friendly = friendlyErrorMessage(state.message, url)
+                    Log.w("HomeViewModel", "[ERROR-STATE] download error shown to user: $friendly (raw: ${state.message})")
+                    _downloadState.value = DownloadState.Error(friendly)
+                } else {
+                    _downloadState.value = state
                 }
                 if (state is DownloadState.Success) {
                     FileHelper.scanFile(getApplication(), state.filePath)
@@ -542,21 +572,105 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _showFormatSheet.value = false
     }
 
-    private fun buildFriendlyError(msg: String, url: String): String {
+    private fun friendlyErrorMessage(rawError: String, url: String): String {
+        val platform = detectPlatform(url)
+        val app = getApplication<Application>()
+
         return when {
-            msg.contains("Instagram API is not granting access") ||
-            msg.contains("empty media response") ||
-            msg.contains("instagram") && (msg.contains("login") || msg.contains("cookies")) ->
-                getApplication<Application>().getString(R.string.error_instagram_cookies)
-            msg.contains("sign in") && msg.contains("YouTube") ->
-                getApplication<Application>().getString(R.string.error_youtube_login)
-            (url.contains("facebook.com") || url.contains("fb.watch") || url.contains("fb.com")) &&
-                    (msg.contains("generic") || msg.contains("fallback") || msg.contains("extractor")) ->
-                getApplication<Application>().getString(R.string.error_facebook)
-            (url.contains("tiktok.com") || url.contains("vm.tiktok.com") || url.contains("vt.tiktok.com")) &&
-                    (msg.contains("impersonat") || msg.contains("not available") || msg.contains("status code 0")) ->
-                getApplication<Application>().getString(R.string.error_tiktok)
-            else -> msg
+            rawError.contains("timed out", ignoreCase = true) ||
+            rawError.contains("connection refused", ignoreCase = true) ->
+                app.getString(R.string.error_network_timeout)
+
+            rawError.contains("Unable to resolve host", ignoreCase = true) ||
+            rawError.contains("no internet", ignoreCase = true) ->
+                app.getString(R.string.error_no_internet)
+
+            rawError.contains("video unavailable", ignoreCase = true) ||
+            rawError.contains("this video isn't available", ignoreCase = true) ->
+                app.getString(R.string.error_video_unavailable)
+
+            rawError.contains("private video", ignoreCase = true) ->
+                app.getString(R.string.error_private_video)
+
+            rawError.contains("removed", ignoreCase = true) ||
+            rawError.contains("404", ignoreCase = true) ||
+            rawError.contains("not found", ignoreCase = true) ->
+                app.getString(R.string.error_video_removed)
+
+            rawError.contains("copyright", ignoreCase = true) ->
+                app.getString(R.string.error_copyright)
+
+            rawError.contains("sign in", ignoreCase = true) ||
+            rawError.contains("login required", ignoreCase = true) ||
+            rawError.contains("age", ignoreCase = true) && rawError.contains("restrict", ignoreCase = true) ->
+                app.getString(R.string.error_auth_required, getCookieHint(platform))
+
+            rawError.contains("not available in your country", ignoreCase = true) ||
+            rawError.contains("geo", ignoreCase = true) && rawError.contains("restrict", ignoreCase = true) ->
+                app.getString(R.string.error_region_blocked)
+
+            rawError.contains("live event will begin", ignoreCase = true) ->
+                app.getString(R.string.error_live_not_started)
+
+            rawError.contains("DVR", ignoreCase = true) ||
+            rawError.contains("live stream has ended", ignoreCase = true) ->
+                app.getString(R.string.error_live_ended)
+
+            rawError.contains("opus", ignoreCase = true) && rawError.contains("error", ignoreCase = true) ->
+                app.getString(R.string.error_codec_issue)
+
+            rawError.contains("requested format not available", ignoreCase = true) ->
+                app.getString(R.string.error_format_unavailable)
+
+            platform == PLATFORM_INSTAGRAM && rawError.contains("login", ignoreCase = true) ->
+                app.getString(R.string.error_instagram_login)
+
+            platform == PLATFORM_TWITTER && rawError.contains("rate", ignoreCase = true) ->
+                app.getString(R.string.error_twitter_rate_limit)
+
+            platform == PLATFORM_TIKTOK && rawError.contains("extract", ignoreCase = true) ->
+                app.getString(R.string.error_tiktok_extractor)
+
+            platform == PLATFORM_FACEBOOK && rawError.contains("login", ignoreCase = true) ->
+                app.getString(R.string.error_facebook_login)
+
+            else -> app.getString(R.string.error_generic_with_hint)
+        }
+    }
+
+    companion object {
+        private const val PLATFORM_YOUTUBE = 0
+        private const val PLATFORM_FACEBOOK = 1
+        private const val PLATFORM_INSTAGRAM = 2
+        private const val PLATFORM_TWITTER = 3
+        private const val PLATFORM_TIKTOK = 4
+        private const val PLATFORM_OTHER = 5
+    }
+
+    private fun detectPlatform(url: String): Int {
+        return when {
+            url.contains("youtube.com") || url.contains("youtu.be") -> PLATFORM_YOUTUBE
+            url.contains("facebook.com") || url.contains("fb.watch") || url.contains("fb.com") -> PLATFORM_FACEBOOK
+            url.contains("instagram.com") -> PLATFORM_INSTAGRAM
+            url.contains("twitter.com") || url.contains("x.com") -> PLATFORM_TWITTER
+            url.contains("tiktok.com") -> PLATFORM_TIKTOK
+            else -> PLATFORM_OTHER
+        }
+    }
+
+    private fun getCookieHint(platform: Int): String {
+        return when (platform) {
+            PLATFORM_INSTAGRAM -> getApplication<Application>().getString(R.string.cookie_hint_instagram)
+            PLATFORM_FACEBOOK -> getApplication<Application>().getString(R.string.cookie_hint_facebook)
+            PLATFORM_TWITTER -> getApplication<Application>().getString(R.string.cookie_hint_twitter)
+            PLATFORM_YOUTUBE -> getApplication<Application>().getString(R.string.cookie_hint_youtube_age)
+            else -> getApplication<Application>().getString(R.string.cookie_hint_generic)
         }
     }
 }
+
+data class RetryStatus(
+    val attempt: Int = 0,
+    val maxAttempts: Int = 0,
+    val isRetrying: Boolean = false
+)

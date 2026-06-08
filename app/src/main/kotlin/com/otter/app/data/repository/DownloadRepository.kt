@@ -29,9 +29,10 @@ class DownloadRepository(private val context: Context) {
 
     suspend fun fetchVideoInfo(
         url: String,
-        onRetryMessage: ((String) -> Unit)? = null
+        onRetryMessage: ((String) -> Unit)? = null,
+        onRetryStatus: ((Int, Int) -> Unit)? = null
     ): Result<VideoInfo> {
-        return formatParser.fetchVideoInfo(url, onRetryMessage)
+        return formatParser.fetchVideoInfo(url, onRetryMessage, onRetryStatus)
     }
 
     suspend fun startDownload(

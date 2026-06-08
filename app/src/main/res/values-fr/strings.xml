@@ -71,10 +71,32 @@
     <string name="failed_fetch_video">Échec de la récupération des infos vidéo</string>
     <string name="no_suitable_format">Aucun format approprié trouvé</string>
     <string name="video_thumbnail_saved">Vidéo + miniature enregistrées</string>
-    <string name="error_instagram_cookies">Instagram nécessite une connexion pour télécharger ce contenu. Veuillez ajouter vos cookies de navigateur dans Paramètres → Site Cookies.</string>
-    <string name="error_youtube_login">Cette vidéo YouTube nécessite une connexion. Veuillez ajouter vos cookies de navigateur dans Paramètres → Site Cookies.</string>
-    <string name="error_facebook">Échec du téléchargement Facebook. Veuillez mettre à jour le moteur dans Paramètres ou ajouter les cookies Facebook s\'il s\'agit d\'une vidéo privée.</string>
-    <string name="error_tiktok">Échec du téléchargement TikTok. Cette vidéo peut être verrouillée par région ou nécessiter une connexion. Essayez d\'ajouter les cookies TikTok dans Paramètres → Site Cookies.</string>
+    <!-- Friendly error messages -->
+    <string name="error_network_timeout">Délai de connexion dépassé. Vérifiez votre connexion et réessayez.</string>
+    <string name="error_no_internet">Pas de connexion Internet. Connectez-vous au Wi-Fi ou aux données mobiles.</string>
+    <string name="error_video_unavailable">Cette vidéo n\'est pas disponible. Elle a peut-être été supprimée ou est restreinte par région.</string>
+    <string name="error_private_video">Cette vidéo est privée et ne peut pas être téléchargée.</string>
+    <string name="error_video_removed">Vidéo introuvable. Vérifiez que l\'URL est correcte.</string>
+    <string name="error_copyright">Cette vidéo a été supprimée pour des raisons de droits d\'auteur.</string>
+    <string name="error_region_blocked">Cette vidéo n\'est pas disponible dans votre région.</string>
+    <string name="error_format_unavailable">La qualité demandée n\'est pas disponible. Essayez un autre format.</string>
+    <string name="error_codec_issue">Problème de codec vidéo. Essayez une autre qualité.</string>
+    <string name="error_auth_required">Ce contenu nécessite une connexion. %1$s</string>
+    <string name="cookie_hint_instagram">Ajoutez les cookies Instagram dans Paramètres → Cookies pour télécharger.</string>
+    <string name="cookie_hint_facebook">Ajoutez les cookies Facebook dans Paramètres → Cookies pour télécharger.</string>
+    <string name="cookie_hint_twitter">Ajoutez les cookies X/Twitter dans Paramètres → Cookies pour télécharger.</string>
+    <string name="cookie_hint_youtube_age">Pour les vidéos restreintes par âge, ajoutez les cookies YouTube dans Paramètres.</string>
+    <string name="cookie_hint_generic">Ajoutez des cookies dans Paramètres pour accéder à ce contenu.</string>
+    <string name="error_live_not_started">Cette diffusion en direct n\'a pas encore commencé. Réessayez plus tard.</string>
+    <string name="error_live_ended">Cette diffusion en direct est terminée et n\'est plus disponible.</string>
+    <string name="error_instagram_login">Instagram nécessite une connexion. Ajoutez les cookies dans Paramètres.</string>
+    <string name="error_twitter_rate_limit">X/Twitter limite le débit. Attendez une minute et réessayez.</string>
+    <string name="error_tiktok_extractor">Problème d\'extracteur TikTok. Le moteur peut nécessiter une mise à jour — réessayez dans un moment.</string>
+    <string name="error_facebook_login">Facebook nécessite une connexion. Ajoutez les cookies dans Paramètres.</string>
+    <string name="error_generic_with_hint">Impossible de traiter cette vidéo. Vérifiez l\'URL, votre connexion, ou réessayez dans un moment.</string>
+    <string name="fetching_attempt">Récupération… (tentative %1$d sur %2$d)</string>
+    <string name="downloading_attempt">Téléchargement… (tentative %1$d sur %2$d)</string>
+    <string name="retrying_in_seconds">Nouvelle tentative dans %1$d s…</string>
 
     <!-- SettingsScreen -->
     <string name="settings_title">Paramètres</string>
@@ -124,7 +146,7 @@
     <string name="supported_platforms_instagram_desc">Reels et carrousels dimages, publications</string>
     <string name="supported_platforms_twitter_desc">Tweets vidéo depuis x.com et twitter.com</string>
     <string name="supported_platforms_tiktok_desc">URL standards et courtes</string>
-    <string name="supported_platforms_footer">Ce sont les plateformes officiellement prises en charge et testées par Otter. Propulsé par le moteur yt-dlp.</string>
+    <string name="supported_platforms_footer">⚙ Propulsé par le moteur AV®</string>
     <string name="settings_legal">Juridique</string>
     <string name="setting_legal_notice">Avis juridique</string>
     <string name="setting_legal_notice_sub">Veuillez uniquement télécharger le contenu que vous avez le droit de sauvegarder. Respectez les droits d\'auteur et les conditions d\'utilisation des plateformes.</string>

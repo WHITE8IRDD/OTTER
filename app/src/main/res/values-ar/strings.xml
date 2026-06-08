@@ -71,10 +71,32 @@
     <string name="failed_fetch_video">فشل في جلب معلومات الفيديو</string>
     <string name="no_suitable_format">لم يتم العثور على صيغة مناسبة</string>
     <string name="video_thumbnail_saved">تم حفظ الفيديو والصورة المصغرة</string>
-    <string name="error_instagram_cookies">يتطلب Instagram تسجيل الدخول لتنزيل هذا المحتوى. الرجاء إضافة كوكيز المتصفح في الإعدادات ← Site Cookies.</string>
-    <string name="error_youtube_login">يتطلب فيديو YouTube هذا تسجيل الدخول. الرجاء إضافة كوكيز المتصفح في الإعدادات ← Site Cookies.</string>
-    <string name="error_facebook">فشل تنزيل Facebook. الرجاء تحديث المحرك في الإعدادات أو إضافة كوكيز Facebook إذا كان هذا فيديو خاصاً.</string>
-    <string name="error_tiktok">فشل تنزيل TikTok. قد يكون هذا الفيديو مقيداً حسب المنطقة أو يتطلب تسجيل الدخول. جرب إضافة كوكيز TikTok في الإعدادات ← Site Cookies.</string>
+    <!-- Friendly error messages -->
+    <string name="error_network_timeout">انتهت مهلة الاتصال. تحقق من اتصالك بالإنترنت وحاول مرة أخرى.</string>
+    <string name="error_no_internet">لا يوجد اتصال بالإنترنت. اتصل بشبكة Wi-Fi أو بيانات الجوال.</string>
+    <string name="error_video_unavailable">هذا الفيديو غير متاح. ربما تم حذفه أو أنه محظور في منطقتك.</string>
+    <string name="error_private_video">هذا الفيديو خاص ولا يمكن تنزيله.</string>
+    <string name="error_video_removed">لم يتم العثور على الفيديو. تحقق من صحة الرابط.</string>
+    <string name="error_copyright">تم حذف هذا الفيديو لأسباب تتعلق بحقوق النشر.</string>
+    <string name="error_region_blocked">هذا الفيديو غير متاح في منطقتك.</string>
+    <string name="error_format_unavailable">الجودة المطلوبة غير متاحة. جرب صيغة أخرى.</string>
+    <string name="error_codec_issue">مشكلة في ترميز الفيديو. جرب اختيار جودة مختلفة.</string>
+    <string name="error_auth_required">يتطلب هذا المحتوى تسجيل الدخول. %1$s</string>
+    <string name="cookie_hint_instagram">أضف ملفات تعريف الارتباط لـ Instagram من الإعدادات ← ملفات تعريف الارتباط للتنزيل.</string>
+    <string name="cookie_hint_facebook">أضف ملفات تعريف الارتباط لـ Facebook من الإعدادات ← ملفات تعريف الارتباط للتنزيل.</string>
+    <string name="cookie_hint_twitter">أضف ملفات تعريف الارتباط لـ X/Twitter من الإعدادات ← ملفات تعريف الارتباط للتنزيل.</string>
+    <string name="cookie_hint_youtube_age">للفيديوهات المقيدة بالعمر، أضف ملفات تعريف الارتباط لـ YouTube من الإعدادات.</string>
+    <string name="cookie_hint_generic">أضف ملفات تعريف الارتباط من الإعدادات للوصول إلى هذا المحتوى.</string>
+    <string name="error_live_not_started">لم يبدأ هذا البث المباشر بعد. حاول لاحقًا.</string>
+    <string name="error_live_ended">انتهى هذا البث المباشر ولم يعد متاحًا.</string>
+    <string name="error_instagram_login">يتطلب Instagram تسجيل الدخول. أضف ملفات تعريف الارتباط في الإعدادات.</string>
+    <string name="error_twitter_rate_limit">X/Twitter يحد من المعدل. انتظر دقيقة وحاول مرة أخرى.</string>
+    <string name="error_tiktok_extractor">مشكلة في مستخرج TikTok. قد يحتاج المحرك إلى تحديث — حاول مرة أخرى بعد لحظة.</string>
+    <string name="error_facebook_login">يتطلب Facebook تسجيل الدخول. أضف ملفات تعريف الارتباط في الإعدادات.</string>
+    <string name="error_generic_with_hint">تعذرت معالجة هذا الفيديو. تحقق من الرابط أو اتصالك، أو حاول مرة أخرى بعد لحظة.</string>
+    <string name="fetching_attempt">جاري الجلب… (المحاولة %1$d من %2$d)</string>
+    <string name="downloading_attempt">جاري التنزيل… (المحاولة %1$d من %2$d)</string>
+    <string name="retrying_in_seconds">إعادة المحاولة خلال %1$d ثانية…</string>
 
     <!-- SettingsScreen -->
     <string name="settings_title">الإعدادات</string>
@@ -124,7 +146,7 @@
     <string name="supported_platforms_instagram_desc">Reels، معارض الصور، المنشورات</string>
     <string name="supported_platforms_twitter_desc">تغريدات الفيديو من x.com و twitter.com</string>
     <string name="supported_platforms_tiktok_desc">الروابط القياسية والقصيرة</string>
-    <string name="supported_platforms_footer">هذه هي المنصات التي يدعمها Otter رسميًا ويختبرها. مدعوم بواسطة محرك yt-dlp.</string>
+    <string name="supported_platforms_footer">⚙ مدعوم بواسطة محرك AV®</string>
     <string name="settings_legal">قانوني</string>
     <string name="setting_legal_notice">إشعار قانوني</string>
     <string name="setting_legal_notice_sub">يرجى تنزيل المحتوى الذي يحق لك حفظه فقط. احترم حقوق النشر وشروط خدمة المنصات.</string>

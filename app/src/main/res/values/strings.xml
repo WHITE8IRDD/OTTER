@@ -71,10 +71,32 @@
     <string name="failed_fetch_video">Failed to fetch video info</string>
     <string name="no_suitable_format">No suitable format found</string>
     <string name="video_thumbnail_saved">Video + Thumbnail saved</string>
-    <string name="error_instagram_cookies">Instagram requires login to download this content. Please add your browser cookies in Settings → Site Cookies.</string>
-    <string name="error_youtube_login">This YouTube video requires login. Please add your browser cookies in Settings → Site Cookies.</string>
-    <string name="error_facebook">Facebook download failed. Please update the engine in Settings or add Facebook cookies if this is a private video.</string>
-    <string name="error_tiktok">TikTok download failed. This video may be region-locked or require login. Try adding TikTok cookies in Settings → Site Cookies.</string>
+    <!-- Friendly error messages -->
+    <string name="error_network_timeout">Connection timed out. Check your internet and try again.</string>
+    <string name="error_no_internet">No internet connection. Connect to Wi-Fi or mobile data.</string>
+    <string name="error_video_unavailable">This video isn\'t available. It may have been removed or is region-restricted.</string>
+    <string name="error_private_video">This video is private and can\'t be downloaded.</string>
+    <string name="error_video_removed">Video not found. Check that the URL is correct.</string>
+    <string name="error_copyright">This video was removed for copyright reasons.</string>
+    <string name="error_region_blocked">This video isn\'t available in your region.</string>
+    <string name="error_format_unavailable">The requested quality isn\'t available. Try a different format.</string>
+    <string name="error_codec_issue">Video codec issue. Try selecting a different quality.</string>
+    <string name="error_auth_required">This content requires login. %1$s</string>
+    <string name="cookie_hint_instagram">Add Instagram cookies in Settings → Cookies to download.</string>
+    <string name="cookie_hint_facebook">Add Facebook cookies in Settings → Cookies to download.</string>
+    <string name="cookie_hint_twitter">Add X/Twitter cookies in Settings → Cookies to download.</string>
+    <string name="cookie_hint_youtube_age">For age-restricted videos, add YouTube cookies in Settings → Cookies.</string>
+    <string name="cookie_hint_generic">Add cookies in Settings → Cookies to access this content.</string>
+    <string name="error_live_not_started">This live stream hasn\'t started yet. Try again later.</string>
+    <string name="error_live_ended">This live stream has ended and is no longer available.</string>
+    <string name="error_instagram_login">Instagram requires login. Add cookies in Settings → Cookies.</string>
+    <string name="error_twitter_rate_limit">X/Twitter is rate-limiting. Wait a minute and try again.</string>
+    <string name="error_tiktok_extractor">TikTok extractor issue. The engine may need updating — try again in a moment.</string>
+    <string name="error_facebook_login">Facebook requires login. Add cookies in Settings → Cookies.</string>
+    <string name="error_generic_with_hint">Couldn\'t process this video. Check the URL, your connection, or try again in a moment.</string>
+    <string name="fetching_attempt">Fetching… (attempt %1$d of %2$d)</string>
+    <string name="downloading_attempt">Downloading… (attempt %1$d of %2$d)</string>
+    <string name="retrying_in_seconds">Retrying in %1$ds…</string>
 
     <!-- SettingsScreen -->
     <string name="settings_title">Settings</string>
@@ -124,7 +146,7 @@
     <string name="supported_platforms_instagram_desc">Reels, image carousels, posts</string>
     <string name="supported_platforms_twitter_desc">Video tweets from x.com and twitter.com</string>
     <string name="supported_platforms_tiktok_desc">Standard and short URLs</string>
-    <string name="supported_platforms_footer">These are the platforms Otter officially supports and tests. Powered by yt-dlp engine.</string>
+    <string name="supported_platforms_footer">⚙ Powered by AV® engine</string>
     <string name="settings_legal">Legal</string>
     <string name="setting_legal_notice">Legal Notice</string>
     <string name="setting_legal_notice_sub">Please only download content you have the right to save. Respect copyright and platform terms of service.</string>

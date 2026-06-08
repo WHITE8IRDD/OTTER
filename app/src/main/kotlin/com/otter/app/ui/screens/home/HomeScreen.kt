@@ -138,6 +138,7 @@ fun HomeScreen(
     val tintLogo by themeViewModel.tintLogo.collectAsStateWithLifecycle()
     val autoDownload by viewModel.autoDownload.collectAsStateWithLifecycle()
     val fetchingMessage by viewModel.fetchingMessage.collectAsStateWithLifecycle()
+    val retryStatus by viewModel.retryStatus.collectAsStateWithLifecycle()
     val selectedCarouselIndices by viewModel.selectedCarouselIndices.collectAsStateWithLifecycle()
     val selectedSubtitleLangs by viewModel.selectedSubtitleLangs.collectAsStateWithLifecycle()
     val selectedAutoCaptionLangs by viewModel.selectedAutoCaptionLangs.collectAsStateWithLifecycle()
@@ -376,6 +377,7 @@ fun HomeScreen(
                         MascotFetchingState(
                             logoTint = logoTint,
                             message = state.message,
+                            retryStatus = retryStatus,
                             onCancel = viewModel::cancelFetch
                         )
                     }
@@ -593,7 +595,7 @@ private fun MascotEmptyState(logoTint: Color) {
 }
 
 @Composable
-private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -> Unit) {
+private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: RetryStatus, onCancel: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "fetch_bounce")
     val bounceY by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -614,8 +616,9 @@ private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -
         label = "search_rotate"
     )
 
-    // Stage progression for perceived speed
+    // Stage progression for perceived speed (disabled during retry)
     var stage by remember { mutableStateOf<Int>(0) }
+    val isRetrying = retryStatus.isRetrying
     val stageMessages = listOf(
         message,
         stringResource(R.string.fetch_stage_connecting),
@@ -624,6 +627,7 @@ private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -
         stringResource(R.string.fetch_stage_finishing)
     )
     LaunchedEffect(Unit) {
+        if (isRetrying) return@LaunchedEffect
         stage = 0
         kotlinx.coroutines.delay(800)
         if (stage == 0) stage = 1
@@ -632,7 +636,7 @@ private fun MascotFetchingState(logoTint: Color, message: String, onCancel: () -
         kotlinx.coroutines.delay(1500)
         if (stage == 2) stage = 3
     }
-    LaunchedEffect(message) { stage = 0 }
+    LaunchedEffect(message) { if (!isRetrying) stage = 0 }
 
     BrutalCard(
         modifier = Modifier.fillMaxWidth(),
