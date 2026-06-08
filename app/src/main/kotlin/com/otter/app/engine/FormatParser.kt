@@ -13,6 +13,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
@@ -25,7 +27,22 @@ class FormatParser(private val context: Context? = null) {
         private const val TAG = "FormatParser"
         private const val OUTPUT_BASENAME = "%(title).200B"
 
-        private var engineWarmed = false
+        val engineReady = MutableStateFlow(false)
+
+        private suspend fun ensureEngineReady() {
+            if (engineReady.value) return
+            Log.i(TAG, "[PREFLIGHT] Engine not confirmed ready — running --version check")
+            try {
+                kotlinx.coroutines.withTimeout(3000L) {
+                    val pingRequest = YoutubeDLRequest("").apply { addOption("--version") }
+                    YoutubeDL.getInstance().execute(pingRequest)
+                }
+                engineReady.value = true
+                Log.i(TAG, "[PREFLIGHT] --version check succeeded, engine now confirmed ready")
+            } catch (e: Exception) {
+                Log.w(TAG, "[PREFLIGHT] --version check failed (non-blocking): ${e.message}")
+            }
+        }
 
         fun resolveTikTokShortUrl(url: String): String {
             if (!url.contains("tiktok.com") && !url.contains("vm.tiktok.com") && !url.contains("vt.tiktok.com")) return url
@@ -48,7 +65,8 @@ class FormatParser(private val context: Context? = null) {
         }
 
         suspend fun warmUpEngine(context: Context) {
-            if (engineWarmed) return
+            if (engineReady.value) return
+            val startTime = System.currentTimeMillis()
             try {
                 Log.i(TAG, "[WARMUP] Pre-warming engine start...")
                 YoutubeDL.getInstance().init(context)
@@ -58,25 +76,27 @@ class FormatParser(private val context: Context? = null) {
                 YoutubeDL.getInstance().execute(versionRequest)
                 Log.i(TAG, "[WARMUP] yt-dlp binary loaded")
 
-                // Step 2: Quick simulated YouTube fetch to pre-load extractors
+                // Step 2: Simulated YouTube fetch to pre-load extractors (generous timeout)
                 try {
                     val warmRequest = YoutubeDLRequest("https://www.youtube.com/watch?v=dQw4w9WgXcQ").apply {
                         addOption("--skip-download")
                         addOption("--no-warnings")
                         addOption("--dump-json")
                         addOption("--no-playlist")
-                        addOption("--socket-timeout", "5")
-                        addOption("--extractor-retries", "1")
+                        addOption("--socket-timeout", "30")
+                        addOption("--extractor-retries", "3")
                     }
                     YoutubeDL.getInstance().getInfo(warmRequest)
                 } catch (e: Exception) {
-                    Log.w(TAG, "[WARMUP] YouTube warmup failed (non-fatal)", e)
+                    Log.w(TAG, "[WARMUP] YouTube warmup fetch failed (non-fatal)", e)
                 }
 
-                engineWarmed = true
-                Log.i(TAG, "[WARMUP] Engine pre-warmed successfully")
+                engineReady.value = true
+                val duration = System.currentTimeMillis() - startTime
+                Log.i(TAG, "[WARMUP] Engine pre-warmed successfully in ${duration}ms")
             } catch (e: Exception) {
-                Log.w(TAG, "[WARMUP] Engine pre-warm failed (ignored)", e)
+                val duration = System.currentTimeMillis() - startTime
+                Log.w(TAG, "[WARMUP] Engine pre-warm failed after ${duration}ms (ignored)", e)
             }
         }
     }
@@ -134,7 +154,13 @@ class FormatParser(private val context: Context? = null) {
             Log.i(TAG, "Scraper returned empty, falling back to yt-dlp")
         }
 
-        val delays = listOf(500L, 2000L)
+        // Pre-flight: ensure yt-dlp binary is responsive before first attempt
+        if (!engineReady.value) {
+            Log.i(TAG, "[PREFLIGHT] Engine not ready yet, running warmup check")
+            ensureEngineReady()
+        }
+
+        val delays = listOf(1500L, 5000L)
         val maxAttempts = 1 + delays.size
         var lastError: Exception? = null
 
@@ -160,15 +186,18 @@ class FormatParser(private val context: Context? = null) {
                     addOption("--no-write-info-json")
                     addOption("--no-write-description")
                     addOption("--no-write-thumbnail")
-                    addOption("--extractor-retries", "1")
+                    addOption("--extractor-retries", "3")
                     addOption("--flat-playlist")
 
-                    // Platform-specific timeouts
-                    when {
-                        url.contains("instagram.com") -> addOption("--socket-timeout", "8")
-                        url.contains("facebook.com") || url.contains("fb.watch") -> addOption("--socket-timeout", "8")
-                        else -> addOption("--socket-timeout", "5")
+                    // Progressive socket timeout per attempt
+                    val baseTimeout = when {
+                        url.contains("instagram.com") -> 15
+                        url.contains("facebook.com") || url.contains("fb.watch") -> 15
+                        else -> 10
                     }
+                    val socketTimeout = (baseTimeout + (attempt - 1) * 10).coerceAtMost(30)
+                    addOption("--socket-timeout", socketTimeout.toString())
+                    Log.i(TAG, "[FETCH-RETRY] attempt=$attempt socketTimeout=${socketTimeout}s")
 
                     if (context != null) {
                         val cookieFile = File(context.filesDir, "cookies.txt")
