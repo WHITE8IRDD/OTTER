@@ -36,7 +36,7 @@
     <string name="error_state_title">Oops! Something went wrong</string>
     <string name="btn_try_again">TRY AGAIN</string>
     <string name="btn_cookie_settings">COOKIE SETTINGS</string>
-    <string name="platforms_footer">YouTube • Instagram • Facebook • Tiktok • X +1000 more •••</string>
+    <string name="platforms_footer">YouTube • Facebook • Instagram • Twitter/X • TikTok</string>
 
     <!-- HomeScreen - Palette -->
     <string name="palette_title">Accent Color</string>
@@ -47,7 +47,7 @@
     <!-- HomeScreen - About -->
     <string name="about_app_name">OTTER</string>
     <string name="about_description">Open-source media downloader for Android. Powered by the •AV® engine.</string>
-    <string name="about_description2">Otter lets you download video, audio, images, and subtitles from 1000+ platforms — YouTube, TikTok, Instagram, Facebook, Twitter/X, and more.</string>
+    <string name="about_description2">Otter lets you download video, audio, images, and subtitles from 5 popular platforms.</string>
     <string name="about_description3">Built with Jetpack Compose. Lightweight, fast, and fully open source.</string>
     <string name="social_instagram">Instagram</string>
     <string name="social_instagram_handle">@acee.visuals</string>
@@ -118,7 +118,13 @@
     <string name="setting_save_to">Save to</string>
     <string name="btn_reset_default">Reset to default</string>
     <string name="settings_supported_platforms">Supported Platforms</string>
-    <string name="setting_platforms_count">1000+ platforms supported</string>
+    <string name="supported_platforms_intro">Otter officially supports these 5 popular platforms:</string>
+    <string name="supported_platforms_youtube_desc">Videos, Shorts, and live streams</string>
+    <string name="supported_platforms_facebook_desc">Posts, fb.watch, watch.facebook.com</string>
+    <string name="supported_platforms_instagram_desc">Reels, image carousels, posts</string>
+    <string name="supported_platforms_twitter_desc">Video tweets from x.com and twitter.com</string>
+    <string name="supported_platforms_tiktok_desc">Standard and short URLs</string>
+    <string name="supported_platforms_footer">These are the platforms Otter officially supports and tests. Powered by yt-dlp engine.</string>
     <string name="settings_legal">Legal</string>
     <string name="setting_legal_notice">Legal Notice</string>
     <string name="setting_legal_notice_sub">Please only download content you have the right to save. Respect copyright and platform terms of service.</string>
@@ -126,7 +132,7 @@
     <string name="setting_app_name">Otter</string>
     <string name="setting_version_info">Version %s • Powered by •AV® engine • Built with Jetpack Compose</string>
     <string name="setting_engine_info">Engine</string>
-    <string name="setting_engine_info_sub">Powered by •AV® engine — ultra-fast media extraction for 1000+ platforms</string>
+    <string name="setting_engine_info_sub">Powered by •AV® engine — ultra-fast media extraction for 5 popular platforms</string>
     <string name="settings_app_language">App Language</string>
 
     <!-- SettingsViewModel -->
@@ -268,9 +274,7 @@
     <!-- VideoInfo Platform Names -->
 <string name="platform_twitter">Twitter/X</string>
 <string name="platform_tiktok">TikTok</string>
-<string name="platform_reddit">Reddit</string>
-<string name="platform_vimeo">Vimeo</string>
-<string name="platform_bandcamp">Bandcamp</string>
+<!-- Reddit, Vimeo, Bandcamp removed from supported platform list -->
 <!-- Progress -->
     <string name="progress_preparing">Preparing…</string>
     <string name="progress_downloading">Downloading</string>

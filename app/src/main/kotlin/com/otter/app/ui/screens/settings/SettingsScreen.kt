@@ -28,6 +28,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,7 +60,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.otter.app.R
-import com.otter.app.data.model.VideoInfo
 import com.otter.app.ui.components.ColorDot
 import com.otter.app.ui.components.SettingsClickableRow
 import com.otter.app.ui.components.SettingsGroup
@@ -484,12 +486,45 @@ fun SettingsScreen(
             }
 
             SettingsGroup(title = stringResource(R.string.settings_supported_platforms)) {
-                SettingsRow(
-                    title = stringResource(R.string.setting_platforms_count),
-                    subtitle = VideoInfo.SUPPORTED_PLATFORMS.joinToString(" \u2022 "),
-                    trailing = {},
-                    showDivider = false
-                )
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        text = stringResource(R.string.supported_platforms_intro),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    PlatformRow(
+                        icon = Icons.Default.PlayArrow,
+                        name = "YouTube",
+                        description = stringResource(R.string.supported_platforms_youtube_desc)
+                    )
+                    PlatformRow(
+                        icon = Icons.Default.PlayArrow,
+                        name = "Facebook",
+                        description = stringResource(R.string.supported_platforms_facebook_desc)
+                    )
+                    PlatformRow(
+                        icon = Icons.Default.PhotoCamera,
+                        name = "Instagram",
+                        description = stringResource(R.string.supported_platforms_instagram_desc)
+                    )
+                    PlatformRow(
+                        icon = Icons.Default.PlayArrow,
+                        name = "Twitter / X",
+                        description = stringResource(R.string.supported_platforms_twitter_desc)
+                    )
+                    PlatformRow(
+                        icon = Icons.Default.MusicNote,
+                        name = "TikTok",
+                        description = stringResource(R.string.supported_platforms_tiktok_desc)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.supported_platforms_footer),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
             }
 
             SettingsGroup(title = stringResource(R.string.settings_legal)) {
@@ -610,6 +645,41 @@ private fun LanguageSettingsPickerSheet(onDismiss: () -> Unit) {
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun PlatformRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    name: String,
+    description: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = name,
+            modifier = Modifier.size(28.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Column {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

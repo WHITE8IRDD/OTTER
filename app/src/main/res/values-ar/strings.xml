@@ -36,7 +36,7 @@
     <string name="error_state_title">عذراً! حدث خطأ ما</string>
     <string name="btn_try_again">حاول مرة أخرى</string>
     <string name="btn_cookie_settings">إعدادات الكوكيز</string>
-    <string name="platforms_footer">YouTube • Instagram • Facebook • Tiktok • X +1000 منصة أخرى •••</string>
+    <string name="platforms_footer">YouTube • Facebook • Instagram • Twitter/X • TikTok</string>
 
     <!-- HomeScreen - Palette -->
     <string name="palette_title">لون التمييز</string>
@@ -47,7 +47,7 @@
     <!-- HomeScreen - About -->
     <string name="about_app_name">OTTER</string>
     <string name="about_description">برنامج تنزيل وسائط مفتوح المصدر لنظام Android. مدعوم بمحرك •AV®.</string>
-    <string name="about_description2">Otter يتيح لك تنزيل الفيديو والصوت والصور والترجمة من أكثر من 1000 منصة — YouTube وTikTok وInstagram وFacebook وTwitter/X والمزيد.</string>
+    <string name="about_description2">Otter يتيح لك تنزيل الفيديو والصوت والصور والترجمة من 5 منصات شائعة.</string>
     <string name="about_description3">مبني بـ Jetpack Compose. خفيف وسريع ومفتوح المصدر بالكامل.</string>
     <string name="social_instagram">Instagram</string>
     <string name="social_instagram_handle">@acee.visuals</string>
@@ -118,7 +118,13 @@
     <string name="setting_save_to">حفظ في</string>
     <string name="btn_reset_default">إعادة للافتراضي</string>
     <string name="settings_supported_platforms">المنصات المدعومة</string>
-    <string name="setting_platforms_count">أكثر من 1000 منصة مدعومة</string>
+    <string name="supported_platforms_intro">يدعم Otter رسميًا هذه المنصات الخمس الشهيرة:</string>
+    <string name="supported_platforms_youtube_desc">الفيديوهات، Shorts، والبث المباشر</string>
+    <string name="supported_platforms_facebook_desc">المنشورات، fb.watch، watch.facebook.com</string>
+    <string name="supported_platforms_instagram_desc">Reels، معارض الصور، المنشورات</string>
+    <string name="supported_platforms_twitter_desc">تغريدات الفيديو من x.com و twitter.com</string>
+    <string name="supported_platforms_tiktok_desc">الروابط القياسية والقصيرة</string>
+    <string name="supported_platforms_footer">هذه هي المنصات التي يدعمها Otter رسميًا ويختبرها. مدعوم بواسطة محرك yt-dlp.</string>
     <string name="settings_legal">قانوني</string>
     <string name="setting_legal_notice">إشعار قانوني</string>
     <string name="setting_legal_notice_sub">يرجى تنزيل المحتوى الذي يحق لك حفظه فقط. احترم حقوق النشر وشروط خدمة المنصات.</string>
@@ -126,7 +132,7 @@
     <string name="setting_app_name">Otter</string>
     <string name="setting_version_info">الإصدار %s • مدعوم بمحرك •AV® • مبني بـ Jetpack Compose</string>
     <string name="setting_engine_info">المحرك</string>
-    <string name="setting_engine_info_sub">مدعوم بمحرك •AV® — استخراج وسائط فائق السرعة لأكثر من 1000 منصة</string>
+    <string name="setting_engine_info_sub">مدعوم بمحرك •AV® — استخراج وسائط فائق السرعة لـ 5 منصات شائعة</string>
     <string name="settings_app_language">لغة التطبيق</string>
 
     <!-- SettingsViewModel -->
@@ -268,9 +274,7 @@
     <!-- VideoInfo Platform Names -->
 <string name="platform_twitter">تويتر/X</string>
 <string name="platform_tiktok">TikTok</string>
-<string name="platform_reddit">Reddit</string>
-<string name="platform_vimeo">Vimeo</string>
-<string name="platform_bandcamp">Bandcamp</string>
+<!-- Reddit, Vimeo, Bandcamp removed from supported platform list -->
 <!-- Progress -->
     <string name="progress_preparing">جارٍ التجهيز…</string>
     <string name="progress_downloading">جارٍ التنزيل</string>

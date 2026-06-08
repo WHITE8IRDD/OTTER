@@ -53,15 +53,7 @@ data class VideoInfo(
 
     companion object {
         val SUPPORTED_PLATFORMS = listOf(
-            "YouTube", "Facebook", "Instagram", "TikTok", "Twitter/X",
-            "Reddit", "Twitch", "Vimeo", "Dailymotion", "Snapchat",
-            "Pinterest", "LinkedIn", "SoundCloud", "Bandcamp", "Bilibili",
-            "Streamable", "Imgur", "9GAG", "VK", "Telegram",
-            "Rumble", "Odysee", "PeerTube", "Mastodon", "Tumblr",
-            "GettyImages", "NicoNico", "Coub", "GIPHY", "TED",
-            "BBC", "CNN", "Fox News", "NBC", "CBS",
-            "Bloomberg", "The Guardian", "Vice", "Vox", "Wired",
-            "and 1000+ more via 𝘈𝘝® engine"
+            "YouTube", "Facebook", "Instagram", "Twitter/X", "TikTok"
         )
     }
 }
