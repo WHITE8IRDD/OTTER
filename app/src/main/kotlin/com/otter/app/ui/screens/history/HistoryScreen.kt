@@ -229,12 +229,12 @@ private fun MascotHistoryEmptyState(logoTint: Color) {
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         Icon(
-            painter = painterResource(id = R.drawable.otter_logo),
-            contentDescription = null,
+            painter = painterResource(R.drawable.mascot_dreamer),
+            contentDescription = stringResource(R.string.history_empty_title),
             modifier = Modifier
                 .size(80.dp)
                 .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
-            tint = logoTint
+            tint = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(16.dp))
         Box(
