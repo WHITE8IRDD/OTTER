@@ -24,8 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.otter.app.R
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.material3.CardDefaults
 import com.otter.app.ui.components.BrutalButton
-import com.otter.app.ui.components.BrutalCard
+import com.otter.app.ui.components.OtterCard
 import com.otter.app.ui.components.BrutalMultilineTextField
 
 @Composable
@@ -57,9 +58,9 @@ fun CookiesScreen(
             modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
         )
 
-        BrutalCard(
+        OtterCard(
             modifier = Modifier.fillMaxWidth(),
-            backgroundColor = MaterialTheme.colorScheme.primary
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -106,9 +107,9 @@ fun CookiesScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (status != null) {
-            BrutalCard(
+            OtterCard(
                 modifier = Modifier.fillMaxWidth(),
-                backgroundColor = if (viewModel.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
+                colors = CardDefaults.cardColors(containerColor = if (viewModel.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer)
             ) {
                 Text(
                     text = status!!,

@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -23,6 +24,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +53,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
@@ -58,12 +62,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -76,13 +79,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -102,9 +108,10 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.otter.app.data.model.DownloadState
 import com.otter.app.ui.components.BrutalButton
-import com.otter.app.ui.components.BrutalCard
+import com.otter.app.ui.components.OtterCard
 import com.otter.app.ui.components.FormatSheet
 import com.otter.app.ui.components.ProgressCard
+import com.otter.app.ui.components.OtterSwitch
 import com.otter.app.ui.components.SpeechBubble
 import com.otter.app.ui.theme.ACCENT_PRESETS
 import com.otter.app.ui.theme.ThemeViewModel
@@ -160,6 +167,7 @@ fun HomeScreen(
         isDarkMode -> Color.White
         else -> Color.Unspecified
     }
+    val haptic = LocalHapticFeedback.current
 
     LaunchedEffect(Unit) {
         notificationPermission?.let {
@@ -180,6 +188,15 @@ fun HomeScreen(
     }
 
     val scrollState = rememberScrollState()
+
+    // Haptic on error and download complete
+    LaunchedEffect(downloadState) {
+        when (downloadState) {
+            is DownloadState.Error -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            is DownloadState.Success -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            else -> {}
+        }
+    }
 
     // Auto-scroll to top when active download appears
     LaunchedEffect(displayState) {
@@ -213,10 +230,9 @@ fun HomeScreen(
 
             clipboardDetectedUrl?.let { url ->
                 if (urlInput.isEmpty()) {
-                    BrutalCard(
+                    OtterCard(
                         modifier = Modifier.fillMaxWidth(),
-                        backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        cornerRadius = OtterDimens.ButtonCorner
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                     ) {
                         Row(
                             modifier = Modifier
@@ -264,14 +280,14 @@ fun HomeScreen(
                 }
             }
 
-            BrutalCard(modifier = Modifier.fillMaxWidth()) {
+            OtterCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.paste_video_link),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
@@ -287,19 +303,20 @@ fun HomeScreen(
                         },
                         textStyle = MaterialTheme.typography.bodyLarge,
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(OtterDimens.InputCorner),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                             cursorColor = MaterialTheme.colorScheme.primary
                         ),
                         trailingIcon = {
                             if (urlInput.isNotEmpty()) {
-                                IconButton(onClick = viewModel::clearUrlInput) {
+                                IconButton(onClick = viewModel::clearUrlInput, modifier = Modifier.size(40.dp)) {
                                     Icon(
                                         Icons.Default.Close,
                                         contentDescription = stringResource(R.string.content_desc_clear),
+                                        modifier = Modifier.size(22.dp),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -308,11 +325,13 @@ fun HomeScreen(
                                     onClick = {
                                         val clipText = context.getClipboardText()
                                         viewModel.onPasteClicked(clipText)
-                                    }
+                                    },
+                                    modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ContentPaste,
                                         contentDescription = stringResource(R.string.content_desc_paste),
+                                        modifier = Modifier.size(22.dp),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -325,14 +344,27 @@ fun HomeScreen(
                             is DownloadState.FetchingInfo -> stringResource(R.string.btn_fetching)
                             else -> stringResource(R.string.btn_fetch_download)
                         },
-                        onClick = { viewModel.fetchVideoInfo() },
-                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.fetchVideoInfo()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
                         enabled = downloadState !is DownloadState.FetchingInfo &&
-                                downloadState !is DownloadState.Downloading
+                                downloadState !is DownloadState.Downloading,
+                        cornerRadius = 16.dp,
+                        backgroundColor = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                            Color(0xFF0A0A0A) else Color(0xFFF5F5F4),
+                        textColor = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                            Color.White else Color(0xFF0A0A0A)
+                    )
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        thickness = 1.dp
                     )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -348,15 +380,9 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Switch(
+                        OtterSwitch(
                             checked = autoDownload,
-                            onCheckedChange = viewModel::setAutoDownload,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setAutoDownload
                         )
                     }
                 }
@@ -374,12 +400,21 @@ fun HomeScreen(
             ) {
                 when (val state = displayState) {
                     is DownloadState.FetchingInfo -> {
-                        MascotFetchingState(
-                            logoTint = logoTint,
-                            message = state.message,
-                            retryStatus = retryStatus,
-                            onCancel = viewModel::cancelFetch
-                        )
+                        var showSkeleton by remember(state) { mutableStateOf(true) }
+                        LaunchedEffect(state) {
+                            kotlinx.coroutines.delay(2000)
+                            showSkeleton = false
+                        }
+                        if (showSkeleton) {
+                            FetchingSkeleton()
+                        } else {
+                            MascotFetchingState(
+                                logoTint = logoTint,
+                                message = state.message,
+                                retryStatus = retryStatus,
+                                onCancel = viewModel::cancelFetch
+                            )
+                        }
                     }
                     is DownloadState.Downloading, is DownloadState.Paused -> {
                         ProgressCard(
@@ -402,9 +437,9 @@ fun HomeScreen(
             }
 
             if (downloadState is DownloadState.InfoReady && currentVideoInfo != null) {
-                BrutalCard(
+                OtterCard(
                     modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Row(
                         modifier = Modifier
@@ -442,9 +477,9 @@ fun HomeScreen(
                 enter = fadeIn() + slideInVertically(),
                 exit = fadeOut() + slideOutVertically()
             ) {
-                BrutalCard(
+                OtterCard(
                     modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(
                         modifier = Modifier.padding(20.dp),
@@ -556,6 +591,45 @@ fun HomeScreen(
 }
 
 @Composable
+private fun FetchingSkeleton() {
+    val shimmer = rememberInfiniteTransition(label = "shimmer")
+    val alpha by shimmer.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmerAlpha"
+    )
+
+    OtterCard {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha), RoundedCornerShape(12.dp))
+            )
+            Spacer(Modifier.height(16.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth(0.7f)
+                    .height(20.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha), RoundedCornerShape(6.dp))
+            )
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth(0.4f)
+                    .height(16.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha), RoundedCornerShape(6.dp))
+            )
+        }
+    }
+}
+
+@Composable
 private fun MascotEmptyState(logoTint: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "idle_bounce")
     val idleScale by infiniteTransition.animateFloat(
@@ -583,13 +657,22 @@ private fun MascotEmptyState(logoTint: Color) {
             tint = logoTint
         )
         Spacer(modifier = Modifier.height(8.dp))
-        SpeechBubble(
-            text = stringResource(R.string.empty_state_videos),
+        Box(
             modifier = Modifier
                 .fillMaxWidth(0.75f)
-                .height(80.dp),
-            cornerRadius = 20.dp
-        )
+                .shadow(2.dp, shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.empty_state_videos),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
     }
 }
@@ -638,9 +721,9 @@ private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: R
     }
     LaunchedEffect(message) { if (!isRetrying) stage = 0 }
 
-    BrutalCard(
+    OtterCard(
         modifier = Modifier.fillMaxWidth(),
-        backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Row(
             modifier = Modifier
@@ -686,76 +769,58 @@ private fun MascotErrorState(
     isCookieError: Boolean,
     onNavigateToCookies: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "confused_shake")
-    val shakeX by infiniteTransition.animateFloat(
-        initialValue = -3f,
-        targetValue = 3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "shake_x"
-    )
-
-    BrutalCard(
+    OtterCard(
         modifier = Modifier.fillMaxWidth(),
-        backgroundColor = MaterialTheme.colorScheme.errorContainer
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.otter_logo),
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                    Icons.Default.Error,
                     contentDescription = null,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .graphicsLayer {
-                            translationX = shakeX
-                            rotationZ = shakeX * 0.5f
-                        },
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.size(24.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(Modifier.width(12.dp))
                 Text(
-                    text = stringResource(R.string.error_state_title),
+                    stringResource(R.string.error_title_friendly),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
-
-            SpeechBubble(
+            Spacer(Modifier.height(8.dp))
+            Text(
                 text = message,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp),
-                backgroundColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
-                textColor = MaterialTheme.colorScheme.onErrorContainer,
-                borderColor = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
-                cornerRadius = 20.dp
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                BrutalButton(
-                    text = stringResource(R.string.btn_try_again),
-                    onClick = onRetry,
-                    modifier = Modifier.weight(1f)
+            Spacer(Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.onErrorContainer),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
                 )
-                if (isCookieError) {
-                    BrutalButton(
-                        text = stringResource(R.string.btn_cookie_settings),
-                        onClick = onNavigateToCookies,
-                        modifier = Modifier.weight(1f),
-                        backgroundColor = MaterialTheme.colorScheme.secondary,
-                        textColor = MaterialTheme.colorScheme.onSecondary
+            ) {
+                Text(stringResource(R.string.btn_try_again), style = MaterialTheme.typography.labelLarge)
+            }
+            if (isCookieError) {
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = onNavigateToCookies,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.onErrorContainer),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
                     )
+                ) {
+                    Text(stringResource(R.string.btn_cookie_settings), style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -960,7 +1025,7 @@ private fun AboutDialog(
                 .clickable(enabled = false) {},
             contentAlignment = Alignment.Center
         ) {
-            BrutalCard(
+            OtterCard(
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
                     .fillMaxHeight(0.85f)
@@ -969,7 +1034,7 @@ private fun AboutDialog(
                         scaleY = popScale.value,
                         alpha = popScale.value.coerceIn(0f, 1f)
                     ),
-                backgroundColor = MaterialTheme.colorScheme.surface
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier
@@ -1196,13 +1261,13 @@ private fun HomeScreenHeader(
         label = "breathe_scale"
     )
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.otter_logo),
@@ -1217,13 +1282,23 @@ private fun HomeScreenHeader(
             Text(
                 text = stringResource(R.string.header_app_name),
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = 38.sp
+                    fontSize = 38.sp,
+                    letterSpacing = (-1.5).sp
                 ),
                 fontWeight = FontWeight.Black,
                 color = accentColor
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        ) {
             IconButton(onClick = onLanguageClick, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Default.Language,

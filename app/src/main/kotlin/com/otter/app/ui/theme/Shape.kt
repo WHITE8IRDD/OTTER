@@ -5,9 +5,11 @@ import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
 val OtterShapes = Shapes(
-    small = RoundedCornerShape(14.dp),
-    medium = RoundedCornerShape(20.dp),
-    large = RoundedCornerShape(36.dp)
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp)
 )
 
 object OtterDimens {
@@ -21,4 +23,15 @@ object OtterDimens {
     val ListItemVertical = 14.dp
     val ButtonHeight = 52.dp
     val InkyBorder = 3.5.dp
+}
+
+object OtterSpacing {
+    val xs = 4.dp
+    val sm = 8.dp
+    val md = 12.dp
+    val lg = 16.dp
+    val xl = 20.dp
+    val xxl = 24.dp
+    val xxxl = 32.dp
+    val section = 40.dp
 }

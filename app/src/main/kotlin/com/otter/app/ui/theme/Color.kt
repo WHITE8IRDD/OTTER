@@ -4,22 +4,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 
 // Light mode
-val LightBackground = Color(0xFFF8F8FA)
+val LightBackground = Color(0xFFFAFAF9)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceContainerLow = Color(0xFFF2F2F7)
-val LightSurfaceVariant = Color(0xFFEFEFF4)
-val LightOutline = Color(0xFFC6C6C8)
-val LightOnSurface = Color(0xFF1C1C1E)
-val LightOnSurfaceVariant = Color(0xFF6E6E73)
+val LightSurfaceContainerLow = Color(0xFFF7F7F5)
+val LightSurfaceVariant = Color(0xFFF4F4F2)
+val LightOutline = Color(0xFFE5E5E3)
+val LightOnSurface = Color(0xFF0A0A0A)
+val LightOnSurfaceVariant = Color(0xFF6B6B68)
+val LightError = Color(0xFFB91C1C)
+val LightErrorContainer = Color(0xFFFEF2F2)
+val LightOnError = Color(0xFFFFFFFF)
+val LightOnErrorContainer = Color(0xFFB91C1C)
 
 // Dark mode
-val DarkBackground = Color(0xFF121212)
-val DarkSurface = Color(0xFF1E1E1E)
-val DarkSurfaceContainerLow = Color(0xFF2A2A2A)
-val DarkSurfaceVariant = Color(0xFF333333)
-val DarkOutline = Color(0xFF48484A)
-val DarkOnSurface = Color(0xFFE0E0E0)
-val DarkOnSurfaceVariant = Color(0xFF98989F)
+val DarkBackground = Color(0xFF0A0A0A)
+val DarkSurface = Color(0xFF161616)
+val DarkSurfaceContainerLow = Color(0xFF1A1A1A)
+val DarkSurfaceVariant = Color(0xFF1F1F1F)
+val DarkOutline = Color(0xFF2A2A2A)
+val DarkOnSurface = Color(0xFFF5F5F4)
+val DarkOnSurfaceVariant = Color(0xFFA0A09D)
+val DarkError = Color(0xFFFCA5A5)
+val DarkErrorContainer = Color(0xFF3B1212)
+val DarkOnError = Color(0xFF0A0A0A)
+val DarkOnErrorContainer = Color(0xFFFCA5A5)
 
 // Accent presets
 val Periwinkle = Color(0xFF4E55E0)

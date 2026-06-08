@@ -7,14 +7,17 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,11 +26,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
@@ -39,8 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -53,7 +56,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -65,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.otter.app.R
 import com.otter.app.ui.components.ColorDot
+import com.otter.app.ui.components.OtterSwitch
 import com.otter.app.ui.components.SettingsClickableRow
 import com.otter.app.ui.components.SettingsGroup
 import com.otter.app.ui.components.SettingsRow
@@ -99,6 +107,8 @@ fun SettingsScreen(
     val tintLogo by themeViewModel.tintLogo.collectAsStateWithLifecycle()
     val updateStatus by viewModel.updateStatus.collectAsStateWithLifecycle()
     val isUpdating by viewModel.isUpdating.collectAsStateWithLifecycle()
+    var showFullPalette by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
 
     Box(
         modifier = Modifier
@@ -133,36 +143,70 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_dark_mode),
                     subtitle = stringResource(R.string.setting_dark_mode_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = isDarkMode,
-                            onCheckedChange = { themeViewModel.toggleDarkMode() },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = { themeViewModel.toggleDarkMode() }
                         )
                     }
                 )
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
                     Text(
                         text = stringResource(R.string.setting_accent_color),
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ACCENT_PRESETS.forEach { preset ->
+                        items(ACCENT_PRESETS.take(8)) { preset ->
                             val c = if (isDarkMode) preset.dark else preset.light
-                            ColorDot(
-                                color = c,
-                                selected = c == accentColor,
-                                onClick = { themeViewModel.setAccentColor(c) }
-                            )
+                            val isSelected = c == accentColor
+                            Box(contentAlignment = Alignment.Center) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(c, CircleShape)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            themeViewModel.setAccentColor(c)
+                                        }
+                                        .then(
+                                            if (isSelected) Modifier.border(2.dp, c, CircleShape)
+                                            else Modifier
+                                        )
+                                        .graphicsLayer(
+                                            scaleX = if (isSelected) 1.1f else 1f,
+                                            scaleY = if (isSelected) 1.1f else 1f
+                                        )
+                                ) {
+                                    if (isSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(30.dp)
+                                                .clip(CircleShape)
+                                                .border(3.dp, Color.White, CircleShape)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clickable { showFullPalette = true }
+                            ) {
+                                Icon(
+                                    Icons.Default.MoreHoriz,
+                                    contentDescription = "More",
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -170,15 +214,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_tint_logo),
                     subtitle = stringResource(R.string.setting_tint_logo_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = tintLogo,
-                            onCheckedChange = { themeViewModel.toggleTintLogo() },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = { themeViewModel.toggleTintLogo() }
                         )
                     }
                 )
@@ -189,15 +227,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_auto_download),
                     subtitle = stringResource(R.string.setting_auto_download_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = autoDownload,
-                            onCheckedChange = viewModel::setAutoDownload,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setAutoDownload
                         )
                     }
                 )
@@ -205,15 +237,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_download_playlist),
                     subtitle = stringResource(R.string.setting_download_playlist_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = playlist,
-                            onCheckedChange = viewModel::setPlaylist,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setPlaylist
                         )
                     }
                 )
@@ -221,15 +247,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_extract_audio),
                     subtitle = stringResource(R.string.setting_extract_audio_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = extractAudio,
-                            onCheckedChange = viewModel::setExtractAudio,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setExtractAudio
                         )
                     }
                 )
@@ -237,15 +257,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_embed_thumbnail),
                     subtitle = stringResource(R.string.setting_embed_thumbnail_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = embedThumbnail,
-                            onCheckedChange = viewModel::setEmbedThumbnail,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setEmbedThumbnail
                         )
                     }
                 )
@@ -253,15 +267,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_embed_metadata),
                     subtitle = stringResource(R.string.setting_embed_metadata_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = embedMetadata,
-                            onCheckedChange = viewModel::setEmbedMetadata,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setEmbedMetadata
                         )
                     },
                     showDivider = true
@@ -270,15 +278,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_download_subtitles),
                     subtitle = stringResource(R.string.setting_download_subtitles_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = downloadSubtitles,
-                            onCheckedChange = viewModel::setDownloadSubtitles,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setDownloadSubtitles
                         )
                     },
                     showDivider = false
@@ -290,15 +292,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_use_aria2c),
                     subtitle = stringResource(R.string.setting_use_aria2c_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = useAria2c,
-                            onCheckedChange = viewModel::setUseAria2c,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setUseAria2c
                         )
                     }
                 )
@@ -306,15 +302,9 @@ fun SettingsScreen(
                     title = stringResource(R.string.setting_rate_limit),
                     subtitle = stringResource(R.string.setting_rate_limit_sub),
                     trailing = {
-                        Switch(
+                        OtterSwitch(
                             checked = rateLimit,
-                            onCheckedChange = viewModel::setRateLimit,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                            onCheckedChange = viewModel::setRateLimit
                         )
                     },
                     showDivider = false
@@ -570,6 +560,103 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(80.dp))
         }
     }
+
+    if (showFullPalette) {
+        SettingsPaletteSheet(
+            accentColor = accentColor,
+            isDarkMode = isDarkMode,
+            onSelectColor = { color ->
+                themeViewModel.setAccentColor(color)
+                showFullPalette = false
+            },
+            onDismiss = { showFullPalette = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsPaletteSheet(
+    accentColor: Color,
+    isDarkMode: Boolean,
+    onSelectColor: (Color) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val columns = 4
+    val paletteHaptic = LocalHapticFeedback.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.palette_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ACCENT_PRESETS.chunked(columns).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        row.forEach { preset ->
+                            val c = if (isDarkMode) preset.dark else preset.light
+                            val isSelected = c == accentColor
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.width(72.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clickable {
+                                                paletteHaptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                onSelectColor(c)
+                                            },
+                                        shape = MaterialTheme.shapes.small,
+                                        color = c,
+                                        tonalElevation = if (isSelected) 4.dp else 0.dp,
+                                        border = if (isSelected) BorderStroke(3.dp, accentColor)
+                                        else BorderStroke(0.dp, Color.Transparent)
+                                    ) {}
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = if (c.luminance() > 0.5f) Color.Black else Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = preset.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isSelected) accentColor
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        if (row.size < columns) {
+                            repeat(columns - row.size) {
+                                Spacer(modifier = Modifier.width(72.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
 }
 
 private fun resolveSafPath(uri: Uri): String? {
@@ -590,6 +677,7 @@ private fun LanguageSettingsPickerSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
     val current = LocaleManager.getPersistedLanguage(context)
+    val langHaptic = LocalHapticFeedback.current
     val languages = listOf(
         "en" to stringResource(R.string.language_en),
         "ar" to stringResource(R.string.language_ar),
@@ -619,6 +707,7 @@ private fun LanguageSettingsPickerSheet(onDismiss: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
+                            langHaptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onDismiss()
                             if (activity != null) {
                                 LocaleManager.persistAndRestart(activity, code)

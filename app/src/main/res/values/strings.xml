@@ -35,6 +35,7 @@
     <string name="btn_cancel">CANCEL</string>
     <string name="error_state_title">Oops! Something went wrong</string>
     <string name="btn_try_again">TRY AGAIN</string>
+    <string name="error_title_friendly">Couldn\'t fetch that link</string>
     <string name="btn_cookie_settings">COOKIE SETTINGS</string>
     <string name="platforms_footer">YouTube • Facebook • Instagram • Twitter/X • TikTok</string>
 
@@ -166,6 +167,9 @@
     <!-- HistoryScreen -->
     <string name="history_title">History</string>
     <string name="history_subtitle">Your downloaded videos</string>
+    <string name="history_empty_title">Nothing downloaded yet</string>
+    <string name="history_empty_subtitle">Your saved videos will appear here</string>
+    <string name="history_empty_cta">Download your first video</string>
     <string name="btn_clear_all">CLEAR ALL</string>
     <string name="clear_history_title">Clear History</string>
     <string name="clear_history_message">Remove all download history? This won\'t delete the actual files.</string>

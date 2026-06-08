@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,8 +63,9 @@ import com.otter.app.data.model.DownloadItem
 import com.otter.app.data.model.DownloadStatus
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import com.otter.app.ui.components.BrutalButton
-import com.otter.app.ui.components.BrutalCard
+import com.otter.app.ui.components.OtterCard
 import com.otter.app.ui.components.SpeechBubble
 import com.otter.app.ui.theme.ThemeViewModel
 import com.otter.app.util.toReadableDuration
@@ -224,23 +226,56 @@ private fun MascotHistoryEmptyState(logoTint: Color) {
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         Icon(
             painter = painterResource(id = R.drawable.otter_logo),
             contentDescription = null,
             modifier = Modifier
-                .size(96.dp)
+                .size(80.dp)
                 .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
             tint = logoTint
         )
-        SpeechBubble(
-            text = stringResource(R.string.empty_state_videos),
+        Spacer(modifier = Modifier.height(16.dp))
+        Box(
             modifier = Modifier
                 .fillMaxWidth(0.75f)
-                .height(80.dp),
-            cornerRadius = 20.dp
-        )
+                .shadow(2.dp, shape = RoundedCornerShape(16.dp))
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    RoundedCornerShape(16.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.history_empty_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.history_empty_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        TextButton(
+            onClick = { /* TODO: navigate to Home */ }
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.history_empty_cta),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
     }
 }
 
@@ -258,7 +293,7 @@ fun HistoryItemCard(
     val dateFormat = SimpleDateFormat.getDateInstance(SimpleDateFormat.MEDIUM, Locale.getDefault())
     val itemStatus = runCatching { DownloadStatus.valueOf(item.status) }.getOrDefault(DownloadStatus.COMPLETED)
 
-    BrutalCard(modifier = Modifier.fillMaxWidth()) {
+    OtterCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
@@ -444,7 +479,7 @@ fun PausedDownloadCard(
     onStop: () -> Unit,
     onDelete: () -> Unit
 ) {
-    BrutalCard(modifier = Modifier.fillMaxWidth()) {
+    OtterCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = item.title,
