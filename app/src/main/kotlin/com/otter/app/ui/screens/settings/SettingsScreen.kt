@@ -160,7 +160,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(ACCENT_PRESETS.take(8)) { preset ->
+                        items(ACCENT_PRESETS.take(8), key = { it.name }) { preset ->
                             val c = if (isDarkMode) preset.dark else preset.light
                             val isSelected = c == accentColor
                             Box(contentAlignment = Alignment.Center) {

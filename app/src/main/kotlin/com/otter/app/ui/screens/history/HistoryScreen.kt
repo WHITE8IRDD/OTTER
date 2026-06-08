@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -159,7 +160,8 @@ fun HistoryScreen(
                         }
                         items(
                             items = pausedDownloads,
-                            key = { "paused_${it.url}" }
+                            key = { "paused_${it.url}" },
+                            contentType = { "paused" }
                         ) { paused ->
                             PausedDownloadCard(
                                 item = paused,
@@ -168,17 +170,19 @@ fun HistoryScreen(
                                 onDelete = { viewModel.deletePausedDownload(paused) }
                             )
                         }
-                        item(key = "paused_divider") {
+                        item(key = "paused_divider", contentType = "paused") {
                             Spacer(modifier = Modifier.padding(vertical = 8.dp))
                         }
                     }
                     items(
                         items = downloads,
-                        key = { it.id }
+                        key = { it.id },
+                        contentType = { "history" }
                     ) { item ->
+                        val fileExists = remember(item) { viewModel.fileExists(item) }
                         HistoryItemCard(
                             item = item,
-                            fileExists = remember(item) { viewModel.fileExists(item) },
+                            fileExists = fileExists,
                             onOpen = { viewModel.openFile(context, item) },
                             onLocate = { viewModel.locateFile(context, item) },
                             onShare = { viewModel.shareFile(context, item) },
@@ -216,30 +220,12 @@ fun HistoryScreen(
 
 @Composable
 private fun MascotHistoryEmptyState(logoTint: Color) {
-    val infiniteTransition = rememberInfiniteTransition(label = "history_idle")
-    val idleScale by infiniteTransition.animateFloat(
-        initialValue = 0.98f,
-        targetValue = 1.02f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "idle_scale"
-    )
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        Image(
-            painter = painterResource(R.drawable.mascot_dreamer),
-            contentDescription = stringResource(R.string.history_empty_title),
-            modifier = Modifier
-                .height(52.dp)
-                .aspectRatio(768.85f / 505.61f)
-                .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
-            contentScale = ContentScale.FillBounds,
-            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
+        AnimatedDreamerMascot(
+            contentDescription = stringResource(R.string.history_empty_title)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Box(
@@ -538,4 +524,36 @@ fun PausedDownloadCard(
             }
         }
     }
+}
+
+@Composable
+fun AnimatedDreamerMascot(
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    tint: Color = MaterialTheme.colorScheme.onSurface
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "history_idle")
+    val idleScaleState = infiniteTransition.animateFloat(
+        initialValue = 0.98f,
+        targetValue = 1.02f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "idle_scale"
+    )
+
+    Image(
+        painter = painterResource(R.drawable.mascot_dreamer),
+        contentDescription = contentDescription,
+        modifier = modifier
+            .height(52.dp)
+            .aspectRatio(768.85f / 505.61f)
+            .graphicsLayer {
+                scaleX = idleScaleState.value
+                scaleY = idleScaleState.value
+            },
+        contentScale = ContentScale.FillBounds,
+        colorFilter = ColorFilter.tint(tint)
+    )
 }

@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -500,15 +501,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.mascot_archer),
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .height(48.dp)
-                                    .aspectRatio(785.18f / 547.39f),
-                                contentScale = ContentScale.FillBounds,
-                                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
-                            )
+                            AnimatedArcherMascot()
                             Text(
                                 text = stringResource(R.string.download_complete),
                                 style = MaterialTheme.typography.titleLarge,
@@ -644,31 +637,13 @@ private fun FetchingSkeleton() {
 
 @Composable
 private fun MascotEmptyState(logoTint: Color) {
-    val infiniteTransition = rememberInfiniteTransition(label = "idle_bounce")
-    val idleScale by infiniteTransition.animateFloat(
-        initialValue = 0.98f,
-        targetValue = 1.02f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "idle_scale"
-    )
-
     val parts = stringResource(R.string.empty_state_videos).split("\n")
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            painter = painterResource(id = R.drawable.otter_logo),
-            contentDescription = null,
-            modifier = Modifier
-                .size(80.dp)
-                .graphicsLayer(scaleX = idleScale, scaleY = idleScale),
-            tint = Color.Unspecified
-        )
+        AnimatedHungryMascot()
         Spacer(Modifier.height(12.dp))
         Surface(
             shape = RoundedCornerShape(16.dp),
@@ -697,26 +672,6 @@ private fun MascotEmptyState(logoTint: Color) {
 
 @Composable
 private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: RetryStatus, onCancel: () -> Unit) {
-    val infiniteTransition = rememberInfiniteTransition(label = "fetch_bounce")
-    val bounceY by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bounce_y"
-    )
-    val searchRotate by infiniteTransition.animateFloat(
-        initialValue = -5f,
-        targetValue = 5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "search_rotate"
-    )
-
     // Stage progression for perceived speed (disabled during retry)
     var stage by remember { mutableStateOf<Int>(0) }
     val isRetrying = retryStatus.isRetrying
@@ -750,19 +705,7 @@ private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: R
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.mascot_pounce),
-                contentDescription = null,
-                modifier = Modifier
-                    .height(36.dp)
-                    .aspectRatio(713.63f / 314.77f)
-                    .graphicsLayer {
-                        translationY = bounceY
-                        rotationZ = searchRotate
-                    },
-                contentScale = ContentScale.FillBounds,
-                colorFilter = ColorFilter.tint(logoTint)
-            )
+            AnimatedPounceMascot(tint = logoTint)
             Text(
                 text = stageMessages.getOrElse(stage) { message },
                 style = MaterialTheme.typography.bodyLarge,
@@ -798,12 +741,7 @@ private fun MascotErrorState(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    painter = painterResource(R.drawable.mascot_surfer),
-                    contentDescription = null,
-                    modifier = Modifier.height(56.dp),
-                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onErrorContainer)
-                )
+                AnimatedSurferMascot()
                 Spacer(Modifier.width(12.dp))
                 Text(
                     stringResource(R.string.error_title_friendly),
@@ -1425,5 +1363,156 @@ private fun HorizontalDivider(
         modifier = modifier,
         thickness = thickness,
         color = color
+    )
+}
+
+@Composable
+fun AnimatedHungryMascot(
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.onSurface
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "hungryWiggle")
+    val swayXState = infiniteTransition.animateFloat(
+        initialValue = -3f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hungrySwayX"
+    )
+    val swayRotationState = infiniteTransition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hungrySwayRotation"
+    )
+
+    Image(
+        painter = painterResource(R.drawable.mascot_hungry),
+        contentDescription = null,
+        modifier = modifier
+            .height(72.dp)
+            .aspectRatio(319.72f / 562.95f)
+            .graphicsLayer {
+                translationX = swayXState.value
+                rotationZ = swayRotationState.value
+            },
+        contentScale = ContentScale.FillBounds,
+        colorFilter = ColorFilter.tint(tint)
+    )
+}
+
+@Composable
+fun AnimatedArcherMascot(
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary
+) {
+    var animationStarted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        animationStarted = true
+    }
+    val archerScaleState = animateFloatAsState(
+        targetValue = if (animationStarted) 1f else 0.6f,
+        animationSpec = spring(
+            dampingRatio = 0.55f,
+            stiffness = 350f
+        ),
+        label = "archerEntryScale"
+    )
+
+    Image(
+        painter = painterResource(R.drawable.mascot_archer),
+        contentDescription = null,
+        modifier = modifier
+            .height(48.dp)
+            .aspectRatio(785.18f / 547.39f)
+            .graphicsLayer {
+                scaleX = archerScaleState.value
+                scaleY = archerScaleState.value
+            },
+        contentScale = ContentScale.FillBounds,
+        colorFilter = ColorFilter.tint(tint)
+    )
+}
+
+@Composable
+fun AnimatedPounceMascot(
+    modifier: Modifier = Modifier,
+    tint: Color
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "fetch_bounce")
+    val bounceYState = infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bounce_y"
+    )
+    val searchRotateState = infiniteTransition.animateFloat(
+        initialValue = -5f,
+        targetValue = 5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "search_rotate"
+    )
+
+    Image(
+        painter = painterResource(R.drawable.mascot_pounce),
+        contentDescription = null,
+        modifier = modifier
+            .height(36.dp)
+            .aspectRatio(713.63f / 314.77f)
+            .graphicsLayer {
+                translationY = bounceYState.value
+                rotationZ = searchRotateState.value
+            },
+        contentScale = ContentScale.FillBounds,
+        colorFilter = ColorFilter.tint(tint)
+    )
+}
+
+@Composable
+fun AnimatedSurferMascot(
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.onErrorContainer
+) {
+    val waveTransition = rememberInfiniteTransition(label = "surferBob")
+    val bobYState = waveTransition.animateFloat(
+        initialValue = -2f,
+        targetValue = 2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "surferBobY"
+    )
+    val tiltZState = waveTransition.animateFloat(
+        initialValue = -2f,
+        targetValue = 2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "surferTilt"
+    )
+
+    Image(
+        painter = painterResource(R.drawable.mascot_surfer),
+        contentDescription = null,
+        modifier = modifier
+            .height(56.dp)
+            .graphicsLayer {
+                translationY = bobYState.value
+                rotationZ = tiltZState.value
+            },
+        colorFilter = ColorFilter.tint(tint)
     )
 }
