@@ -27,6 +27,7 @@ class FormatParser(private val context: Context? = null) {
         private const val TAG = "FormatParser"
         private const val OUTPUT_BASENAME = "%(title).200B"
         private const val UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36"
+        private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
         val engineReady = MutableStateFlow(false)
 
@@ -60,8 +61,8 @@ class FormatParser(private val context: Context? = null) {
                 }
                 // Reddit
                 lower.contains("reddit.com") || lower.contains("redd.it") || lower.contains("v.redd.it") -> {
-                    request.addOption("--add-header", "Accept:application/json")
-                    Log.i(TAG, "[PLATFORM-FLAGS] Reddit detected, applying user-agent + Accept:application/json")
+                    request.addOption("--user-agent", DESKTOP_UA)
+                    Log.i(TAG, "[PLATFORM-FLAGS] Reddit detected, applying desktop user-agent")
                 }
                 // Twitch
                 lower.contains("twitch.tv") -> {

@@ -17,8 +17,8 @@ class DownloadRepository(private val context: Context) {
     private val dao = db.downloadDao()
     private val pausedDao = db.pausedDownloadDao()
     val preferences = UserPreferences(context)
-    private val downloader = Downloader(context)
     private val formatParser = FormatParser(context)
+    private val downloader = Downloader(context, formatParser)
 
     val allDownloads: Flow<List<DownloadItem>> = dao.getAllDownloads()
     val pausedDownloads: Flow<List<PausedDownload>> = pausedDao.getAll()

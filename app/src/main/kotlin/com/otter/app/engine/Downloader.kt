@@ -24,7 +24,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
-class Downloader(private val context: Context) {
+class Downloader(private val context: Context, private val formatParser: FormatParser? = null) {
 
     companion object {
         private const val TAG = "Downloader"
@@ -67,6 +67,180 @@ class Downloader(private val context: Context) {
                 unit.uppercase().startsWith("T") -> (value * 1024L * 1024 * 1024 * 1024).toLong()
                 unit.uppercase() == "B" -> value.toLong()
                 else -> value.toLong()
+            }
+        }
+
+        private enum class Platform {
+            YOUTUBE, TIKTOK, FACEBOOK, INSTAGRAM, TWITTER, REDDIT, TWITCH, VIMEO,
+            BILIBILI, DAILYMOTION, PINTEREST, STREAMABLE, BANDCAMP, SOUNDCLOUD, SNAPCHAT, UNKNOWN
+        }
+
+        private val DL_UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36"
+        private val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+        private fun detectPlatform(url: String): Platform {
+            val lower = url.lowercase()
+            return when {
+                lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("m.youtube.com") -> Platform.YOUTUBE
+                lower.contains("tiktok.com") || lower.contains("vm.tiktok.com") || lower.contains("vt.tiktok.com") -> Platform.TIKTOK
+                lower.contains("facebook.com") || lower.contains("fb.watch") || lower.contains("m.facebook.com") || lower.contains("fb.com") -> Platform.FACEBOOK
+                lower.contains("instagram.com") || lower.contains("instagr.am") -> Platform.INSTAGRAM
+                lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("t.co") -> Platform.TWITTER
+                lower.contains("reddit.com") || lower.contains("redd.it") || lower.contains("v.redd.it") -> Platform.REDDIT
+                lower.contains("twitch.tv") -> Platform.TWITCH
+                lower.contains("vimeo.com") -> Platform.VIMEO
+                lower.contains("bilibili.com") -> Platform.BILIBILI
+                lower.contains("dailymotion.com") || lower.contains("dai.ly") -> Platform.DAILYMOTION
+                lower.contains("pinterest.com") || lower.contains("pin.it") -> Platform.PINTEREST
+                lower.contains("streamable.com") -> Platform.STREAMABLE
+                lower.contains("bandcamp.com") -> Platform.BANDCAMP
+                lower.contains("soundcloud.com") -> Platform.SOUNDCLOUD
+                lower.contains("snapchat.com") -> Platform.SNAPCHAT
+                else -> Platform.UNKNOWN
+            }
+        }
+
+        private fun isLiveStream(url: String): Boolean {
+            val lower = url.lowercase()
+            return lower.contains("/live/") || lower.contains("youtube.com/live") || lower.contains("youtu.be/live")
+        }
+
+        private fun concurrentFragments(platform: Platform, isLive: Boolean): Int {
+            if (isLive) return 1
+            return when (platform) {
+                Platform.YOUTUBE, Platform.FACEBOOK, Platform.INSTAGRAM, Platform.TIKTOK, Platform.VIMEO -> 8
+                Platform.TWITTER, Platform.REDDIT, Platform.DAILYMOTION, Platform.SOUNDCLOUD, Platform.BANDCAMP -> 5
+                Platform.BILIBILI, Platform.TWITCH, Platform.SNAPCHAT, Platform.PINTEREST -> 3
+                Platform.STREAMABLE, Platform.UNKNOWN -> 3
+            }
+        }
+
+        private fun applyPlatformArgs(request: YoutubeDLRequest, url: String, isLive: Boolean) {
+            val platform = detectPlatform(url)
+            Log.i(TAG, "[DL-PLATFORM] platform=$platform url=$url")
+
+            if (isLive) {
+                request.addOption("--concurrent-fragments", "1")
+                request.addOption("--hls-use-mpegts")
+                request.addOption("--downloader", "native")
+                request.addOption("--extractor-retries", "5")
+                Log.i(TAG, "[LIVE-STREAM] detected live stream, sequential fragments + HLS + native downloader")
+            }
+
+            if (platform != Platform.YOUTUBE && platform != Platform.UNKNOWN
+                && platform != Platform.TIKTOK && platform != Platform.FACEBOOK && platform != Platform.INSTAGRAM
+                && platform != Platform.REDDIT
+            ) {
+                request.addOption("--user-agent", DL_UA)
+            }
+
+            when (platform) {
+                Platform.TIKTOK -> {
+                    request.addOption("--extractor-args", "tiktok:app_info=7355728856979392262")
+                    request.addOption("--add-header", "Referer:https://www.tiktok.com")
+                    request.addOption("--extractor-retries", "5")
+                }
+                Platform.FACEBOOK -> {
+                    request.addOption("--add-header", "Referer:https://www.facebook.com")
+                    request.addOption("--extractor-retries", "5")
+                }
+                Platform.TWITTER -> {
+                    request.addOption("--add-header", "Accept-Language:en-US,en;q=0.9")
+                    request.addOption("--extractor-retries", "5")
+                }
+                Platform.REDDIT -> {
+                    request.addOption("--user-agent", DESKTOP_UA)
+                    request.addOption("--merge-output-format", "mp4")
+                }
+                Platform.TWITCH -> {
+                    request.addOption("--socket-timeout", "20")
+                }
+                Platform.VIMEO -> {
+                    request.addOption("--add-header", "Referer:https://vimeo.com")
+                }
+                Platform.BILIBILI -> {
+                    request.addOption("--add-header", "Referer:https://www.bilibili.com")
+                    request.addOption("--add-header", "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8")
+                    request.addOption("--geo-bypass")
+                }
+                Platform.SNAPCHAT -> {
+                    request.addOption("--add-header", "Referer:https://www.snapchat.com")
+                }
+                Platform.YOUTUBE -> {
+                    if (!isLive) {
+                        request.addOption("--user-agent", DL_UA)
+                    }
+                    request.addOption("--extractor-retries", "3")
+                }
+                else -> {}
+            }
+        }
+
+        private val formatExpiredPatterns = listOf(
+            Regex("HTTP Error 40[134]"),
+            Regex("HTTP Error 410"),
+            Regex("Forbidden", RegexOption.IGNORE_CASE),
+            Regex("expired", RegexOption.IGNORE_CASE),
+            Regex("Signature has expired", RegexOption.IGNORE_CASE),
+            Regex("token.*invalid", RegexOption.IGNORE_CASE)
+        )
+
+        private fun isFormatExpired(errorMessage: String): Boolean {
+            return formatExpiredPatterns.any { it.containsMatchIn(errorMessage) }
+        }
+
+        private fun isNonRecoverableDownloadError(errorMessage: String): Boolean {
+            return nonRecoverableDownloadPatterns.any { it.containsMatchIn(errorMessage) }
+        }
+
+        private val nonRecoverableDownloadPatterns = listOf(
+            Regex("video unavailable", RegexOption.IGNORE_CASE),
+            Regex("private video", RegexOption.IGNORE_CASE),
+            Regex("private", RegexOption.IGNORE_CASE),
+            Regex("requires login", RegexOption.IGNORE_CASE),
+            Regex("copyright", RegexOption.IGNORE_CASE),
+            Regex("takedown", RegexOption.IGNORE_CASE),
+            Regex("This video is not available", RegexOption.IGNORE_CASE),
+            Regex("removed by the uploader", RegexOption.IGNORE_CASE),
+            Regex("account terminated", RegexOption.IGNORE_CASE),
+            Regex("No video formats found", RegexOption.IGNORE_CASE),
+            Regex("Usage:", RegexOption.IGNORE_CASE)
+        )
+
+        private val retryWaitMs = listOf(0L, 2000L, 5000L)
+
+        private suspend fun refreshFormatInfo(
+            formatParser: FormatParser,
+            url: String,
+            currentFormatId: String
+        ): String? {
+            return try {
+                Log.w(TAG, "[FORMAT-REFRESH] Format may be expired, re-fetching for $url")
+                val result = formatParser.fetchVideoInfo(url)
+                if (result.isFailure) {
+                    Log.w(TAG, "[FORMAT-REFRESH] Re-fetch failed: ${result.exceptionOrNull()?.message}")
+                    return null
+                }
+                val info = result.getOrThrow()
+                val matching = info.formats.find { fmt ->
+                    fmt.formatId == currentFormatId || fmt.formatId.startsWith(currentFormatId.take(5))
+                }
+                if (matching != null) {
+                    Log.i(TAG, "[FORMAT-REFRESH] Found matching format: ${matching.formatId} (was $currentFormatId)")
+                    matching.formatId
+                } else {
+                    val firstVideo = info.formats.firstOrNull { !it.isAudioOnly }
+                    if (firstVideo != null) {
+                        Log.i(TAG, "[FORMAT-REFRESH] No exact match, using first video: ${firstVideo.formatId}")
+                        firstVideo.formatId
+                    } else {
+                        Log.w(TAG, "[FORMAT-REFRESH] No formats found in refreshed info")
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "[FORMAT-REFRESH] Exception during refresh: ${e.message}")
+                null
             }
         }
     }
@@ -270,18 +444,25 @@ class Downloader(private val context: Context) {
         autoCaptionLangs: String = "",
         title: String = ""
     ) = withContext(Dispatchers.IO) {
+        var currentFormatId = formatId
+        val isLive = isLiveStream(url)
+        val platform = detectPlatform(url)
         val settings = readSettings()
+        val maxAttempts = retryWaitMs.size
         var attempt = 0
-        Log.i(TAG, "download START url=$url formatId=$formatId outputDir=$outputDir title=$title")
+        var formatAlreadyRefreshed = false
+        Log.i(TAG, "download START url=$url formatId=$currentFormatId outputDir=$outputDir title=$title live=$isLive platform=$platform")
 
-        while (attempt <= settings.retries) {
-            attempt++
-            if (attempt > 1) {
-                val waitMs = listOf(1000L, 2000L, 4000L, 8000L, 16000L).getOrElse(attempt - 2) { 16000L }
+        while (attempt < maxAttempts) {
+            val waitMs = retryWaitMs.getOrElse(attempt) { 5000L }
+            if (attempt > 0 && !formatAlreadyRefreshed) {
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
-                Log.i(TAG, "Retry $attempt/${settings.retries} for $url (waiting ${waitMs}ms)")
+                Log.i(TAG, "[DL-RETRY] attempt=${attempt + 1}/$maxAttempts for $url (waiting ${waitMs}ms)")
                 delay(waitMs)
             }
+            val localFormatId = currentFormatId
+            attempt++
+            formatAlreadyRefreshed = false
 
             try {
                 val workingDir = getWorkingDir()
@@ -293,19 +474,24 @@ class Downloader(private val context: Context) {
 
                 val request = YoutubeDLRequest(url).apply {
                     addCookies(this)
-                    addOption("-f", formatId)
+                    addOption("-f", localFormatId)
                     addOption("-P", workingDir.absolutePath)
                     addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
                     addOption("--no-mtime")
                     addOption("--continue")
-                    addOption("--socket-timeout", "15")
+                    addOption("--socket-timeout", if (isLive) "30" else "15")
                     applySettings(this, settings)
+                    applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
+
+                    val platform = detectPlatform(url)
+                    val cf = concurrentFragments(platform, isLive)
+                    addOption("--concurrent-fragments", cf.toString())
                 }
 
                 val processId = url.hashCode().toUInt().toString()
                 activeDownloads[url] = processId
-                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, title)
+                val activeInfo = ActiveDownload(processId, url, localFormatId, outputDir, title)
                 activeDownloadInfo[url] = activeInfo
                 resetSmoothing()
 
@@ -363,7 +549,6 @@ class Downloader(private val context: Context) {
                 } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 val msg = e.message ?: ""
-                // If process was killed intentionally by pause/stop, don't emit Error
                 if (intentionallyCancelled.remove(url) == true) {
                     Log.i(TAG, "download cancelled intentionally for $url (pause/stop)")
                     activeDownloads.remove(url)
@@ -371,16 +556,33 @@ class Downloader(private val context: Context) {
                 }
                 activeDownloads.remove(url)
 
-                if (!isRecoverableError(msg) || attempt > settings.retries) {
-                    Log.e(TAG, "Non-recoverable or max retries reached for $url: $msg")
+                if (isNonRecoverableDownloadError(msg)) {
+                    Log.e(TAG, "Non-recoverable error for $url: $msg")
+                    onProgress(DownloadState.Error(msg))
+                    return@withContext
+                }
+
+                if (isFormatExpired(msg) && formatParser != null && !formatAlreadyRefreshed) {
+                    val newFmtId = refreshFormatInfo(formatParser, url, localFormatId)
+                    if (newFmtId != null) {
+                        currentFormatId = newFmtId
+                        formatAlreadyRefreshed = true
+                        attempt = (attempt - 1).coerceAtLeast(1)
+                        cleanup()
+                        Log.i(TAG, "[DL-RETRY] retrying with refreshed format $currentFormatId")
+                        continue
+                    }
+                }
+
+                if (attempt >= maxAttempts) {
+                    Log.e(TAG, "Max retries reached for $url: $msg")
                     onProgress(DownloadState.Error(
-                        if (attempt > 1) context.getString(R.string.failed_after_retries, settings.retries, e.message ?: context.getString(R.string.download_failed_text))
-                        else e.message ?: context.getString(R.string.download_failed_text)
+                        context.getString(R.string.failed_after_retries, maxAttempts, msg)
                     ))
                     return@withContext
                 }
 
-                Log.w(TAG, "Attempt $attempt failed for $url, will retry. Error: $msg")
+                Log.w(TAG, "[DL-RETRY] attempt $attempt/$maxAttempts failed for $url, will retry. Error: $msg")
                 cleanup()
             }
         }
@@ -392,6 +594,7 @@ class Downloader(private val context: Context) {
         outputDir: String,
         onProgress: (DownloadState) -> Unit
     ) = withContext(Dispatchers.IO) {
+        val isLive = isLiveStream(url)
         val settings = readSettings()
         try {
             val workingDir = getWorkingDir()
@@ -411,6 +614,7 @@ class Downloader(private val context: Context) {
                 if (!settings.playlist) {
                     addOption("--no-playlist")
                 }
+                applyPlatformArgs(this, url, isLive)
             }
 
             val processId = "thumb_${url.hashCode().toUInt()}"
@@ -448,16 +652,25 @@ class Downloader(private val context: Context) {
         autoCaptionLangs: String = "",
         title: String = ""
     ) = withContext(Dispatchers.IO) {
+        var currentFormatId = formatId
+        val isLive = isLiveStream(url)
+        val platform = detectPlatform(url)
         val settings = readSettings()
+        val maxAttempts = retryWaitMs.size
         var attempt = 0
+        var formatAlreadyRefreshed = false
+        Log.i(TAG, "downloadWithThumbnail START url=$url formatId=$currentFormatId outputDir=$outputDir title=$title live=$isLive platform=$platform")
 
-        while (attempt <= settings.retries) {
-            attempt++
-            if (attempt > 1) {
-                val waitMs = listOf(1000L, 2000L, 4000L, 8000L, 16000L).getOrElse(attempt - 2) { 16000L }
+        while (attempt < maxAttempts) {
+            val waitMs = retryWaitMs.getOrElse(attempt) { 5000L }
+            if (attempt > 0 && !formatAlreadyRefreshed) {
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
+                Log.i(TAG, "[DL-RETRY] downloadWithThumbnail attempt=${attempt + 1}/$maxAttempts for $url (waiting ${waitMs}ms)")
                 delay(waitMs)
             }
+            val localFormatId = currentFormatId
+            attempt++
+            formatAlreadyRefreshed = false
 
             try {
                 val workingDir = getWorkingDir()
@@ -470,7 +683,7 @@ class Downloader(private val context: Context) {
                 val request = YoutubeDLRequest(url).apply {
                     addCookies(this)
                     addOption("--no-mtime")
-                    addOption("-f", formatId)
+                    addOption("-f", localFormatId)
                     addOption("--merge-output-format", "mp4")
                     addOption("--audio-quality", "0")
                     addOption("--write-thumbnail")
@@ -478,14 +691,18 @@ class Downloader(private val context: Context) {
                     addOption("-P", workingDir.absolutePath)
                     addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
                     addOption("--continue")
-                    addOption("--socket-timeout", "15")
+                    addOption("--socket-timeout", if (isLive) "30" else "15")
                     applySettings(this, settings)
+                    applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
+
+                    val cf = concurrentFragments(platform, isLive)
+                    addOption("--concurrent-fragments", cf.toString())
                 }
 
                 val processId = url.hashCode().toUInt().toString()
                 activeDownloads[url] = processId
-                val activeInfo = ActiveDownload(processId, url, formatId, outputDir, title)
+                val activeInfo = ActiveDownload(processId, url, localFormatId, outputDir, title)
                 activeDownloadInfo[url] = activeInfo
                 resetSmoothing()
 
@@ -547,7 +764,6 @@ class Downloader(private val context: Context) {
                 } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 val msg = e.message ?: ""
-                // If process was killed intentionally by pause/stop, don't emit Error
                 if (intentionallyCancelled.remove(url) == true) {
                     Log.i(TAG, "downloadWithThumbnail cancelled intentionally for $url (pause/stop)")
                     activeDownloads.remove(url)
@@ -555,14 +771,33 @@ class Downloader(private val context: Context) {
                 }
                 activeDownloads.remove(url)
 
-                if (!isRecoverableError(msg) || attempt > settings.retries) {
-                    val errorMsg = if (attempt > 1) context.getString(R.string.failed_after_retries, settings.retries, e.message ?: context.getString(R.string.download_failed_text))
-                    else e.message ?: context.getString(R.string.download_failed_text)
-                    onProgress(DownloadState.Error(errorMsg))
+                if (isNonRecoverableDownloadError(msg)) {
+                    Log.e(TAG, "Non-recoverable error for $url: $msg")
+                    onProgress(DownloadState.Error(msg))
                     return@withContext
                 }
 
-                Log.w(TAG, "Attempt $attempt failed for $url, will retry. Error: $msg")
+                if (isFormatExpired(msg) && formatParser != null && !formatAlreadyRefreshed) {
+                    val newFmtId = refreshFormatInfo(formatParser, url, localFormatId)
+                    if (newFmtId != null) {
+                        currentFormatId = newFmtId
+                        formatAlreadyRefreshed = true
+                        attempt = (attempt - 1).coerceAtLeast(1)
+                        cleanup()
+                        Log.i(TAG, "[DL-RETRY] downloadWithThumbnail retrying with refreshed format $currentFormatId")
+                        continue
+                    }
+                }
+
+                if (attempt >= maxAttempts) {
+                    Log.e(TAG, "Max retries reached for $url: $msg")
+                    onProgress(DownloadState.Error(
+                        context.getString(R.string.failed_after_retries, maxAttempts, msg)
+                    ))
+                    return@withContext
+                }
+
+                Log.w(TAG, "[DL-RETRY] downloadWithThumbnail attempt $attempt/$maxAttempts failed for $url, will retry. Error: $msg")
                 cleanup()
             }
         }
@@ -576,6 +811,8 @@ class Downloader(private val context: Context) {
         options: Map<String, String>,
         onProgress: (DownloadState) -> Unit
     ) = withContext(Dispatchers.IO) {
+        val isLive = isLiveStream(url)
+        val platform = detectPlatform(url)
         val settings = readSettings()
         try {
             val workingDir = getWorkingDir()
@@ -591,7 +828,11 @@ class Downloader(private val context: Context) {
                 addOption("-P", workingDir.absolutePath)
                 addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
                 addOption("--no-mtime")
+                addOption("--socket-timeout", if (isLive) "30" else "15")
                 applySettings(this, settings)
+                applyPlatformArgs(this, url, isLive)
+                val cf = concurrentFragments(platform, isLive)
+                addOption("--concurrent-fragments", cf.toString())
                 for ((key, value) in options) {
                     addOption(key, value)
                 }

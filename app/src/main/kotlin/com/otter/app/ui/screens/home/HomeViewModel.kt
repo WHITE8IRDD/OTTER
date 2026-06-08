@@ -2,6 +2,7 @@ package com.otter.app.ui.screens.home
 
 import android.app.Application
 import android.content.Intent
+import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -256,6 +257,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun fetchVideoInfo(onConsumed: () -> Unit = {}) {
         val url = _urlInput.value.trim()
+        Log.d("HomeViewModel", "[RETRY-TAPPED] user requested retry/fetch for ${url.take(60)}")
         if (!url.isValidUrl()) {
             _downloadState.value = DownloadState.Error(getApplication<Application>().getString(R.string.enter_valid_url))
             return
@@ -299,6 +301,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     _showFormatSheet.value = false
                     val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
                     val friendly = buildFriendlyError(msg, url)
+                    Log.w("HomeViewModel", "[ERROR-STATE] error shown to user: $friendly")
                     _downloadState.value = DownloadState.Error(friendly)
                     onConsumed()
                 }
@@ -418,6 +421,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         isAudioOnly: Boolean
     ) {
         _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
+        Log.d("HomeViewModel", "[RETRY-DISPATCH] new download attempt starting for ${url.take(60)} formatId=$formatId")
 
         val intent = Intent(getApplication(), DownloadService::class.java).apply {
             action = DownloadService.ACTION_START_DOWNLOAD
@@ -444,6 +448,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 _downloadState.value = state
+                if (state is DownloadState.Error) {
+                    Log.w("HomeViewModel", "[ERROR-STATE] download error shown to user: ${state.message}")
+                }
                 if (state is DownloadState.Success) {
                     FileHelper.scanFile(getApplication(), state.filePath)
                     if (_alsoSaveThumbnail.value) {

@@ -155,6 +155,10 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                 Log.i(TAG, "[START-5] job cancelled (service stopping)")
             } catch (e: Throwable) {
                 Log.e(TAG, "[START-6] unexpected error", e)
+            } finally {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                ActiveDownloadStateHolder.clear()
             }
         }
     }
@@ -319,6 +323,10 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
             } catch (e: Throwable) {
                 Log.e(TAG, "[RESUME-13] unexpected error", e)
                 showSoftResumeError(url, e.message)
+            } finally {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                ActiveDownloadStateHolder.clear()
             }
         }
     }
@@ -506,9 +514,6 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                 } catch (e: Throwable) {
                     Log.e(TAG, "[COMMON] complete notification threw", e)
                 }
-                ActiveDownloadStateHolder.clear()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
             }
 
             is DownloadState.Error -> {
@@ -529,9 +534,6 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                 } catch (e: Throwable) {
                     Log.e(TAG, "[COMMON] error notification threw", e)
                 }
-                ActiveDownloadStateHolder.clear()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
             }
 
             else -> {} // Idle, FetchingInfo, InfoReady, etc — no-op
