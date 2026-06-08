@@ -788,11 +788,11 @@ private fun MascotErrorState(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                    Icons.Default.Error,
+                Icon(
+                    painter = painterResource(R.drawable.mascot_surfer),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(40.dp)
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
