@@ -155,7 +155,10 @@ fun NavGraph(
                 popEnterTransition = { fadeIn(animationSpec = tween(220)) },
                 popExitTransition = { fadeOut(animationSpec = tween(180)) }
             ) {
-                HistoryScreen(themeViewModel = themeViewModel)
+                HistoryScreen(
+                    themeViewModel = themeViewModel,
+                    onNavigateToHome = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } }
+                )
             }
             composable(
                 route = Screen.Settings.route,

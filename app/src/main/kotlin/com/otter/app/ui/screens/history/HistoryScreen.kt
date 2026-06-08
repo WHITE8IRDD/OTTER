@@ -81,6 +81,7 @@ import java.util.Locale
 @Composable
 fun HistoryScreen(
     themeViewModel: ThemeViewModel,
+    onNavigateToHome: () -> Unit = {},
     viewModel: HistoryViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -141,7 +142,7 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    MascotHistoryEmptyState(logoTint = logoTint)
+                    MascotHistoryEmptyState(logoTint = logoTint, onNavigateToHome = onNavigateToHome)
                 }
             } else {
                 LazyColumn(
@@ -219,13 +220,14 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun MascotHistoryEmptyState(logoTint: Color) {
+private fun MascotHistoryEmptyState(logoTint: Color, onNavigateToHome: () -> Unit = {}) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         AnimatedDreamerMascot(
-            contentDescription = stringResource(R.string.history_empty_title)
+            contentDescription = stringResource(R.string.history_empty_title),
+            tint = logoTint
         )
         Spacer(modifier = Modifier.height(16.dp))
         Box(
@@ -254,7 +256,7 @@ private fun MascotHistoryEmptyState(logoTint: Color) {
         }
         Spacer(modifier = Modifier.height(24.dp))
         TextButton(
-            onClick = { /* TODO: navigate to Home */ }
+            onClick = onNavigateToHome
         ) {
             Icon(
                 Icons.Default.Add,

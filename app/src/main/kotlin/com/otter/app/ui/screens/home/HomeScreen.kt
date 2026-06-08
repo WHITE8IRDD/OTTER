@@ -501,7 +501,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
-                            AnimatedArcherMascot()
+                            AnimatedArcherMascot(tint = accentColor)
                             Text(
                                 text = stringResource(R.string.download_complete),
                                 style = MaterialTheme.typography.titleLarge,
@@ -528,7 +528,8 @@ fun HomeScreen(
                     onRetry = viewModel::fetchVideoInfo,
                     isCookieError = errorState?.message?.contains("Instagram") == true ||
                             errorState?.message?.contains("cookies") == true,
-                    onNavigateToCookies = onNavigateToCookies
+                    onNavigateToCookies = onNavigateToCookies,
+                    logoTint = logoTint
                 )
             }
 
@@ -643,7 +644,7 @@ private fun MascotEmptyState(logoTint: Color) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AnimatedHungryMascot()
+        AnimatedHungryMascot(tint = logoTint)
         Spacer(Modifier.height(12.dp))
         Surface(
             shape = RoundedCornerShape(16.dp),
@@ -730,7 +731,8 @@ private fun MascotErrorState(
     message: String,
     onRetry: () -> Unit,
     isCookieError: Boolean,
-    onNavigateToCookies: () -> Unit
+    onNavigateToCookies: () -> Unit,
+    logoTint: Color = MaterialTheme.colorScheme.onErrorContainer
 ) {
     OtterCard(
         modifier = Modifier.fillMaxWidth(),
@@ -741,7 +743,7 @@ private fun MascotErrorState(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AnimatedSurferMascot()
+                AnimatedSurferMascot(tint = logoTint)
                 Spacer(Modifier.width(12.dp))
                 Text(
                     stringResource(R.string.error_title_friendly),
