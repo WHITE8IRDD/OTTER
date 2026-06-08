@@ -324,4 +324,7 @@
     <string name="fetch_stage_reading">Lecture des infos…</string>
     <string name="fetch_stage_parsing">Analyse des formats…</string>
     <string name="fetch_stage_finishing">Presque fini…</string>
+
+    <!-- Mascot System -->
+    <string name="fetching_message">On attrape ta vidéo…</string>
 </resources>

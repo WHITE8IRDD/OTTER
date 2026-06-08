@@ -328,4 +328,7 @@
     <string name="fetch_stage_reading">Reading video info…</string>
     <string name="fetch_stage_parsing">Parsing formats…</string>
     <string name="fetch_stage_finishing">Almost there…</string>
+
+    <!-- Mascot System -->
+    <string name="fetching_message">Catching your video…</string>
 </resources>

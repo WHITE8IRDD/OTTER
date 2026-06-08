@@ -497,8 +497,10 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CheckCircle,
+                                painter = painterResource(id = R.drawable.mascot_archer),
                                 contentDescription = null,
+                                modifier = Modifier
+                                    .size(48.dp),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Text(
@@ -743,7 +745,7 @@ private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: R
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Icon(
-                painter = painterResource(id = R.drawable.otter_logo),
+                painter = painterResource(id = R.drawable.mascot_pounce),
                 contentDescription = null,
                 modifier = Modifier
                     .size(48.dp)

@@ -324,4 +324,7 @@
     <string name="fetch_stage_reading">جارٍ قراءة معلومات الفيديو…</string>
     <string name="fetch_stage_parsing">جارٍ تحليل التنسيقات…</string>
     <string name="fetch_stage_finishing">على وشك الانتهاء…</string>
+
+    <!-- Mascot System -->
+    <string name="fetching_message">جارٍ التقاط الفيديو…</string>
 </resources>
