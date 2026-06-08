@@ -27,6 +27,7 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,6 +84,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -744,16 +746,16 @@ private fun MascotFetchingState(logoTint: Color, message: String, retryStatus: R
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Icon(
+            Image(
                 painter = painterResource(id = R.drawable.mascot_pounce),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(48.dp)
+                    .height(64.dp)
                     .graphicsLayer {
                         translationY = bounceY
                         rotationZ = searchRotate
                     },
-                tint = logoTint
+                colorFilter = ColorFilter.tint(logoTint)
             )
             Text(
                 text = stageMessages.getOrElse(stage) { message },
@@ -790,11 +792,11 @@ private fun MascotErrorState(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
+                Image(
                     painter = painterResource(R.drawable.mascot_surfer),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.height(56.dp),
+                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onErrorContainer)
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
