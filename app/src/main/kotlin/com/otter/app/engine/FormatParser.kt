@@ -26,8 +26,87 @@ class FormatParser(private val context: Context? = null) {
     companion object {
         private const val TAG = "FormatParser"
         private const val OUTPUT_BASENAME = "%(title).200B"
+        private const val UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36"
 
         val engineReady = MutableStateFlow(false)
+
+        private fun applyPlatformArgs(request: YoutubeDLRequest, url: String) {
+            val lower = url.lowercase()
+
+            // Common: add user-agent for all platforms except YouTube (handled natively)
+            val needsUA = listOf(
+                "twitter.com", "x.com", "t.co",
+                "reddit.com", "redd.it", "v.redd.it",
+                "twitch.tv",
+                "vimeo.com",
+                "soundcloud.com",
+                "bilibili.com",
+                "dailymotion.com", "dai.ly",
+                "pinterest.com", "pin.it",
+                "streamable.com",
+                "bandcamp.com",
+                "snapchat.com"
+            )
+            if (needsUA.any { lower.contains(it) }) {
+                request.addOption("--user-agent", UA)
+            }
+
+            when {
+                // Twitter/X
+                lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("t.co") -> {
+                    request.addOption("--add-header", "Accept-Language:en-US,en;q=0.9")
+                    request.addOption("--extractor-retries", "5")
+                    Log.i(TAG, "[PLATFORM-FLAGS] Twitter/X detected, applying user-agent + en-US header + retry=5")
+                }
+                // Reddit
+                lower.contains("reddit.com") || lower.contains("redd.it") || lower.contains("v.redd.it") -> {
+                    request.addOption("--add-header", "Accept:application/json")
+                    Log.i(TAG, "[PLATFORM-FLAGS] Reddit detected, applying user-agent + Accept:application/json")
+                }
+                // Twitch
+                lower.contains("twitch.tv") -> {
+                    request.addOption("--socket-timeout", "20")
+                    Log.i(TAG, "[PLATFORM-FLAGS] Twitch detected, applying user-agent + socket-timeout=20")
+                }
+                // Vimeo
+                lower.contains("vimeo.com") -> {
+                    request.addOption("--add-header", "Referer:https://vimeo.com")
+                    Log.i(TAG, "[PLATFORM-FLAGS] Vimeo detected, applying user-agent + referer")
+                }
+                // SoundCloud
+                lower.contains("soundcloud.com") -> {
+                    Log.i(TAG, "[PLATFORM-FLAGS] SoundCloud detected, applying user-agent")
+                }
+                // Bilibili
+                lower.contains("bilibili.com") -> {
+                    request.addOption("--add-header", "Referer:https://www.bilibili.com")
+                    request.addOption("--add-header", "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8")
+                    request.addOption("--geo-bypass")
+                    Log.i(TAG, "[PLATFORM-FLAGS] Bilibili detected, applying user-agent + referer + zh-CN + geo-bypass")
+                }
+                // Dailymotion
+                lower.contains("dailymotion.com") || lower.contains("dai.ly") -> {
+                    Log.i(TAG, "[PLATFORM-FLAGS] Dailymotion detected, applying user-agent")
+                }
+                // Pinterest
+                lower.contains("pinterest.com") || lower.contains("pin.it") -> {
+                    Log.i(TAG, "[PLATFORM-FLAGS] Pinterest detected, applying user-agent")
+                }
+                // Streamable
+                lower.contains("streamable.com") -> {
+                    Log.i(TAG, "[PLATFORM-FLAGS] Streamable detected, applying user-agent")
+                }
+                // Bandcamp
+                lower.contains("bandcamp.com") -> {
+                    Log.i(TAG, "[PLATFORM-FLAGS] Bandcamp detected, applying user-agent")
+                }
+                // Snapchat
+                lower.contains("snapchat.com") -> {
+                    request.addOption("--add-header", "Referer:https://www.snapchat.com")
+                    Log.i(TAG, "[PLATFORM-FLAGS] Snapchat detected, applying user-agent + referer")
+                }
+            }
+        }
 
         private suspend fun ensureEngineReady() {
             if (engineReady.value) return
@@ -181,13 +260,13 @@ class FormatParser(private val context: Context? = null) {
                     }
                     addOption("--skip-download")
                     addOption("--no-warnings")
-                    addOption("--no-call-home")
                     addOption("--no-check-certificate")
                     addOption("--no-write-info-json")
                     addOption("--no-write-description")
                     addOption("--no-write-thumbnail")
                     addOption("--extractor-retries", "3")
                     addOption("--flat-playlist")
+                    addOption("--ignore-errors")
 
                     // Progressive socket timeout per attempt
                     val baseTimeout = when {
@@ -198,6 +277,9 @@ class FormatParser(private val context: Context? = null) {
                     val socketTimeout = (baseTimeout + (attempt - 1) * 10).coerceAtMost(30)
                     addOption("--socket-timeout", socketTimeout.toString())
                     Log.i(TAG, "[FETCH-RETRY] attempt=$attempt socketTimeout=${socketTimeout}s")
+
+                    // Platform-specific flags (user-agent, headers, geo-bypass, etc.)
+                    applyPlatformArgs(this, url)
 
                     if (context != null) {
                         val cookieFile = File(context.filesDir, "cookies.txt")
