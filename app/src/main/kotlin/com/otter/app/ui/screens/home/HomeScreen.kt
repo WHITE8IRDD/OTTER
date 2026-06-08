@@ -1224,15 +1224,7 @@ private fun HomeScreenHeader(
                     .graphicsLayer(scaleX = breatheScale, scaleY = breatheScale),
                 tint = logoColor
             )
-            Text(
-                text = stringResource(R.string.header_app_name),
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = 38.sp,
-                    letterSpacing = (-1.5).sp
-                ),
-                fontWeight = FontWeight.Black,
-                color = accentColor
-            )
+
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
