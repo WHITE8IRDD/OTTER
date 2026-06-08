@@ -132,11 +132,17 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                             }
                         } catch (e: Throwable) {
                             Log.e(TAG, "[START-3] download function threw for $u", e)
-                            // Only emit error if NOT intentional cancel
-                            if (!repository.wasIntentionallyCancelled(u)) {
-                                progress(DownloadState.Error(e.message ?: "Download failed"))
-                            } else {
-                                Log.i(TAG, "[START-3b] suppressed error — intentional cancel")
+                            when {
+                                repository.wasIntentionallyCancelled(u) -> {
+                                    Log.i(TAG, "[START-3b] suppressed — intentional cancel")
+                                }
+                                e is CancellationException -> {
+                                    Log.w(TAG, "[START-3c] CancellationException from non-user source")
+                                    progress(DownloadState.Error("Download interrupted unexpectedly. Tap Retry to try again."))
+                                }
+                                else -> {
+                                    progress(DownloadState.Error(e.message ?: "Download failed"))
+                                }
                             }
                         }
                     }
@@ -304,7 +310,12 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                 )
                 Log.i(TAG, "[RESUME-11] startDownload returned")
             } catch (e: CancellationException) {
-                Log.i(TAG, "[RESUME-12] job cancelled (service stopping — download likely completed)")
+                if (!repository.wasIntentionallyCancelled(url)) {
+                    Log.w(TAG, "[RESUME-12a] CancellationException from non-user source during resume")
+                    showSoftResumeError(url, "Download interrupted unexpectedly. Tap Retry to try again.")
+                } else {
+                    Log.i(TAG, "[RESUME-12b] suppressed CancellationException — intentional cancel")
+                }
             } catch (e: Throwable) {
                 Log.e(TAG, "[RESUME-13] unexpected error", e)
                 showSoftResumeError(url, e.message)
