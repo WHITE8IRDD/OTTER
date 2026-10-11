@@ -78,6 +78,14 @@ jobs:
       - name: Install Android 35 build packages
         run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
+      # A fresh runner would otherwise generate a brand new debug key on every run,
+      # and a test APK signed by a different key cannot be installed over the
+      # previous one. This is the public Android debug key, not a release secret.
+      - name: Use the repository debug key for test builds
+        run: |
+          mkdir -p "$HOME/.android"
+          cp .github/debug.keystore "$HOME/.android/debug.keystore"
+
       # Optional: only runs when the repository defines these secrets.
       - name: Configure release signing (optional)
         if: env.KEYSTORE_BASE64 != ''
@@ -259,8 +267,14 @@ jobs:
               echo "This APK is signed with the repository's release keystore."
             else
               echo "No release keystore is configured for this repository, so this is a"
-              echo "**debug-signed** APK for testing. It installs fine on a phone, but it is"
-              echo "not suitable for store distribution."
+              echo "**debug-signed** APK for testing (stable Android debug key, so newer"
+              echo "test builds install over older ones). It is not suitable for store"
+              echo "distribution."
+              echo ""
+              echo "Want a properly release-signed APK? Add the OTTER_KEYSTORE_BASE64,"
+              echo "OTTER_KEYSTORE_PASSWORD, OTTER_KEY_ALIAS and OTTER_KEY_PASSWORD"
+              echo "repository secrets and this workflow switches to the release variant"
+              echo "automatically.""
             fi
             echo ""
             if [ -s live-verdict.md ]; then
