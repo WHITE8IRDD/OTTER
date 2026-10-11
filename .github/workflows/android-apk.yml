@@ -193,17 +193,14 @@ jobs:
             echo "- **Failure says why** - a post that cannot be read reports what each endpoint"
             echo "  returned instead of leaving the screen sitting on an empty picker."
             echo
-            echo "## Download speed"
+            echo "## Downloads"
             echo
-            echo "- **aria2c is wired up** - the setting existed and the binary was unpacked, but"
-            echo "  no request ever used it. It now splits a file across eight connections, and"
-            echo "  falls back to the built-in downloader if anything about that fails."
             echo "- **No duplicated soundtrack** - a format that already carries audio is no longer"
             echo "  paired with a second audio stream, which halved the data and dropped the merge."
-            echo "- **No second copy** - a finished download is renamed into place instead of being"
-            echo "  copied out of the cache directory."
             echo "- **The nightly yt-dlp update stands aside** - it no longer shares the connection"
             echo "  with a download you are already waiting on."
+            echo "- **33 unit tests** covering mixed carousels, the page payload, the format"
+            echo "  selection rules and the history metadata, run before this APK is published."
             echo
             echo "## Install"
             echo

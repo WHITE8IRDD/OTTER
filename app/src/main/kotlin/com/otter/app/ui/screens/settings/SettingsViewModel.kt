@@ -59,7 +59,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val userAgent: StateFlow<String> = prefs.userAgent
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
-    val useAria2c: StateFlow<Boolean> = prefs.useAria2c
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val concurrentFragments: StateFlow<Int> = prefs.concurrentFragments
@@ -134,10 +133,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun setUserAgent(ua: String) {
         viewModelScope.launch { prefs.setUserAgent(ua) }
-    }
-
-    fun setUseAria2c(enabled: Boolean) {
-        viewModelScope.launch { prefs.setUseAria2c(enabled) }
     }
 
     fun setConcurrentFragments(n: Int) {

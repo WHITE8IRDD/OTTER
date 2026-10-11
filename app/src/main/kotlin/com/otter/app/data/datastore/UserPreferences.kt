@@ -21,7 +21,6 @@ class UserPreferences(private val context: Context) {
         val KEY_DOWNLOAD_PATH = stringPreferencesKey("download_path")
         val KEY_DEFAULT_QUALITY = stringPreferencesKey("default_quality")
         val KEY_AUTO_DOWNLOAD = booleanPreferencesKey("auto_download")
-        val KEY_USE_ARIA2C = booleanPreferencesKey("use_aria2c")
         val KEY_MAX_CONCURRENT = stringPreferencesKey("max_concurrent")
         val KEY_DARK_MODE = booleanPreferencesKey("dark_mode")
         val KEY_EXTRACT_AUDIO = booleanPreferencesKey("extract_audio")
@@ -56,10 +55,6 @@ class UserPreferences(private val context: Context) {
 
     val autoDownload: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_AUTO_DOWNLOAD] ?: false
-    }
-
-    val useAria2c: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_USE_ARIA2C] ?: false
     }
 
     val darkMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -156,10 +151,6 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setAutoDownload(enabled: Boolean) {
         context.dataStore.edit { prefs -> prefs[KEY_AUTO_DOWNLOAD] = enabled }
-    }
-
-    suspend fun setUseAria2c(enabled: Boolean) {
-        context.dataStore.edit { prefs -> prefs[KEY_USE_ARIA2C] = enabled }
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -287,7 +278,6 @@ class UserPreferences(private val context: Context) {
     suspend fun getProxyUrlOnce(): String = proxyUrl.first()
     suspend fun getRetriesOnce(): Int = retries.first()
     suspend fun getConcurrentFragmentsOnce(): Int = concurrentFragments.first()
-    suspend fun getUseAria2cOnce(): Boolean = useAria2c.first()
     suspend fun getCookiesEnabledOnce(): Boolean = cookiesEnabled.first()
     suspend fun getCookieContentOnce(): String = cookieContent.first()
     suspend fun getLanguageOnce(): String = language.first()

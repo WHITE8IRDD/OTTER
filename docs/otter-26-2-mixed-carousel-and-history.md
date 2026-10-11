@@ -169,56 +169,60 @@ happened: the scraper's per-endpoint counts (`page(0) page-mobile(0) webview(2) 
 plus the yt-dlp response type, entry count and format count. A failure report from a
 device says which endpoint to look at instead of just "nothing appeared".
 
-## Follow-up: download speed (YouTube and Shorts)
+## Follow-up: reading a carousel from the page payload
 
-Four separate things contributed, and one of them was a setting that never did anything.
+A carousel was only recognised when its node carried `media_type: 8`. That field belongs
+to Instagram's private API. The payload that is actually available without a session types
+the post with `__typename: GraphSidecar` (or `XDTGraphSidecar`) and carries no
+`media_type` at all.
 
-### The aria2c setting was decoration
+So the sidecar was never recognised, and the post fell through to `collectMedia`, a blind
+breadth-first scan of the whole payload. That scan reads whatever it walks into first —
+on a post page that is the suggested posts around the real one — and it reads a video
+slide as the video's poster frame unless `is_video` happens to be present. The result was
+a carousel that looked like a picture-only post.
 
-Settings offered *Use Aria2c*, the preference was stored, and `Aria2c.getInstance().init()`
-unpacked the binary at startup — but no `YoutubeDLRequest` ever mentioned it. Nothing in
-`applySettings` or `applyPlatformArgs` passed `--downloader`, so toggling it changed nothing.
+Two rules changed, both in `InstagramMediaParser`:
 
-It is wired up now, and on by default. Three details matter and are easy to get wrong:
+* `slides()` recognises a sidecar by `edge_sidecar_to_children`, the field only a sidecar
+  has, rather than requiring `media_type` 8.
+* `isVideoNode()` reads `__typename` before anything else: a slide typed `*GraphVideo` is
+  a video on that evidence alone, and one typed `*GraphImage` is a picture, so a missing
+  `is_video` can no longer demote a video slide to a poster.
 
-* **`-x` has to be set.** aria2c defaults to `--max-connection-per-server=1`, so with the
-  defaults it opens one connection and is no faster than yt-dlp. The arguments ask for
-  eight splits and eight connections per server.
-* **It needs a CA bundle.** aria2c cannot find Android's CA store, and HTTPS downloads fail
-  without one. The engine unpacks a bundle under `youtubedl-android/packages/*/usr/etc/
-  tls/cert.pem`; `enableAria2c` looks for it and keeps the built-in downloader when it is
-  not there, rather than failing every download.
-* **The arguments must go last.** yt-dlp keeps only the *last* value it is given for a
-  downloader's arguments, and `YoutubeDL.execute` adds its own `--ca-certificate` when the
-  request runs. Passing ours through `addCommands` puts them after the engine's, so both
-  survive. `--downloader libaria2c.so` is also what triggers the engine's special-casing.
+### Why the old tests did not catch it
 
-Segmented (DASH) formats are unaffected: aria2c does not support those protocols, so
-`can_download` returns false and yt-dlp keeps its own downloader with
-`--concurrent-fragments`. aria2c only takes the single-file downloads, which is exactly
-where one connection is the bottleneck. A retry drops back to the built-in downloader, so
-a failure caused by aria2c costs one attempt and no more.
+`InstagramMixedCarouselTest` was written against fixtures shaped like the parser: every
+slide had `media_type` and `video_versions`. Real payloads do not. The fixtures passed
+while the app did not work, which is the opposite of what a test is for.
 
-### Every video format was paired with a second audio stream
+`InstagramPagePayloadTest` is written against the source instead. Its fixtures use
+`__typename`, have no `media_type`, give the video slide its video as `video_url`, and
+include suggested posts around the real one — so a post that is not recognised genuinely
+fails rather than quietly returning the wrong media.
 
-`onFormatSelected` built `-f "<id>+bestaudio/best"` for *any* video format. For a muxed
-format — one that already carries audio, like the progressive MP4s YouTube serves — that
-downloads the soundtrack a second time and forces a merge the single file never needed.
-`formatSpecFor` now only pairs formats that genuinely have no audio (`isVideoOnly`).
+## Follow-up: aria2c, tried and reverted
 
-The recommended `bestvideo+bestaudio` entry became `bestvideo+bestaudio+bestaudio`, a
-three-part spec. Specs that already contain `+` are passed through untouched, as
-`bestvideo+bestaudio/best`.
+The *Use Aria2c* setting was wired up in an attempt to speed downloads, and reverted in
+the next commit: it stalled YouTube, Shorts and Instagram video posts. Instagram picture
+posts were unaffected, which was the tell — slides take a plain-HTTP path that never saw
+the option, while everything running through yt-dlp did.
 
-### Finishing a download copied the whole file
+That is the whole lesson: the change was reasonable on paper and unverifiable here, and
+shipping it cost more than it was worth. The setting was dead before and is dead now, so
+the toggle has been removed from Settings rather than left as a promise the app does not
+keep.
 
-Downloads land in `cacheDir/ytdlp` and are then moved to the download directory with
-`srcFile.copyTo(destFile)` — a full rewrite of a file that was just written. It renames
-first and only copies when the two directories are on different filesystems.
+What remains of the speed work is the one change that removes work instead of adding a
+component: a format that already carries audio is no longer paired with a second audio
+stream (`FormatSpec`). That halved the data and dropped the merge on muxed picks.
 
-### The nightly update shared the connection
+## Tests
 
-`OtterApplication` runs `autoUpdateYtDlp()` from its startup coroutine, right after the
-warm-up fetch. That pulls a fresh yt-dlp binary — tens of megabytes — over the same
-connection as the first download of the session. `EngineLock` records whether the engine
-has been used in this process; if it has, the update waits for the next launch.
+`FormatSpec` is a pure object so the format-selection rules can run on the JVM, and
+`FormatSpecTest` pins them. `InstagramPagePayloadTest` covers the real page shapes.
+CI runs the suite before the APK is published; 33 tests, all passing.
+
+What CI cannot do is run the app. Instagram serves the runner a login wall on every
+endpoint, so the probe job reports shapes and nothing more — behaviour on a real device
+still has to be confirmed by using it.

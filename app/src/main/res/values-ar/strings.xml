@@ -123,8 +123,6 @@
     <string name="setting_download_subtitles">تنزيل الترجمة</string>
     <string name="setting_download_subtitles_sub">تضمين الترجمة مع التنزيل السريع</string>
     <string name="settings_performance">الأداء</string>
-    <string name="setting_use_aria2c">استخدام Aria2c</string>
-    <string name="setting_use_aria2c_sub">تنزيل أسرع مع Aria2</string>
     <string name="setting_rate_limit">تحديد السرعة</string>
     <string name="setting_rate_limit_sub">تحديد سرعة التنزيل</string>
     <string name="settings_notifications">الإشعارات</string>

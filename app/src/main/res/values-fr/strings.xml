@@ -123,8 +123,6 @@
     <string name="setting_download_subtitles">Télécharger les sous-titres</string>
     <string name="setting_download_subtitles_sub">Inclure les sous-titres avec le téléchargement rapide</string>
     <string name="settings_performance">Performances</string>
-    <string name="setting_use_aria2c">Utiliser Aria2c</string>
-    <string name="setting_use_aria2c_sub">Téléchargements plus rapides avec Aria2</string>
     <string name="setting_rate_limit">Limite de débit</string>
     <string name="setting_rate_limit_sub">Limiter la vitesse de téléchargement</string>
     <string name="settings_notifications">Notifications</string>

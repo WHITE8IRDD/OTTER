@@ -123,8 +123,6 @@
     <string name="setting_download_subtitles">Download subtitles</string>
     <string name="setting_download_subtitles_sub">Include subtitles with Quick Download</string>
     <string name="settings_performance">Performance</string>
-    <string name="setting_use_aria2c">Use Aria2c</string>
-    <string name="setting_use_aria2c_sub">Faster downloads with Aria2</string>
     <string name="setting_rate_limit">Rate limit</string>
     <string name="setting_rate_limit_sub">Limit download speed</string>
     <string name="settings_notifications">Notifications</string>
