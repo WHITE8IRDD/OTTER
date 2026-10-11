@@ -29,8 +29,8 @@ object GenericPageMediaParser {
     private val mediaTag = Regex("""(?is)<(meta|img|source|link)\b[^>]*>""")
     private val attribute = Regex("""(?is)([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
     private val jsonLdScript = Regex("""(?is)<script\b(?=[^>]*type\s*=\s*["']application/ld\+json["'])[^>]*>(.*?)</script\s*>""")
-    private val jsonImageField = Regex("""(?is)"(?:image|thumbnailUrl|thumbnail_url)"\s*:\s*(?:"((?:\.|[^"\])*)"|\[(.*?)\])""")
-    private val jsonString = Regex("\"((?:\\.|[^\"\\])*)\"")
+    private val jsonImageField = Regex("""(?is)"(?:image|thumbnailUrl|thumbnail_url)"\s*:\s*(?:"(.*?)"|\[(.*?)\])""")
+    private val jsonString = Regex("\"([^\"]*)\"")
 
     private val imageMetaNames = setOf(
         "og:image", "og:image:url", "og:image:secure_url",

@@ -59,7 +59,9 @@ jobs:
                           for failure in list(testcase.findall("failure")) + list(testcase.findall("error")):
                               test_details.append(f"FAILED {testcase.attrib.get('classname', '')}.{testcase.attrib.get('name', '')}: {failure.attrib.get('message', '')}")
                               if failure.text:
-                                  test_details.extend(failure.text.splitlines()[:12])
+                                  failure_lines = failure.text.splitlines()
+                                  test_details.extend(failure_lines[:4])
+                                  test_details.extend(line for line in failure_lines if "Caused by:" in line or "PatternSyntaxException" in line)
                   except ET.ParseError:
                       pass
               selected = test_details + log_details
