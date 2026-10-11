@@ -1,0 +1,56 @@
+name: Instagram probe (diagnostic)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Probe Instagram endpoints from the CI runner
+        run: |
+          set +e
+          UA='Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
+          POST='https://www.instagram.com/p/DeEo7SjjLYz/'
+          URL='https://www.instagram.com/p/DeEo7SjjLYz/?img_index=2&mdxt=MTB3NWI3aGFiYWg3eQ=='
+          MEDIA_ID=4000502365245191731
+
+          probe () {
+            local label="$1"; shift
+            local out="probe_${label}.txt"
+            local code
+            code=$(curl -sS -L --max-time 40 -A "$UA" \
+              -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
+              -H 'Accept-Language: en-US,en;q=0.9' \
+              -o "$out" -w '%{http_code} %{size_download} %{content_type}' "$@" 2>&1 | tail -1)
+            echo "=== $label -> $code"
+            echo "--- first 300 chars:"
+            head -c 300 "$out" | tr -d '\r'
+            echo
+            echo "--- markers:"
+            for m in 'xdt_api__v1__media__shortcode__web_info' 'edge_sidecar_to_children' 'carousel_media' 'image_versions2' 'display_url' 'og:image' 'login'; do
+              printf '  %-42s %s\n' "$m" "$(grep -o "$m" "$out" | wc -l)"
+            done
+            echo "  scontent occurrences: $(grep -o 'scontent' "$out" | wc -l)"
+            echo "  cdninstagram occurrences: $(grep -o 'cdninstagram' "$out" | wc -l)"
+            echo
+          }
+
+          probe page            "$POST"
+          probe page_query      "$URL"
+          probe a1              "${POST}?__a=1&__d=dis"
+          probe embed           "https://www.instagram.com/p/DeEo7SjjLYz/embed/captioned/"
+          probe webapi          "https://www.instagram.com/api/v1/media/${MEDIA_ID}/info/" -H 'X-IG-App-ID: 936619743392459'
+          probe iapi            "https://i.instagram.com/api/v1/media/${MEDIA_ID}/info/" -H 'X-IG-App-ID: 936619743392459'
+          echo "done"
+      - name: Upload probe dumps
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: instagram-probe
+          path: probe_*.txt
+          if-no-files-found: warn
