@@ -168,3 +168,57 @@ a page with no media markers — the empty-picker error now carries what actuall
 happened: the scraper's per-endpoint counts (`page(0) page-mobile(0) webview(2) …`)
 plus the yt-dlp response type, entry count and format count. A failure report from a
 device says which endpoint to look at instead of just "nothing appeared".
+
+## Follow-up: download speed (YouTube and Shorts)
+
+Four separate things contributed, and one of them was a setting that never did anything.
+
+### The aria2c setting was decoration
+
+Settings offered *Use Aria2c*, the preference was stored, and `Aria2c.getInstance().init()`
+unpacked the binary at startup — but no `YoutubeDLRequest` ever mentioned it. Nothing in
+`applySettings` or `applyPlatformArgs` passed `--downloader`, so toggling it changed nothing.
+
+It is wired up now, and on by default. Three details matter and are easy to get wrong:
+
+* **`-x` has to be set.** aria2c defaults to `--max-connection-per-server=1`, so with the
+  defaults it opens one connection and is no faster than yt-dlp. The arguments ask for
+  eight splits and eight connections per server.
+* **It needs a CA bundle.** aria2c cannot find Android's CA store, and HTTPS downloads fail
+  without one. The engine unpacks a bundle under `youtubedl-android/packages/*/usr/etc/
+  tls/cert.pem`; `enableAria2c` looks for it and keeps the built-in downloader when it is
+  not there, rather than failing every download.
+* **The arguments must go last.** yt-dlp keeps only the *last* value it is given for a
+  downloader's arguments, and `YoutubeDL.execute` adds its own `--ca-certificate` when the
+  request runs. Passing ours through `addCommands` puts them after the engine's, so both
+  survive. `--downloader libaria2c.so` is also what triggers the engine's special-casing.
+
+Segmented (DASH) formats are unaffected: aria2c does not support those protocols, so
+`can_download` returns false and yt-dlp keeps its own downloader with
+`--concurrent-fragments`. aria2c only takes the single-file downloads, which is exactly
+where one connection is the bottleneck. A retry drops back to the built-in downloader, so
+a failure caused by aria2c costs one attempt and no more.
+
+### Every video format was paired with a second audio stream
+
+`onFormatSelected` built `-f "<id>+bestaudio/best"` for *any* video format. For a muxed
+format — one that already carries audio, like the progressive MP4s YouTube serves — that
+downloads the soundtrack a second time and forces a merge the single file never needed.
+`formatSpecFor` now only pairs formats that genuinely have no audio (`isVideoOnly`).
+
+The recommended `bestvideo+bestaudio` entry became `bestvideo+bestaudio+bestaudio`, a
+three-part spec. Specs that already contain `+` are passed through untouched, as
+`bestvideo+bestaudio/best`.
+
+### Finishing a download copied the whole file
+
+Downloads land in `cacheDir/ytdlp` and are then moved to the download directory with
+`srcFile.copyTo(destFile)` — a full rewrite of a file that was just written. It renames
+first and only copies when the two directories are on different filesystems.
+
+### The nightly update shared the connection
+
+`OtterApplication` runs `autoUpdateYtDlp()` from its startup coroutine, right after the
+warm-up fetch. That pulls a fresh yt-dlp binary — tens of megabytes — over the same
+connection as the first download of the session. `EngineLock` records whether the engine
+has been used in this process; if it has, the update waits for the next launch.
