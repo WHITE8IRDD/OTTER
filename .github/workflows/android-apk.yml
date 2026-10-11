@@ -39,12 +39,21 @@ jobs:
         if: failure()
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
           log = Path("build.log")
           if log.exists():
-              tail = "\n".join(log.read_text(errors="replace").splitlines()[-60:])[:12000]
-              encoded = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              lines = log.read_text(errors="replace").splitlines()
+              marker = re.compile(r"(?i)(FAILURE:|what went wrong:|execution failed for task|could not (find|resolve)|no matching variant|^e:|error:|failed to)")
+              selected = []
+              for index, line in enumerate(lines):
+                  if marker.search(line):
+                      selected.extend(lines[max(0, index - 1):min(len(lines), index + 5)])
+              if not selected:
+                  selected = lines[-20:]
+              details = "\n".join(dict.fromkeys(selected))[:3000]
+              encoded = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               print(f"::error title=Gradle failure::{encoded}")
           PY
 
