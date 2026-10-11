@@ -11,6 +11,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -41,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -49,6 +54,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
@@ -57,7 +63,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -65,6 +70,7 @@ import com.otter.app.R
 import com.otter.app.data.db.PausedDownload
 import com.otter.app.data.model.DownloadItem
 import com.otter.app.data.model.DownloadStatus
+import android.widget.Toast
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -72,6 +78,7 @@ import com.otter.app.ui.components.BrutalButton
 import com.otter.app.ui.components.OtterCard
 import com.otter.app.ui.components.SpeechBubble
 import com.otter.app.ui.theme.ThemeViewModel
+import com.otter.app.util.copyToClipboard
 import com.otter.app.util.toReadableDuration
 import com.otter.app.util.toReadableFileSize
 import java.text.SimpleDateFormat
@@ -90,6 +97,7 @@ fun HistoryScreen(
     val isDarkMode by themeViewModel.isDarkMode.collectAsStateWithLifecycle()
     val tintLogo by themeViewModel.tintLogo.collectAsStateWithLifecycle()
     var showClearDialog by remember { mutableStateOf(false) }
+    var detailsItem by remember { mutableStateOf<DownloadItem?>(null) }
 
     val logoTint = when {
         tintLogo -> MaterialTheme.colorScheme.primary
@@ -126,6 +134,13 @@ fun HistoryScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (downloads.isNotEmpty() || pausedDownloads.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.history_details_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
                 }
                 if (downloads.isNotEmpty()) {
                     BrutalButton(
@@ -184,6 +199,7 @@ fun HistoryScreen(
                         HistoryItemCard(
                             item = item,
                             fileExists = fileExists,
+                            onOpenDetails = { detailsItem = item },
                             onOpen = { viewModel.openFile(context, item) },
                             onLocate = { viewModel.locateFile(context, item) },
                             onShare = { viewModel.shareFile(context, item) },
@@ -195,6 +211,10 @@ fun HistoryScreen(
                 }
             }
         }
+    }
+
+    detailsItem?.let { item ->
+        HistoryDetailsDialog(item = item, onDismiss = { detailsItem = null })
     }
 
     if (showClearDialog) {
@@ -281,12 +301,13 @@ fun HistoryItemCard(
     onShare: () -> Unit,
     onRetry: () -> Unit = {},
     onResume: () -> Unit = {},
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onOpenDetails: () -> Unit = {}
 ) {
     val dateFormat = SimpleDateFormat.getDateInstance(SimpleDateFormat.MEDIUM, Locale.getDefault())
     val itemStatus = runCatching { DownloadStatus.valueOf(item.status) }.getOrDefault(DownloadStatus.COMPLETED)
 
-    OtterCard(modifier = Modifier.fillMaxWidth()) {
+    OtterCard(modifier = Modifier.fillMaxWidth(), onClick = onOpenDetails) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
@@ -462,6 +483,162 @@ fun HistoryItemCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Title, description and hashtags saved with a download, each with its own copy
+ * button so the text can be reused without leaving the app.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun HistoryDetailsDialog(
+    item: DownloadItem,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val hashtags = item.hashtags.filter { it.isNotBlank() }.distinct()
+    val hashtagText = hashtags.joinToString(" ")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.history_details_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                CopyableField(
+                    heading = stringResource(R.string.content_desc_copy_title),
+                    value = item.title,
+                    emptyText = item.title,
+                    copyLabel = stringResource(R.string.content_desc_copy_title)
+                )
+                CopyableField(
+                    heading = stringResource(R.string.section_description),
+                    value = item.description,
+                    emptyText = stringResource(R.string.history_no_description),
+                    copyLabel = stringResource(R.string.content_desc_copy_description)
+                )
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.section_hashtags),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (hashtagText.isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    context.copyToClipboard(
+                                        hashtagText,
+                                        context.getString(R.string.content_desc_copy_hashtags)
+                                    )
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = stringResource(R.string.content_desc_copy_hashtags),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                    if (hashtagText.isNotBlank()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            hashtags.forEach { hashtag ->
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = hashtag,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.history_no_hashtags),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val everything = listOf(item.title, item.description, hashtagText)
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n\n")
+                    Toast.makeText(context, context.getString(R.string.history_copied_all), Toast.LENGTH_SHORT).show()
+                    context.copyToClipboard(everything, context.getString(R.string.history_details_title))
+                }
+            ) {
+                Text(stringResource(R.string.btn_copy_all))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.content_desc_close))
+            }
+        }
+    )
+}
+
+@Composable
+private fun CopyableField(
+    heading: String,
+    value: String,
+    emptyText: String,
+    copyLabel: String
+) {
+    val context = LocalContext.current
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = heading,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            if (value.isNotBlank()) {
+                IconButton(
+                    onClick = { context.copyToClipboard(value, copyLabel) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = copyLabel,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value.ifBlank { emptyText },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (value.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

@@ -14,8 +14,10 @@ import java.util.Locale
  * from a plain JVM.
  *
  * Rules that matter for correctness:
- *  - Carousel slides keep the order the payload reports (never the order a regex
- *    happens to find them in).
+ *  - A carousel slide is either a **photo** or a **video**; both are read, in the
+ *    order the payload reports them (never the order a regex happens to find them in).
+ *    Video slides are returned separately (with their poster frame) so the app can
+ *    send them through the video download path and the photos through the image path.
  *  - URLs are kept *with* their signed query string; removing it makes Instagram's
  *    CDN answer 403, which is what produced blank previews and empty downloads.
  *  - Duplicates are detected on host+path (query strings differ per delivery edge).
@@ -29,6 +31,8 @@ object InstagramMediaParser {
     private const val MAX_URLS = 40
 
     private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "avif", "gif")
+    private val videoExtensions = setOf("mp4", "m4v", "mov", "webm")
+
     private val scriptJson = Regex(
         """(?is)<script[^>]*type=["']application/json["'][^>]*>(.*?)</script\s*>"""
     )
@@ -61,15 +65,34 @@ object InstagramMediaParser {
 
     data class Result(
         val imageUrls: List<String>,
+        /** Playable URLs of the video slides of the same post, in payload order. */
+        val videoUrls: List<String> = emptyList(),
+        /**
+         * Poster frame for each entry of [videoUrls] (same indexes, blank when the
+         * payload carried none) so the picker can still show a preview.
+         */
+        val videoPosters: List<String> = emptyList(),
         /** Number of slides the payload declared, or 0 when unknown. */
-        val expectedCount: Int,
-        val source: Source,
+        val expectedCount: Int = 0,
+        val source: Source = Source.JSON_API,
         val shortcode: String = "",
+        /** Post caption when the payload carried one (used for description/hashtags). */
+        val caption: String = "",
         /** Short human readable explanation when the payload was empty or partial. */
         val note: String? = null
     ) {
+        /** Photos + videos actually readable. */
+        val mediaCount: Int get() = imageUrls.size + videoUrls.size
+
         val isComplete: Boolean
-            get() = expectedCount == 0 || imageUrls.size >= expectedCount
+            get() = expectedCount == 0 || mediaCount >= expectedCount
+
+        /** Something was read, but fewer slides than the post declares. */
+        val isPartial: Boolean
+            get() = mediaCount > 0 && !isComplete
+
+        /** Poster for a video slide, or blank when there is none. */
+        fun posterFor(index: Int): String = videoPosters.getOrNull(index).orEmpty()
     }
 
     // ---------------------------------------------------------------- URL helpers
@@ -158,6 +181,12 @@ object InstagramMediaParser {
         return extension in imageExtensions
     }
 
+    private fun hasVideoExtension(url: String): Boolean {
+        val path = runCatching { URL(url).path }.getOrNull() ?: return false
+        val extension = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        return extension in videoExtensions
+    }
+
     /** True when the URL can be fetched as a picture (extension may be missing on video posters). */
     fun isUsableImageUrl(url: String): Boolean =
         normalizeUrl(url) != null && (hasImageExtension(url) || looksLikeMediaCdn(url))
@@ -173,30 +202,47 @@ object InstagramMediaParser {
     fun parseJson(json: String, source: Source = Source.JSON_API): Result {
         val root = runCatching { JSONObject(json) }.getOrNull()
             ?: runCatching { JSONArray(json) }.getOrNull()
-            ?: return Result(emptyList(), 0, source, note = "payload was not JSON")
+            ?: return Result(emptyList(), emptyList(), emptyList(), 0, source, note = "payload was not JSON")
         return parseJsonNode(root, source)
     }
 
     fun parseJsonNode(root: Any, source: Source = Source.JSON_API): Result {
+        val caption = findCaption(root)
         val carousel = findCarousel(root)
         if (carousel != null && carousel.size >= 2) {
-            return Result(carousel, carousel.size, source)
+            return Result(
+                carousel.photos.urls(),
+                carousel.videos.urls(),
+                carousel.videos.posters(),
+                carousel.declaredCount,
+                source,
+                caption = caption
+            )
         }
         val collected = collectMediaUrls(root)
-        val order = if (carousel != null && carousel.isNotEmpty()) {
-            (carousel + collected).distinctBy { mediaKey(it) }
-        } else {
-            collected
-        }
-        val ordered = order.take(MAX_URLS)
-        return Result(ordered, 0, source)
+        val photos = MediaSet()
+        val videos = MediaSet()
+        carousel?.photos?.entries()?.forEach { photos.add(it.url) }
+        collected.images.entries().forEach { photos.add(it.url) }
+        carousel?.videos?.entries()?.forEach { videos.add(it.url, it.poster) }
+        collected.videos.entries().forEach { videos.add(it.url, it.poster) }
+
+        val expected = carousel?.declaredCount ?: 0
+        return Result(
+            photos.urls().take(MAX_URLS),
+            videos.urls().take(MAX_URLS),
+            videos.posters().take(MAX_URLS),
+            expected,
+            source,
+            caption = caption
+        )
     }
 
     /**
      * Locate the first object that explicitly describes a multi-slide post and
-     * return its slides in payload order.
+     * return its slides in payload order (photos and videos kept apart).
      */
-    private fun findCarousel(root: Any): List<String>? {
+    private fun findCarousel(root: Any): Slides? {
         val queue = ArrayDeque<Any>()
         queue.add(root)
         var visited = 0
@@ -220,30 +266,77 @@ object InstagramMediaParser {
         return null
     }
 
-    private fun slides(node: JSONObject): List<String>? {
+    /** The photo and video slides of one multi-slide post, in payload order. */
+    private data class Slides(
+        val photos: MediaSet,
+        val videos: MediaSet,
+        /** Slide count the payload itself declared (0 = unknown). */
+        val declaredCount: Int
+    ) {
+        val size: Int get() = photos.size + videos.size
+    }
+
+    private fun slides(node: JSONObject): Slides? {
         node.optJSONArray("carousel_media")?.let { array ->
-            val urls = mutableListOf<String>()
-            for (index in 0 until minOf(array.length(), MAX_SLIDES)) {
-                val child = array.optJSONObject(index) ?: continue
-                bestImage(child)?.let { if (!urls.contains(it)) urls.add(it) }
-            }
-            if (urls.isNotEmpty()) return urls
+            val slides = readSlideArray(array)
+            if (slides.size > 0) return slides.withDeclared(node)
         }
         val edges = node.optJSONObject("edge_sidecar_to_children")?.optJSONArray("edges")
             ?: node.optJSONArray("edges")
         if (edges != null && node.optInt("media_type", -1) == 8) {
-            val urls = mutableListOf<String>()
-            for (index in 0 until minOf(edges.length(), MAX_SLIDES)) {
-                val child = edges.optJSONObject(index)?.optJSONObject("node") ?: continue
-                bestImage(child)?.let { if (!urls.contains(it)) urls.add(it) }
-            }
-            if (urls.isNotEmpty()) return urls
+            val slides = readEdgeArray(edges)
+            if (slides.size > 0) return slides.withDeclared(node)
         }
         // `items: [...]` from the web info payload can also hold the carousel.
         return null
     }
 
-    /** Best picture URL of a single media node (thumbnails are used for video slides). */
+    private fun Slides.withDeclared(node: JSONObject): Slides =
+        copy(declaredCount = maxOf(node.optInt("carousel_media_count", 0), size))
+
+    private fun readSlideArray(array: JSONArray): Slides {
+        val photos = MediaSet()
+        val videos = MediaSet()
+        for (index in 0 until minOf(array.length(), MAX_SLIDES)) {
+            val child = array.optJSONObject(index) ?: continue
+            addSlide(child, photos, videos)
+        }
+        return Slides(photos, videos, photos.size + videos.size)
+    }
+
+    private fun readEdgeArray(edges: JSONArray): Slides {
+        val photos = MediaSet()
+        val videos = MediaSet()
+        for (index in 0 until minOf(edges.length(), MAX_SLIDES)) {
+            val child = edges.optJSONObject(index)?.optJSONObject("node") ?: continue
+            addSlide(child, photos, videos)
+        }
+        return Slides(photos, videos, photos.size + videos.size)
+    }
+
+    private fun addSlide(node: JSONObject, photos: MediaSet, videos: MediaSet) {
+        if (isVideoNode(node)) {
+            bestVideo(node)?.let { videos.add(it, bestImage(node).orEmpty()) }
+        } else {
+            bestImage(node)?.let { photos.add(it) }
+        }
+    }
+
+    /**
+     * `media_type` 2 is a video slide, 1 a photo; GraphQL nodes use `is_video`.
+     * A video slide also carries a poster in `image_versions2`, so the type flag
+     * wins over "has a picture".
+     */
+    private fun isVideoNode(node: JSONObject): Boolean {
+        when (node.optInt("media_type", -1)) {
+            2 -> return true
+            1 -> return false
+        }
+        if (node.optBoolean("is_video", false)) return true
+        return node.optJSONArray("video_versions")?.let { it.length() > 0 } == true
+    }
+
+    /** Best picture URL of a single media node (video slides fall back to their poster). */
     private fun bestImage(node: JSONObject): String? {
         node.optJSONObject("image_versions2")?.optJSONArray("candidates")?.let { candidates ->
             pickLargest(candidates, "url")?.let { return it }
@@ -257,6 +350,20 @@ object InstagramMediaParser {
         if (thumbnail.isNotEmpty()) normalizeUrl(thumbnail)?.let { return it }
         node.optString("display_uri", "").takeIf { it.isNotEmpty() }?.let { uri ->
             normalizeUrl(uri)?.let { return it }
+        }
+        return null
+    }
+
+    /** Best playable URL of a video slide (`video_versions` holds the renditions). */
+    private fun bestVideo(node: JSONObject): String? {
+        node.optJSONArray("video_versions")?.let { versions ->
+            pickLargest(versions, "url")?.let { return it }
+        }
+        for (field in listOf("video_url", "playback_url", "url")) {
+            val value = node.optString(field, "")
+            if (value.isNotEmpty() && hasVideoExtension(value)) {
+                normalizeUrl(value)?.let { return it }
+            }
         }
         return null
     }
@@ -276,28 +383,96 @@ object InstagramMediaParser {
         return bestUrl
     }
 
-    /** Every picture URL in payload order, deduplicated by CDN path. */
-    private fun collectMediaUrls(root: Any): List<String> {
-        val found = LinkedHashMap<String, String>()
+    /** Every picture and video URL in payload order, deduplicated by CDN path. */
+    private fun collectMediaUrls(root: Any): Collected {
+        val images = MediaSet()
+        val videos = MediaSet()
         val queue = ArrayDeque<Any>()
         queue.add(root)
         var visited = 0
-        while (queue.isNotEmpty() && visited < 40_000 && found.size < MAX_URLS) {
+        while (queue.isNotEmpty() && visited < 40_000 && images.size + videos.size < MAX_URLS) {
             val node = queue.removeFirst()
             visited++
             when (node) {
                 is JSONObject -> {
-                    for (field in listOf("display_url", "thumbnail_src", "display_uri", "src", "url")) {
-                        val value = node.optString(field, "")
-                        if (value.isNotEmpty() && looksLikeMediaCdn(value)) {
-                            normalizeUrl(value)?.let { add(found, it) }
+                    val isVideo = isVideoNode(node)
+                    // Structures already read here must not be walked again: their
+                    // `url` entries would otherwise be collected a second time (and a
+                    // video's poster frame would be offered as a photo of the post).
+                    val consumed = mutableSetOf<String>()
+
+                    val poster = node.optJSONObject("image_versions2")?.optJSONArray("candidates")
+                        ?.let { candidates ->
+                            consumed.add("image_versions2")
+                            pickLargest(candidates, "url")
+                        }
+                    val display = node.optJSONArray("display_resources")?.let { resources ->
+                        consumed.add("display_resources")
+                        pickLargest(resources, "src")
+                    }
+                    val preview = poster ?: display.orEmpty()
+
+                    if (isVideo) {
+                        node.optJSONObject("video_versions")?.let { versions ->
+                            consumed.add("video_versions")
+                            pickLargest(versions, "url")?.let { videos.add(it, preview) }
+                        }
+                        for (field in listOf("video_url", "playback_url")) {
+                            val value = node.optString(field, "")
+                            if (value.isNotEmpty() && looksLikeMediaCdn(value)) {
+                                normalizeUrl(value)?.let { videos.add(it, preview) }
+                            }
+                        }
+                    } else {
+                        for (field in listOf("display_url", "thumbnail_src", "display_uri", "src", "url")) {
+                            val value = node.optString(field, "")
+                            if (value.isNotEmpty() && looksLikeMediaCdn(value) && !hasVideoExtension(value)) {
+                                normalizeUrl(value)?.let { images.add(it) }
+                            }
+                        }
+                        poster?.let { images.add(it) }
+                        display?.let { images.add(it) }
+                    }
+
+                    for (key in node.keys()) {
+                        if (key in consumed) continue
+                        node.opt(key)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
+                    }
+                }
+                is JSONArray -> {
+                    for (index in 0 until node.length()) {
+                        node.opt(index)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
+                    }
+                }
+            }
+        }
+        return Collected(images, videos)
+    }
+
+    private data class Collected(val images: MediaSet, val videos: MediaSet)
+
+    /** First caption text of the post (GraphQL edge form and the plain forms). */
+    private fun findCaption(root: Any): String {
+        val queue = ArrayDeque<Any>()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty() && visited < 20_000) {
+            val node = queue.removeFirst()
+            visited++
+            when (node) {
+                is JSONObject -> {
+                    node.optJSONObject("edge_media_to_caption")?.optJSONArray("edges")?.let { edges ->
+                        for (index in 0 until edges.length()) {
+                            val text = edges.optJSONObject(index)
+                                ?.optJSONObject("node")
+                                ?.optString("text", "")
+                            if (!text.isNullOrBlank()) return text
                         }
                     }
-                    node.optJSONObject("image_versions2")?.optJSONArray("candidates")?.let { candidates ->
-                        pickLargest(candidates, "url")?.let { add(found, it) }
-                    }
-                    node.optJSONArray("display_resources")?.let { resources ->
-                        pickLargest(resources, "src")?.let { add(found, it) }
+                    when (val caption = node.opt("caption")) {
+                        is String -> if (caption.isNotBlank()) return caption
+                        is JSONObject -> caption.optString("text", "")
+                            .takeIf { it.isNotBlank() }?.let { return it }
                     }
                     for (key in node.keys()) {
                         node.opt(key)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
@@ -310,68 +485,73 @@ object InstagramMediaParser {
                 }
             }
         }
-        return found.values.toList()
-    }
-
-    private fun add(target: MutableMap<String, String>, url: String) {
-        val key = mediaKey(url)
-        val existing = target[key]
-        if (existing == null) {
-            target[key] = url
-            return
-        }
-        // Prefer the copy that still carries its signed query string, then the longer one.
-        val existingHasQuery = existing.contains('?')
-        val candidateHasQuery = url.contains('?')
-        if ((!existingHasQuery && candidateHasQuery) ||
-            (existingHasQuery == candidateHasQuery && url.length > existing.length)
-        ) {
-            target[key] = url
-        }
+        return ""
     }
 
     // ------------------------------------------------------------------ HTML walk
 
     fun parseHtml(html: String, pageUrl: String? = null): Result {
         val shortcode = pageUrl?.let(::shortcodeFromUrl).orEmpty()
-        val merged = LinkedHashMap<String, String>()
+        val photos = MediaSet()
+        val videos = MediaSet()
         var expected = 0
+        var caption = ""
 
         for (blob in jsonBlobs(html)) {
             val partial = runCatching { parseJson(blob, Source.HTML_PAYLOAD) }.getOrNull() ?: continue
             if (partial.expectedCount > expected) expected = partial.expectedCount
-            for (url in partial.imageUrls) add(merged, url)
-        }
-
-        if (merged.size < 2) {
-            // Raw scan of the HTML (handles pages whose payload is inline JSON without a script tag).
-            for (match in anyCdnUrl.findAll(html)) {
-                val url = normalizeUrl(match.value) ?: continue
-                if (hasImageExtension(url)) add(merged, url)
+            if (caption.isBlank()) caption = partial.caption
+            partial.imageUrls.forEach { photos.add(it) }
+            partial.videoUrls.forEachIndexed { index, url ->
+                videos.add(url, partial.videoPosters.getOrNull(index).orEmpty())
             }
         }
 
-        if (merged.isEmpty()) {
+        if (photos.size + videos.size < 2) {
+            // Raw scan of the HTML (handles pages whose payload is inline JSON without a script tag).
+            for (match in anyCdnUrl.findAll(html)) {
+                val url = normalizeUrl(match.value) ?: continue
+                if (hasImageExtension(url)) photos.add(url)
+                else if (hasVideoExtension(url)) videos.add(url)
+            }
+        }
+
+        if (photos.isEmpty() && videos.isEmpty()) {
             for (tag in ogImage.findAll(html)) {
                 for (value in attributeValue.findAll(tag.value)) {
                     val raw = value.groupValues[1].ifEmpty { value.groupValues[2] }
                     val url = normalizeUrl(raw) ?: continue
-                    add(merged, url)
+                    photos.add(url)
                 }
             }
         }
 
-        val urls = merged.values
+        val urls = photos.entries()
+            .map { it.url }
             .filter { hasImageExtension(it) || looksLikeMediaCdn(it) }
             .distinctBy { mediaKey(it) }
             .take(MAX_URLS)
+        val videoEntries = videos.entries()
+            .filter { hasVideoExtension(it.url) || looksLikeMediaCdn(it.url) }
+            .distinctBy { mediaKey(it.url) }
+            .take(MAX_URLS)
+        val read = urls.size + videoEntries.size
         val note = when {
-            urls.isEmpty() && looksLikeLoginWall(html) -> "Instagram returned a login wall"
-            urls.isEmpty() -> "no media found in the page payload"
-            expected > 0 && urls.size < expected -> "page listed $expected slides but only ${urls.size} were readable"
+            read == 0 && looksLikeLoginWall(html) -> "Instagram returned a login wall"
+            read == 0 -> "no media found in the page payload"
+            expected > 0 && read < expected -> "page listed $expected slides but only $read were readable"
             else -> null
         }
-        return Result(urls, expected, Source.HTML_PAYLOAD, shortcode, note)
+        return Result(
+            imageUrls = urls,
+            videoUrls = videoEntries.map { it.url },
+            videoPosters = videoEntries.map { it.poster },
+            expectedCount = expected,
+            source = Source.HTML_PAYLOAD,
+            shortcode = shortcode,
+            caption = caption,
+            note = note
+        )
     }
 
     private fun jsonBlobs(html: String): List<String> {
@@ -392,5 +572,47 @@ object InstagramMediaParser {
         if (lower.contains("\"require_login\":true") || lower.contains("\"requirelogin\":true")) return true
         if (lower.contains("accounts/login")) return true
         return lower.contains("you must log in to continue") || lower.contains("please wait a few minutes")
+    }
+}
+
+/**
+ * An insertion-ordered set of media URLs keyed on host+path, so the same slide
+ * delivered by two CDN edges is only kept once.
+ */
+private class MediaSet {
+
+    data class Entry(val url: String, val poster: String = "")
+
+    private val entries = LinkedHashMap<String, Entry>()
+
+    val size: Int get() = entries.size
+
+    fun isEmpty(): Boolean = entries.isEmpty()
+
+    fun add(url: String, poster: String = "") {
+        val key = InstagramMediaParser.mediaKey(url)
+        val existing = entries[key]
+        if (existing == null) {
+            entries[key] = Entry(url, poster)
+            return
+        }
+        // Prefer the copy that still carries its signed query string, then the longer one.
+        val betterUrl = prefer(existing.url, url)
+        val betterPoster = existing.poster.ifBlank { poster }
+        entries[key] = Entry(betterUrl, betterPoster)
+    }
+
+    fun entries(): List<Entry> = entries.values.toList()
+
+    fun urls(): List<String> = entries.values.map { it.url }
+
+    fun posters(): List<String> = entries.values.map { it.poster }
+
+    private fun prefer(existing: String, candidate: String): String {
+        val existingHasQuery = existing.contains('?')
+        val candidateHasQuery = candidate.contains('?')
+        return if ((!existingHasQuery && candidateHasQuery) ||
+            (existingHasQuery == candidateHasQuery && candidate.length > existing.length)
+        ) candidate else existing
     }
 }

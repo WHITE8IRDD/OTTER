@@ -333,4 +333,20 @@
 
     <!-- Mascot System -->
     <string name="fetching_message">جارٍ العثور على الوسائط…</string>
+
+    <string name="carousel_photos">صور</string>
+    <string name="carousel_videos">فيديوهات</string>
+    <string name="carousel_partial">تمت قراءة %1$d فقط من %2$d شريحة. قد تحتاج الشرائح المتبقية إلى ملفات تعريف الارتباط أو قد تكون غير عامة.</string>
+    <string name="media_saved">تم حفظ %d ملفًا</string>
+    <string name="media_saved_partial">تم حفظ %1$d، وفشل %2$d.</string>
+    <string name="content_desc_video">فيديو %d</string>
+    <string name="content_desc_video_slide">شريحة فيديو</string>
+    <string name="content_desc_copy_hashtags">نسخ الوسوم</string>
+    <string name="history_details_title">تفاصيل التنزيل</string>
+    <string name="history_details_hint">انقر على أي تنزيل لعرض عنوانه ووصفه ووسومه</string>
+    <string name="history_no_description">لم يتم حفظ أي وصف مع هذا التنزيل.</string>
+    <string name="history_no_hashtags">لم يتم حفظ أي وسوم مع هذا التنزيل.</string>
+    <string name="btn_copy_all">نسخ الكل</string>
+    <string name="history_copied_all">تم نسخ العنوان والوصف والوسوم</string>
+    <string name="media_saved_none">لم يمكن حفظ أي شيء من هذه الشرائح.</string>
 </resources>

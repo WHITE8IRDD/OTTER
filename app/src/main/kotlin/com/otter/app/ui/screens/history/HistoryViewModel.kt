@@ -194,6 +194,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             putExtra(DownloadService.EXTRA_AUTO_CAPTION_LANGS, "")
             putExtra(DownloadService.EXTRA_EMBED_SUBTITLES, false)
             putExtra(DownloadService.EXTRA_SUBTITLE_FORMAT, "srt")
+            // Keep the metadata the original entry had.
+            putExtra(DownloadService.EXTRA_UPLOADER, item.uploader)
+            putExtra(DownloadService.EXTRA_DESCRIPTION, item.description)
+            putExtra(DownloadService.EXTRA_HASHTAGS, item.hashtags.joinToString(","))
+            putExtra(DownloadService.EXTRA_DURATION, item.duration)
+            putExtra(DownloadService.EXTRA_IS_AUDIO_ONLY, item.isAudioOnly)
+            putExtra(DownloadService.EXTRA_HAS_SUBTITLES, item.hasSubtitles)
         }
         getApplication<Application>().startForegroundService(intent)
         Log.i(tag, "[RETRY] Fresh download intent dispatched")

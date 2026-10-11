@@ -24,6 +24,10 @@ data class DownloadItem(
     val ext: String,
     val isAudioOnly: Boolean,
     val hasSubtitles: Boolean = false,
+    /** Source description (post caption / video description), saved with the entry. */
+    val description: String = "",
+    /** Hashtags of the source, shown and copyable from the history entry. */
+    val hashtags: List<String> = emptyList(),
     val downloadedAt: Long = System.currentTimeMillis(),
     val status: String = DownloadStatus.COMPLETED.name,
     val progressAtStop: Float = 0f,

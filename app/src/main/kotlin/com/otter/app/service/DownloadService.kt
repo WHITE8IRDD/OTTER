@@ -19,6 +19,7 @@ import com.otter.app.data.model.DownloadState
 import com.otter.app.data.model.DownloadStatus
 import com.otter.app.data.repository.DownloadRepository
 import com.otter.app.R
+import com.otter.app.util.FileHelper
 import com.otter.app.util.NotificationHelper
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -55,6 +56,15 @@ class DownloadService : Service() {
         const val EXTRA_AUTO_CAPTION_LANGS = "extra_auto_caption_langs"
         const val EXTRA_EMBED_SUBTITLES = "extra_embed_subtitles"
         const val EXTRA_SUBTITLE_FORMAT = "extra_subtitle_format"
+        // Metadata kept with the history entry so it can be shown and copied later.
+        const val EXTRA_UPLOADER = "extra_uploader"
+        const val EXTRA_DESCRIPTION = "extra_description"
+        const val EXTRA_HASHTAGS = "extra_hashtags"
+        const val EXTRA_DURATION = "extra_duration"
+        const val EXTRA_IS_AUDIO_ONLY = "extra_is_audio_only"
+        const val EXTRA_HAS_SUBTITLES = "extra_has_subtitles"
+        /** Set when the caller does not want this download recorded in History. */
+        const val EXTRA_SKIP_HISTORY = "extra_skip_history"
         private const val NOTIFICATION_THROTTLE_MS = 500L
     }
 
@@ -62,6 +72,17 @@ class DownloadService : Service() {
         super.onCreate()
         repository = DownloadRepository(applicationContext)
     }
+
+    // Metadata of the download currently being handled (single download at a time).
+    private var pendingUploader = ""
+    private var pendingThumbnailUrl: String? = null
+    private var pendingDescription = ""
+    private var pendingHashtags: List<String> = emptyList()
+    private var pendingDuration = 0L
+    private var pendingFormatId = ""
+    private var pendingIsAudioOnly = false
+    private var pendingHasSubtitles = false
+    private var pendingSkipHistory = false
 
 @SuppressLint("MissingPermission")
 override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -100,6 +121,22 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val autoCaptionLangs = intent.getStringExtra(EXTRA_AUTO_CAPTION_LANGS) ?: ""
         val embedSubtitles = intent.getBooleanExtra(EXTRA_EMBED_SUBTITLES, false)
         val subtitleFormat = intent.getStringExtra(EXTRA_SUBTITLE_FORMAT) ?: "srt"
+
+        // History metadata: description and hashtags travel with the download so the
+        // finished entry can show (and copy) them.
+        pendingUploader = intent.getStringExtra(EXTRA_UPLOADER).orEmpty()
+        pendingThumbnailUrl = thumbUrl
+        pendingDescription = intent.getStringExtra(EXTRA_DESCRIPTION).orEmpty()
+        pendingHashtags = intent.getStringExtra(EXTRA_HASHTAGS)
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        pendingDuration = intent.getLongExtra(EXTRA_DURATION, 0L)
+        pendingFormatId = formatId
+        pendingIsAudioOnly = intent.getBooleanExtra(EXTRA_IS_AUDIO_ONLY, false)
+        pendingHasSubtitles = intent.getBooleanExtra(EXTRA_HAS_SUBTITLES, false)
+        pendingSkipHistory = intent.getBooleanExtra(EXTRA_SKIP_HISTORY, false)
 
         if (!thumbUrl.isNullOrEmpty()) {
             serviceScope.launch(Dispatchers.IO) {
@@ -513,6 +550,19 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                 } catch (e: Throwable) {
                     Log.e(TAG, "[COMMON] complete notification threw", e)
                 }
+                // The finished file is recorded here (unless the caller opted out) so
+                // every path — in-app, retry, resume, quick download — has history.
+                if (!pendingSkipHistory) {
+                    try {
+                        val record = buildCompletedRecord(url, title, state.filePath)
+                        runBlocking(Dispatchers.IO) { repository.saveDownloadItem(record) }
+                        Log.i(TAG, "[COMMON] history record saved for $url")
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "[COMMON] failed to save history record", e)
+                    }
+                } else {
+                    Log.i(TAG, "[COMMON] history record skipped for $url")
+                }
             }
 
             is DownloadState.Error -> {
@@ -541,6 +591,30 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     }
 
     // ─── HELPERS ──────────────────────────────────────────────────────────────
+
+    /** Builds the History row for a finished download, metadata included. */
+    private fun buildCompletedRecord(url: String, title: String, filePath: String): DownloadItem {
+        val extension = filePath.substringAfterLast('/')
+            .substringAfterLast('.', "")
+            .lowercase()
+        val size = runCatching { FileHelper.getFileSizeBytes(filePath) }.getOrDefault(0L)
+        return DownloadItem(
+            url = url,
+            title = title,
+            uploader = pendingUploader,
+            thumbnailUrl = pendingThumbnailUrl,
+            filePath = filePath,
+            fileSize = size,
+            duration = pendingDuration,
+            formatId = pendingFormatId,
+            ext = extension,
+            isAudioOnly = pendingIsAudioOnly,
+            hasSubtitles = pendingHasSubtitles,
+            description = pendingDescription,
+            hashtags = pendingHashtags,
+            status = DownloadStatus.COMPLETED.name
+        )
+    }
 
     private fun showSoftResumeError(url: String?, message: String?) {
         try {

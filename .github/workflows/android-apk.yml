@@ -5,6 +5,7 @@ on:
     branches:
       - arena/23a7b6e2-otter
       - arena/b09a8450-otter
+      - arena/3dd8a9d3-otter
   workflow_dispatch:
 
 permissions:
@@ -122,15 +123,81 @@ jobs:
                           "--input", "-"], input=json.dumps({"body": body}), text=True, check=True)
           PY
 
+      - name: Resolve app version
+        id: version
+        run: |
+          VERSION=$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')
+          test -n "$VERSION" || { echo "could not read versionName"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building OTTER $VERSION"
+
+      - name: Summarise unit tests
+        id: tests
+        run: |
+          python3 - <<'PY' | tee test-summary.md
+          import glob, xml.etree.ElementTree as ET
+          total = failures = errors = skipped = 0
+          for report in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
+              root = ET.parse(report).getroot()
+              total += int(root.attrib.get("tests", 0))
+              failures += int(root.attrib.get("failures", 0))
+              errors += int(root.attrib.get("errors", 0))
+              skipped += int(root.attrib.get("skipped", 0))
+          print(f"JVM unit tests: {total} run, {failures + errors} failed, {skipped} skipped")
+          PY
+
       - name: Collect APK artifacts
         run: |
           mkdir -p build-artifacts
-          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk "build-artifacts/OTTER-26.1-arm64-v8a-debug.apk"
+          APK="build-artifacts/OTTER-${{ steps.version.outputs.version }}-arm64-v8a-debug.apk"
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk "$APK"
           ls -l build-artifacts
 
       - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v7
         with:
-          name: OTTER-26.1-arm64-v8a
-          path: build-artifacts/OTTER-26.1-arm64-v8a-debug.apk
+          name: OTTER-${{ steps.version.outputs.version }}-arm64-v8a
+          path: build-artifacts/OTTER-${{ steps.version.outputs.version }}-arm64-v8a-debug.apk
           if-no-files-found: error
+
+      - name: Publish arm64-v8a debug APK release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="otter-${VERSION}-arm64-v8a"
+          APK="build-artifacts/OTTER-${VERSION}-arm64-v8a-debug.apk"
+          SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
+          {
+            echo "Debug-signed test build of OTTER ${VERSION} (arm64-v8a only), built by \`${GITHUB_WORKFLOW}\` from \`${GITHUB_SHA}\`."
+            echo
+            cat test-summary.md
+            echo
+            echo "## This build"
+            echo
+            echo "- **Mixed carousels** - photo and video slides are listed separately in the picker and"
+            echo "  both are downloadable: photos through the image path, videos through the video path."
+            echo "  The slide counter and the partial-read warning cover both kinds of slide."
+            echo "- **History** - a finished download keeps its title, description and hashtags. Tap a"
+            echo "  history entry to see them, each with its own copy button. Quick downloads may have"
+            echo "  no description or hashtags saved with them."
+            echo
+            echo "## Install"
+            echo
+            echo "- arm64-v8a only. Debug-signed with the public Android debug key committed at"
+            echo "  \`.github/debug.keystore\`, so a newer test build installs over the previous one."
+            echo "- Uninstall an older OTTER build first if Android refuses to install over it."
+            echo
+            echo "## APK sha256"
+            echo
+            echo '```'
+            echo "${SHA256}"
+            echo '```'
+          } > release-notes.md
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" "$APK" \
+            --target "$GITHUB_SHA" \
+            --title "OTTER ${VERSION} - arm64-v8a debug" \
+            --notes-file release-notes.md
+          echo "Published $TAG"

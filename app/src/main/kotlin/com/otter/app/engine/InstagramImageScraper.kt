@@ -30,7 +30,7 @@ import java.util.Locale
 import kotlin.coroutines.resume
 
 /**
- * Reads the pictures of an Instagram post / carousel.
+ * Reads the media of an Instagram post / carousel — photos **and** video slides.
  *
  * Endpoints are tried in order of reliability and their results are *merged*, so a
  * partially readable payload no longer looks like a finished one-slide post:
@@ -44,6 +44,11 @@ import kotlin.coroutines.resume
  * Every URL is stored exactly as the CDN returned it, including the signed query
  * string: Instagram answers 403 without it, which is what left previews blank and
  * "Download Selected" saving nothing.
+ *
+ * A mixed carousel returns two ordered lists: the photo slides, for the image
+ * download path, and the video slides (with their poster frames) for the video path.
+ * The slide count the post declares covers both, so a post that lists 8 slides but
+ * only exposes 5 readable ones is reported as a partial read.
  */
 class InstagramImageScraper(private val context: Context) {
 
@@ -65,33 +70,58 @@ class InstagramImageScraper(private val context: Context) {
         private val JS_EXTRACTOR = """
 (function(){
     var SEEN={}, ORDER=[], MAX=24, MS=1400, C=0;
+    var VSEEN={}, VORDER=[];
     function key(u){ return u.split('?')[0]; }
     function norm(u){
         if(!u) return '';
         return u.replace(/&amp;/g,'&').replace(/\\u0026/g,'&').replace(/\\\//g,'/');
     }
+    function isCdn(u){
+        var k = key(u);
+        if(k.indexOf('scontent')<0 && k.indexOf('cdninstagram')<0 && k.indexOf('fbcdn')<0) return false;
+        if(k.indexOf('/rsrc.php')>=0 || k.indexOf('/v/t51.2885-19/')>=0) return false;
+        return true;
+    }
+    function isVideo(u){ return /(\.mp4|\.m4v|\.webm|\.mov)(\?|$)/i.test(key(u)); }
     function add(u){
         u = norm(u);
         if(!u || u.indexOf('http')!==0) return;
+        if(!isCdn(u)) return;
+        if(isVideo(u)){ addV(u); return; }
         var k = key(u);
-        if(k.indexOf('scontent')<0 && k.indexOf('cdninstagram')<0 && k.indexOf('fbcdn')<0) return;
-        if(k.indexOf('/rsrc.php')>=0 || k.indexOf('/v/t51.2885-19/')>=0) return;
         if(SEEN[k]) return;
         SEEN[k]=true; ORDER.push(u);
+    }
+    function addV(u){
+        u = norm(u);
+        if(!u || u.indexOf('http')!==0) return;
+        if(!isCdn(u)) return;
+        if(!isVideo(u)) return;
+        var k = key(u);
+        if(VSEEN[k]) return;
+        VSEEN[k]=true; VORDER.push(u);
     }
     function scanText(txt){
         if(!txt) return;
         var re=/https?:[^"'\\\s<>]*?(?:scontent|cdninstagram|fbcdn)[^"'\\\s<>]*/g, m;
         while((m=re.exec(txt))!==null){ add(m[0]); }
     }
+    function total(){ return ORDER.length + VORDER.length; }
     function collect(){
-        var before=ORDER.length;
+        var before=total();
         document.querySelectorAll('img').forEach(function(i){
             add(i.currentSrc || i.src);
             var ss=i.getAttribute('srcset')||'';
             if(ss){ ss.split(',').forEach(function(p){ add(p.trim().split(' ')[0]); }); }
         });
-        document.querySelectorAll('video').forEach(function(v){ if(v.poster) add(v.poster); });
+        document.querySelectorAll('video').forEach(function(v){
+            if(v.poster) add(v.poster);
+            if(v.src) addV(v.src);
+            if(v.currentSrc) addV(v.currentSrc);
+        });
+        document.querySelectorAll('source').forEach(function(s){
+            if(s.src) addV(s.src);
+        });
         document.querySelectorAll('*').forEach(function(el){
             var bg=window.getComputedStyle(el).backgroundImage;
             if(bg && bg.indexOf('url(')>=0){
@@ -102,7 +132,7 @@ class InstagramImageScraper(private val context: Context) {
         document.querySelectorAll('script[type="application/json"]').forEach(function(sc){
             scanText(sc.textContent);
         });
-        return ORDER.length-before;
+        return total()-before;
     }
     function nextBtn(){
         var a=document.querySelector('button[aria-label="Next"],button[aria-label*="Next" i],button[aria-label*="next" i]');
@@ -120,8 +150,8 @@ class InstagramImageScraper(private val context: Context) {
     function tick(){
         C++;
         var added=collect();
-        Android.log(C+'/'+MAX+': +'+added+' total='+ORDER.length);
-        if(C>=MAX || ORDER.length>=20){ done(); return; }
+        Android.log(C+'/'+MAX+': +'+added+' total='+total());
+        if(C>=MAX || total()>=20){ done(); return; }
         var n=nextBtn();
         if(n){ click(n); setTimeout(tick,MS); }
         else if(C===1){ window.scrollTo(0,document.body.scrollHeight); setTimeout(function(){ window.scrollTo(0,0); collect(); done(); },1500); }
@@ -129,7 +159,7 @@ class InstagramImageScraper(private val context: Context) {
     }
     function done(){
         collect();
-        Android.onResult(JSON.stringify(ORDER));
+        Android.onResult(JSON.stringify({images:ORDER, videos:VORDER}));
     }
     setTimeout(tick,2000);
 })();
@@ -137,19 +167,31 @@ class InstagramImageScraper(private val context: Context) {
     }
 
     data class ScrapeResult(
+        /** Photo slides, in payload order. */
         val imageUrls: List<String>,
+        /** Video slides of the same post, in payload order. */
+        val videoUrls: List<String> = emptyList(),
+        /** Poster frame per entry of [videoUrls] (same indexes, blank when unknown). */
+        val videoPosters: List<String> = emptyList(),
         /** Slides the payload declared (0 = unknown). */
         val expectedCount: Int,
         val shortcode: String,
         /** Which endpoints answered, for logging/diagnostics. */
         val sources: List<String>,
+        /** Post caption, when the payload carried one. */
+        val caption: String = "",
         val note: String? = null
     ) {
+        /** Photos + videos the scrape could read. */
+        val mediaCount: Int get() = imageUrls.size + videoUrls.size
+
         val isComplete: Boolean
-            get() = imageUrls.isNotEmpty() && (expectedCount == 0 || imageUrls.size >= expectedCount)
+            get() = mediaCount > 0 && (expectedCount == 0 || mediaCount >= expectedCount)
 
         val isPartial: Boolean
-            get() = imageUrls.isNotEmpty() && !isComplete
+            get() = mediaCount > 0 && !isComplete
+
+        fun posterFor(index: Int): String = videoPosters.getOrNull(index).orEmpty()
     }
 
     /** Compatibility helper: the ordered list of readable image URLs. */
@@ -168,26 +210,39 @@ class InstagramImageScraper(private val context: Context) {
         val csrf = extractCookieValue(cookies, "csrftoken")
 
         val merged = LinkedHashMap<String, String>()
+        val mergedVideos = LinkedHashMap<String, String>()
+        val mergedPosters = LinkedHashMap<String, String>()
         var expected = 0
+        var caption = ""
         var note: String? = null
         val sources = mutableListOf<String>()
+
+        fun total(): Int = merged.size + mergedVideos.size
 
         fun absorb(result: InstagramMediaParser.Result?, label: String) {
             if (result == null) return
             result.imageUrls.forEach { url ->
                 merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url)
             }
+            result.videoUrls.forEachIndexed { index, url ->
+                val key = InstagramMediaParser.mediaKey(url)
+                if (!mergedVideos.containsKey(key)) {
+                    mergedVideos[key] = url
+                    mergedPosters[key] = result.videoPosters.getOrNull(index).orEmpty()
+                }
+            }
             if (result.expectedCount > expected) expected = result.expectedCount
+            if (caption.isBlank()) caption = result.caption
             if (!result.note.isNullOrBlank()) note = result.note
-            if (result.imageUrls.isNotEmpty()) {
-                sources += "$label(${result.imageUrls.size}${if (result.expectedCount > 0) "/${result.expectedCount}" else ""})"
+            if (result.imageUrls.isNotEmpty() || result.videoUrls.isNotEmpty()) {
+                sources += "$label(${result.imageUrls.size}+${result.videoUrls.size}${if (result.expectedCount > 0) "/${result.expectedCount}" else ""})"
             } else {
                 sources += "$label(0)"
             }
         }
 
         fun complete(): Boolean =
-            merged.isNotEmpty() && (expected == 0 && merged.size >= 2 || expected > 0 && merged.size >= expected)
+            total() > 0 && (expected == 0 && total() >= 2 || expected > 0 && total() >= expected)
 
         fun budgetLeft(): Boolean = System.currentTimeMillis() - startedAt < OVERALL_HTTP_BUDGET_MS
 
@@ -197,7 +252,9 @@ class InstagramImageScraper(private val context: Context) {
             if (page != null) {
                 val parsed = InstagramMediaParser.parseHtml(page, canonical)
                 absorb(parsed, "page")
-                if (parsed.imageUrls.isEmpty() && InstagramMediaParser.looksLikeLoginWall(page)) {
+                if (parsed.imageUrls.isEmpty() && parsed.videoUrls.isEmpty() &&
+                    InstagramMediaParser.looksLikeLoginWall(page)
+                ) {
                     note = "Instagram showed a login wall"
                 }
             } else {
@@ -248,10 +305,12 @@ class InstagramImageScraper(private val context: Context) {
         // 6. WebView rendering — only when the static payloads could not be read fully.
         if (!complete() && context is Activity) {
             val rendered = scrapeWithWebView(canonical)
-            if (rendered.isNotEmpty()) {
-                rendered.forEach { url -> merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url) }
-                sources += "webview(${rendered.size})"
-                if (expected == 0) expected = rendered.size
+            val renderedCount = rendered.first.size + rendered.second.size
+            if (renderedCount > 0) {
+                rendered.first.forEach { url -> merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url) }
+                rendered.second.forEach { url -> mergedVideos.putIfAbsent(InstagramMediaParser.mediaKey(url), url) }
+                sources += "webview($renderedCount)"
+                if (expected == 0) expected = renderedCount
             } else {
                 sources += "webview(0)"
             }
@@ -260,19 +319,26 @@ class InstagramImageScraper(private val context: Context) {
         }
 
         val urls = merged.values.toList()
-        if (urls.isEmpty()) {
-            Log.w(TAG, "No Instagram images found for $canonical (${sources.joinToString()})")
+        val videos = mergedVideos.values.toList()
+        val posters = videos.map { mergedPosters[InstagramMediaParser.mediaKey(it)].orEmpty() }
+        val readCount = urls.size + videos.size
+        if (readCount == 0) {
+            Log.w(TAG, "No Instagram media found for $canonical (${sources.joinToString()})")
             if (note == null) note = "Instagram returned no readable media for this post"
         } else {
-            Log.i(TAG, "Instagram images: ${urls.size} of ${if (expected > 0) expected else "?"} " +
-                "via ${sources.joinToString()}")
-            urls.forEachIndexed { index, url -> Log.i(TAG, "  [$index] ${url.take(160)}") }
+            Log.i(TAG, "Instagram media: ${urls.size} photo(s) + ${videos.size} video(s) " +
+                "of ${if (expected > 0) expected else "?"} via ${sources.joinToString()}")
+            urls.forEachIndexed { index, url -> Log.i(TAG, "  [photo $index] ${url.take(160)}") }
+            videos.forEachIndexed { index, url -> Log.i(TAG, "  [video $index] ${url.take(160)}") }
         }
         ScrapeResult(
             imageUrls = urls,
-            expectedCount = if (expected > 0) expected else urls.size,
+            videoUrls = videos,
+            videoPosters = posters,
+            expectedCount = if (expected > 0) expected else readCount,
             shortcode = shortcode,
             sources = sources,
+            caption = caption,
             note = note
         )
     }
@@ -320,90 +386,124 @@ class InstagramImageScraper(private val context: Context) {
         }
     }
 
+    /** Returns the rendered photo URLs and video URLs. */
     @SuppressLint("SetJavaScriptEnabled")
-    private suspend fun scrapeWithWebView(url: String): List<String> = withContext(Dispatchers.Main) {
-        Log.i(TAG, "Starting WebView scrape for $url")
-        var webView: WebView? = null
-        val result = try {
-            withTimeoutOrNull(WEBVIEW_TIMEOUT_MS) {
-                suspendCancellableCoroutine<List<String>> { cont ->
-                    val activity = context as? Activity
-                    val container = activity?.let { act ->
-                        FrameLayout(context).apply {
-                            layoutParams = FrameLayout.LayoutParams(1080, 4000)
-                            setBackgroundColor(Color.TRANSPARENT)
-                            (act.window.decorView as? ViewGroup)?.addView(this)
+    private suspend fun scrapeWithWebView(url: String): Pair<List<String>, List<String>> =
+        withContext(Dispatchers.Main) {
+            Log.i(TAG, "Starting WebView scrape for $url")
+            var webView: WebView? = null
+            val result = try {
+                withTimeoutOrNull(WEBVIEW_TIMEOUT_MS) {
+                    suspendCancellableCoroutine<Pair<List<String>, List<String>>> { cont ->
+                        val activity = context as? Activity
+                        val container = activity?.let { act ->
+                            FrameLayout(context).apply {
+                                layoutParams = FrameLayout.LayoutParams(1080, 4000)
+                                setBackgroundColor(Color.TRANSPARENT)
+                                (act.window.decorView as? ViewGroup)?.addView(this)
+                            }
                         }
+
+                        webView = WebView(context).apply {
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+                            settings.userAgentString = MOBILE_UA
+                            alpha = 0.01f
+
+                            CookieManager.getInstance().setAcceptCookie(true)
+                            injectWebViewCookies()
+
+                            addJavascriptInterface(object {
+                                @JavascriptInterface
+                                fun onResult(json: String) {
+                                    Log.i(TAG, "WebView JS returned ${json.length} chars")
+                                    if (cont.isActive) cont.resume(parseExtractorPayload(json))
+                                }
+
+                                @JavascriptInterface
+                                fun log(message: String) {
+                                    Log.i(TAG, "JS: $message")
+                                }
+                            }, "Android")
+
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onConsoleMessage(msg: android.webkit.ConsoleMessage?): Boolean {
+                                    if (msg != null) Log.i(TAG, "JS[${msg.messageLevel()}]: ${msg.message}")
+                                    return true
+                                }
+                            }
+
+                            webViewClient = object : WebViewClient() {
+                                override fun onPageStarted(view: WebView?, pageUrl: String?, favicon: Bitmap?) {
+                                    Log.i(TAG, "WebView page started: $pageUrl")
+                                }
+
+                                override fun onPageFinished(view: WebView?, pageUrl: String?) {
+                                    Log.i(TAG, "WebView page finished, injecting extractor")
+                                    view?.evaluateJavascript(JS_EXTRACTOR, null)
+                                }
+
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    error: WebResourceError?
+                                ) {
+                                    Log.w(TAG, "WebView error: ${error?.description}")
+                                }
+                            }
+                        }
+
+                        container?.addView(webView)
+                        webView?.loadUrl(url)
                     }
+                } ?: (emptyList<String>() to emptyList<String>())
+            } finally {
+                webView?.let { wv ->
+                    wv.stopLoading()
+                    wv.removeJavascriptInterface("Android")
+                    (wv.parent as? ViewGroup)?.removeView(wv)
+                    wv.destroy()
+                }
+                Log.i(TAG, "WebView cleaned up")
+            }
+            result
+        }
 
-                    webView = WebView(context).apply {
-                        layoutParams = FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-                        settings.userAgentString = MOBILE_UA
-                        alpha = 0.01f
-
-                        CookieManager.getInstance().setAcceptCookie(true)
-                        injectWebViewCookies()
-
-                        addJavascriptInterface(object {
-                            @JavascriptInterface
-                            fun onResult(json: String) {
-                                Log.i(TAG, "WebView JS returned ${json.length} chars")
-                                if (cont.isActive) cont.resume(parseJsonArray(json))
-                            }
-
-                            @JavascriptInterface
-                            fun log(message: String) {
-                                Log.i(TAG, "JS: $message")
-                            }
-                        }, "Android")
-
-                        webChromeClient = object : WebChromeClient() {
-                            override fun onConsoleMessage(msg: android.webkit.ConsoleMessage?): Boolean {
-                                if (msg != null) Log.i(TAG, "JS[${msg.messageLevel()}]: ${msg.message()}")
-                                return true
-                            }
-                        }
-
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, pageUrl: String?, favicon: Bitmap?) {
-                                Log.i(TAG, "WebView page started: $pageUrl")
-                            }
-
-                            override fun onPageFinished(view: WebView?, pageUrl: String?) {
-                                Log.i(TAG, "WebView page finished, injecting extractor")
-                                view?.evaluateJavascript(JS_EXTRACTOR, null)
-                            }
-
-                            override fun onReceivedError(
-                                view: WebView?,
-                                request: WebResourceRequest?,
-                                error: WebResourceError?
-                            ) {
-                                Log.w(TAG, "WebView error: ${error?.description}")
-                            }
-                        }
-                    }
-
-                    container?.addView(webView)
-                    webView?.loadUrl(url)
+    /**
+     * Reads the extractor payload: `{"images":[…],"videos":[…]}` from the current
+     * script, and the bare `[…]` array older builds may still return.
+     */
+    private fun parseExtractorPayload(json: String): Pair<List<String>, List<String>> {
+        val trimmed = json.trim()
+        if (!trimmed.startsWith("{")) {
+            val images = runCatching { org.json.JSONArray(trimmed) }.getOrNull()?.let { array ->
+                (0 until array.length()).mapNotNull { index ->
+                    InstagramMediaParser.normalizeUrl(array.optString(index, ""))
                 }
             } ?: emptyList()
-        } finally {
-            webView?.let { wv ->
-                wv.stopLoading()
-                wv.removeJavascriptInterface("Android")
-                (wv.parent as? ViewGroup)?.removeView(wv)
-                wv.destroy()
-            }
-            Log.i(TAG, "WebView cleaned up")
+            return images to emptyList()
         }
-        result
+        val images = mutableListOf<String>()
+        val videos = mutableListOf<String>()
+        runCatching {
+            val root = org.json.JSONObject(trimmed)
+            root.optJSONArray("images")?.let { array ->
+                for (index in 0 until array.length()) {
+                    InstagramMediaParser.normalizeUrl(array.optString(index, ""))?.let { images.add(it) }
+                }
+            }
+            root.optJSONArray("videos")?.let { array ->
+                for (index in 0 until array.length()) {
+                    InstagramMediaParser.normalizeUrl(array.optString(index, ""))?.let { videos.add(it) }
+                }
+            }
+        }
+        return images to videos
     }
 
     private fun injectWebViewCookies() {
@@ -431,13 +531,6 @@ class InstagramImageScraper(private val context: Context) {
             Log.w(TAG, "Cookie injection failed: ${e.message}")
         }
     }
-
-    private fun parseJsonArray(json: String): List<String> = runCatching {
-        val array = org.json.JSONArray(json)
-        (0 until array.length()).mapNotNull { index ->
-            InstagramMediaParser.normalizeUrl(array.optString(index, ""))
-        }
-    }.getOrDefault(emptyList())
 
     private fun extractCookieValue(cookies: String, name: String): String {
         val pattern = Regex("""(?:^|;\s*)${Regex.escape(name)}=([^;]+)""")

@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -46,6 +48,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -93,8 +97,10 @@ fun FormatSheet(
     onToggleThumbnail: () -> Unit,
     onThumbnailOnly: () -> Unit,
     onFormatSelected: (VideoFormat) -> Unit,
-    selectedCarouselIndices: Set<Int> = emptySet(),
-    onToggleCarouselIndex: (Int) -> Unit = {},
+    selectedPhotoIndices: Set<Int> = emptySet(),
+    selectedVideoIndices: Set<Int> = emptySet(),
+    onTogglePhotoIndex: (Int) -> Unit = {},
+    onToggleVideoIndex: (Int) -> Unit = {},
     onSelectAllCarousel: () -> Unit = {},
     onDeselectAllCarousel: () -> Unit = {},
     onDownloadCarousel: () -> Unit = {},
@@ -138,8 +144,10 @@ fun FormatSheet(
         } else if (videoInfo.isCarousel) {
             CarouselGalleryContent(
                 videoInfo = videoInfo,
-                selectedIndices = selectedCarouselIndices,
-                onToggleIndex = onToggleCarouselIndex,
+                selectedPhotoIndices = selectedPhotoIndices,
+                selectedVideoIndices = selectedVideoIndices,
+                onTogglePhotoIndex = onTogglePhotoIndex,
+                onToggleVideoIndex = onToggleVideoIndex,
                 onSelectAll = onSelectAllCarousel,
                 onDeselectAll = onDeselectAllCarousel,
                 onDownload = onDownloadCarousel,
@@ -553,13 +561,21 @@ private fun ThumbnailOptionsSection(
 @Composable
 private fun CarouselGalleryContent(
     videoInfo: VideoInfo,
-    selectedIndices: Set<Int>,
-    onToggleIndex: (Int) -> Unit,
+    selectedPhotoIndices: Set<Int>,
+    selectedVideoIndices: Set<Int>,
+    onTogglePhotoIndex: (Int) -> Unit,
+    onToggleVideoIndex: (Int) -> Unit,
     onSelectAll: () -> Unit,
     onDeselectAll: () -> Unit,
     onDownload: () -> Unit,
     popScale: Float = 1f
 ) {
+    val photos = videoInfo.carouselImages
+    val videos = videoInfo.carouselVideos
+    val total = photos.size + videos.size
+    // The counter covers photos and videos together: this is one post.
+    val selectedCount = selectedPhotoIndices.size + selectedVideoIndices.size
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -567,7 +583,7 @@ private fun CarouselGalleryContent(
     ) {
         VideoInfoHeader(videoInfo = videoInfo)
 
-        if (videoInfo.carouselImages.isEmpty()) {
+        if (total == 0) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -607,7 +623,7 @@ private fun CarouselGalleryContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.carousel_selected, selectedIndices.size, videoInfo.carouselImages.size),
+                    text = stringResource(R.string.carousel_selected, selectedCount, total),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black
                 )
@@ -621,100 +637,252 @@ private fun CarouselGalleryContent(
                 }
             }
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            // Partial read: the post declares more slides than could be read.
+            if (videoInfo.isCarouselPartial) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                        .background(
+                            MaterialTheme.colorScheme.errorContainer,
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Error,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.carousel_partial,
+                            total,
+                            videoInfo.carouselExpectedCount
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = false)
-                    .heightIn(max = 1000.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(videoInfo.carouselImages, key = { it }) { imageUrl ->
-                    val index = videoInfo.carouselImages.indexOf(imageUrl)
-                    val isSelected = selectedIndices.contains(index)
-
-                    val cardBorder = if (isSelected) {
-                        BorderStroke(OtterDimens.InkyBorder, MaterialTheme.colorScheme.primary)
-                    } else {
-                        BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggleIndex(index) }
-                    ) {
-                        androidx.compose.material3.Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = androidx.compose.material3.CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ),
-                            border = cardBorder,
-                            elevation = androidx.compose.material3.CardDefaults.cardElevation(
-                                defaultElevation = if (isSelected) 4.dp else 0.dp
-                            )
-                        ) {
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                AsyncImage(
-                                    model = imageUrl,
-                                    contentDescription = stringResource(R.string.content_desc_image, index + 1),
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                )
-                                if (isSelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(6.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.CheckCircle,
-                                            contentDescription = "Selected",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .padding(6.dp)
-                                        .background(
-                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "${index + 1}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Black,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-                    }
+                if (photos.isNotEmpty()) {
+                    SlideSectionHeader(
+                        text = stringResource(R.string.carousel_photos),
+                        count = photos.size
+                    )
+                    SlideGrid(
+                        count = photos.size,
+                        selectedIndices = selectedPhotoIndices,
+                        isVideo = false,
+                        previewFor = { photos[it] },
+                        onToggle = onTogglePhotoIndex
+                    )
                 }
+                if (videos.isNotEmpty()) {
+                    SlideSectionHeader(
+                        text = stringResource(R.string.carousel_videos),
+                        count = videos.size
+                    )
+                    SlideGrid(
+                        count = videos.size,
+                        selectedIndices = selectedVideoIndices,
+                        isVideo = true,
+                        previewFor = { videoInfo.carouselVideoPosters.getOrNull(it).orEmpty() },
+                        onToggle = onToggleVideoIndex
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
             BrutalButton(
-                text = stringResource(R.string.btn_download_selected, selectedIndices.size),
+                text = stringResource(R.string.btn_download_selected, selectedCount),
                 onClick = onDownload,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),
-                enabled = selectedIndices.isNotEmpty()
+                enabled = selectedCount > 0
             )
+        }
+    }
+}
+
+@Composable
+private fun SlideSectionHeader(text: String, count: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = "($count)",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Two slides per row; videos show their poster frame and a play badge. */
+@Composable
+private fun SlideGrid(
+    count: Int,
+    selectedIndices: Set<Int>,
+    isVideo: Boolean,
+    previewFor: (Int) -> String,
+    onToggle: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (rowIndices in (0 until count).toList().chunked(2)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowIndices.forEach { index ->
+                    SlideCard(
+                        index = index,
+                        previewUrl = previewFor(index),
+                        isSelected = selectedIndices.contains(index),
+                        isVideo = isVideo,
+                        onToggle = onToggle,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowIndices.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlideCard(
+    index: Int,
+    previewUrl: String,
+    isSelected: Boolean,
+    isVideo: Boolean,
+    onToggle: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cardBorder = if (isSelected) {
+        BorderStroke(OtterDimens.InkyBorder, MaterialTheme.colorScheme.primary)
+    } else {
+        BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    }
+
+    Box(modifier = modifier.clickable { onToggle(index) }) {
+        androidx.compose.material3.Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = androidx.compose.material3.CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            border = cardBorder,
+            elevation = androidx.compose.material3.CardDefaults.cardElevation(
+                defaultElevation = if (isSelected) 4.dp else 0.dp
+            )
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (previewUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = previewUrl,
+                        contentDescription = stringResource(
+                            if (isVideo) R.string.content_desc_video else R.string.content_desc_image,
+                            index + 1
+                        ),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (isVideo) Icons.Default.VideoFile else Icons.Default.Image,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (isVideo) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                RoundedCornerShape(50)
+                            )
+                            .padding(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = stringResource(R.string.content_desc_video_slide),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Selected",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     }
 }

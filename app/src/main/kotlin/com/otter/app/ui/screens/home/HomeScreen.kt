@@ -151,7 +151,8 @@ fun HomeScreen(
     val autoDownload by viewModel.autoDownload.collectAsStateWithLifecycle()
     val fetchingMessage by viewModel.fetchingMessage.collectAsStateWithLifecycle()
     val retryStatus by viewModel.retryStatus.collectAsStateWithLifecycle()
-    val selectedCarouselIndices by viewModel.selectedCarouselIndices.collectAsStateWithLifecycle()
+    val selectedPhotoIndices by viewModel.selectedPhotoIndices.collectAsStateWithLifecycle()
+    val selectedVideoIndices by viewModel.selectedVideoIndices.collectAsStateWithLifecycle()
     val selectedSubtitleLangs by viewModel.selectedSubtitleLangs.collectAsStateWithLifecycle()
     val selectedAutoCaptionLangs by viewModel.selectedAutoCaptionLangs.collectAsStateWithLifecycle()
     val embedSubtitles by viewModel.embedSubtitles.collectAsStateWithLifecycle()
@@ -547,8 +548,10 @@ fun HomeScreen(
             onToggleThumbnail = viewModel::toggleAlsoSaveThumbnail,
             onThumbnailOnly = viewModel::downloadThumbnailOnly,
             onFormatSelected = viewModel::onFormatSelected,
-            selectedCarouselIndices = selectedCarouselIndices,
-            onToggleCarouselIndex = viewModel::toggleCarouselIndex,
+            selectedPhotoIndices = selectedPhotoIndices,
+            selectedVideoIndices = selectedVideoIndices,
+            onTogglePhotoIndex = viewModel::togglePhotoIndex,
+            onToggleVideoIndex = viewModel::toggleVideoIndex,
             onSelectAllCarousel = viewModel::selectAllCarousel,
             onDeselectAllCarousel = viewModel::deselectAllCarousel,
             onDownloadCarousel = viewModel::downloadCarouselSelected,
