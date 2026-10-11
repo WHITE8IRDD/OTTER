@@ -59,8 +59,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val userAgent: StateFlow<String> = prefs.userAgent
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
     val concurrentFragments: StateFlow<Int> = prefs.concurrentFragments
         .stateIn(viewModelScope, SharingStarted.Eagerly, 8)
 
