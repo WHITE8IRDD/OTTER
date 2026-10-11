@@ -240,7 +240,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun writableOutputDir(): String {
         val preferred = repository.downloadPath.first()
-        return StorageAccess.resolveWritableDirectory(getApplication(), preferred).directory
+        return StorageAccess.resolveWritableDirectory(getApplication<Application>(), preferred).directory
     }
 
     fun downloadCarouselSelected() {
@@ -253,7 +253,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val preferredDir = repository.downloadPath.first()
-            val target = StorageAccess.resolveWritableDirectory(getApplication(), preferredDir)
+            val target = StorageAccess.resolveWritableDirectory(getApplication<Application>(), preferredDir)
             _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
             val summary = repository.downloadImages(
                 imageUrls = selectedUrls,
