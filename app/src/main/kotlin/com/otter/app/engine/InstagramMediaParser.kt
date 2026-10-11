@@ -283,13 +283,16 @@ object InstagramMediaParser {
             val slides = readSlideArray(array)
             if (slides.size > 0) return slides.withDeclared(node)
         }
+        // The page payload marks a sidecar with `__typename: GraphSidecar` and carries
+        // no `media_type`, which is a private-API field. Requiring `media_type` 8 meant
+        // the payload that is actually available without a session was never recognised,
+        // and the post fell through to a blind scan of the whole page.
         val edges = node.optJSONObject("edge_sidecar_to_children")?.optJSONArray("edges")
             ?: node.optJSONArray("edges")
-        if (edges != null && node.optInt("media_type", -1) == 8) {
+        if (edges != null) {
             val slides = readEdgeArray(edges)
             if (slides.size > 0) return slides.withDeclared(node)
         }
-        // `items: [...]` from the web info payload can also hold the carousel.
         return null
     }
 
@@ -334,6 +337,11 @@ object InstagramMediaParser {
             2 -> return true
             1 -> return false
         }
+        // The page payload types every slide: GraphVideo / XDTGraphVideo carry the
+        // video, GraphImage / XDTGraphImage carry a picture.
+        val typename = node.optString("__typename", "")
+        if (typename.contains("Video", ignoreCase = true)) return true
+        if (typename.contains("Image", ignoreCase = true)) return false
         if (node.optBoolean("is_video", false)) return true
         return node.optJSONArray("video_versions")?.let { it.length() > 0 } == true
     }
