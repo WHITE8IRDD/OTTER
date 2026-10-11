@@ -239,6 +239,12 @@ jobs:
           TAG="otter-26.1-arm64-v8a"
           APK=$(ls build-artifacts/*.apk | head -1)
           KIND="${{ needs.build.outputs.apk_kind }}"
+          APK_SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          APKSIGNER=$(ls /usr/local/lib/android/sdk/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)
+          CERT=""
+          if [ -n "$APKSIGNER" ]; then
+            CERT=$("$APKSIGNER" verify --print-certs "$APK" 2>/dev/null | grep -i "SHA-256 digest" | head -1 | sed 's/^[[:space:]]*//' || true)
+          fi
           if [ -s build-artifacts/live-verdict.md ]; then
             cp build-artifacts/live-verdict.md live-verdict.md
           else
@@ -262,6 +268,14 @@ jobs:
             echo "- Downloads fall back to the app folder when \"All files access\" is"
             echo "  missing instead of silently failing."
             echo ""
+            echo "### Build fingerprint"
+            echo ""
+            echo "apk sha256: $APK_SHA"
+            if [ -n "$CERT" ]; then
+              echo ""
+              echo "signing certificate: $CERT"
+            fi
+            echo ""
             echo "### Release signing"
             if [ "$KIND" = "release" ]; then
               echo "This APK is signed with the repository's release keystore."
@@ -274,7 +288,7 @@ jobs:
               echo "Want a properly release-signed APK? Add the OTTER_KEYSTORE_BASE64,"
               echo "OTTER_KEYSTORE_PASSWORD, OTTER_KEY_ALIAS and OTTER_KEY_PASSWORD"
               echo "repository secrets and this workflow switches to the release variant"
-              echo "automatically.""
+              echo "automatically."
             fi
             echo ""
             if [ -s live-verdict.md ]; then
