@@ -107,8 +107,10 @@ a single History entry instead of one per slide.
 page and the legacy `?__a=1` JSON one after another, each with its own 15 s timeout —
 up to 75 s before the picker appeared. The post page, mobile page and web API are now
 requested together in a `coroutineScope`, and the embed page and legacy JSON only run
-when the post is still not fully read; per-request timeouts dropped to 10 s and the
-overall budget to 30 s.
+when the post is still not fully read. The per-request timeout stayed at 15 s and the
+overall HTTP budget at 40 s: cutting them to 10 s/30 s along with the parallel rounds
+made every request time out on anything slower than a fast connection, which is how
+*every* Instagram post ended up with an empty picker.
 
 The declared slide count also came from *every* JSON blob on the page, including the
 ones for suggested posts, so a complete post was routinely reported as a partial read.
@@ -136,3 +138,33 @@ An Instagram post that still exposes no slides used to open a picker with nothin
 it and no download button — indistinguishable from a download that silently does
 nothing. It now fails with `error_instagram_no_slides`, which says the post could not
 be read and can be retried, in all three locales.
+
+### Every Instagram post stopped working
+
+Three separate faults, all of which end the same way: the screen sits on "Parsing
+formats…" and then shows no picker and no error.
+
+1. **Timeouts.** See above — 10 s per request meant slow connections read nothing.
+2. **Silence.** `fetch_stage_parsing` is not a real stage; it is the third step of a
+   cosmetic timer (800 ms, 1200 ms, 1500 ms), so it says nothing about where a fetch
+   died. What actually freezes the screen is an exception escaping `parseVideoInfo`:
+   it kills the coroutine that owns the fetch, and the screen keeps whatever stage it
+   had last. Instagram work is now wrapped in `runCatching` plus a 60 s budget, so it
+   can only ever fall through to the next engine, never out of the function.
+3. **The WebView fallback never ran.** It was gated on `context is Activity`, but
+   `FormatParser` only ever holds the application context, so the one path that still
+   reaches a logged-out page was dead code. It now runs either way: a detached view is
+   sized by hand with `layout(0, 0, 1080, 4000)` because a 0×0 page never loads its
+   images, and the paging script falls back to the first matching *Next* button when
+   nothing reports as visible — which in a detached view is everything.
+
+The scrape result is also kept and reused by the two later fallback points instead of
+being fetched a second time, and `InstagramMediaParser` stops feeding every JSON blob
+on the page through `org.json`: a post page carries payloads for suggested posts too,
+which cost time and memory and only ever contributed other posts' media.
+
+Because CI cannot prove Instagram works — an unauthenticated probe gets a login wall or
+a page with no media markers — the empty-picker error now carries what actually
+happened: the scraper's per-endpoint counts (`page(0) page-mobile(0) webview(2) …`)
+plus the yt-dlp response type, entry count and format count. A failure report from a
+device says which endpoint to look at instead of just "nothing appeared".

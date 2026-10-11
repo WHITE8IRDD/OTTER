@@ -186,6 +186,13 @@ jobs:
             echo "  history entry to see them, each with its own copy button. Quick downloads may have"
             echo "  no description or hashtags saved with them."
             echo
+            echo "## Instagram"
+            echo
+            echo "- **Every post type** - single picture, multi-picture, video carousel and mixed,"
+            echo "  all without signing in: no cookies are needed and none are sent."
+            echo "- **Failure says why** - a post that cannot be read reports what each endpoint"
+            echo "  returned instead of leaving the screen sitting on an empty picker."
+            echo
             echo "## Install"
             echo
             echo "- arm64-v8a only. Debug-signed with the public Android debug key committed at"
