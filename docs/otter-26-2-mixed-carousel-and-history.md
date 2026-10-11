@@ -122,3 +122,17 @@ slides.
 * History's *Clear all* is a plain text button instead of a red brutalist one.
 * An Instagram playlist that could not be broken into slides but did come back with
   formats now opens the format sheet instead of an empty picker.
+
+### Working without a login
+
+The app must download public posts with no cookies at all, and nothing in the fetch
+sends a cookie unless one is stored, so that stays true. What did change is how much
+of a post is read before giving up: the embed page and the legacy `?__a=1` payload are
+now merged whenever the first parallel round left the post unfinished or found a single
+slide, because Instagram routinely spreads one post across several payloads and another
+round in parallel is cheap.
+
+An Instagram post that still exposes no slides used to open a picker with nothing in
+it and no download button — indistinguishable from a download that silently does
+nothing. It now fails with `error_instagram_no_slides`, which says the post could not
+be read and can be retried, in all three locales.
