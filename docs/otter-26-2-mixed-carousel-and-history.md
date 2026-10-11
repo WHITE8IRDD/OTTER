@@ -221,8 +221,68 @@ stream (`FormatSpec`). That halved the data and dropped the merge on muxed picks
 
 `FormatSpec` is a pure object so the format-selection rules can run on the JVM, and
 `FormatSpecTest` pins them. `InstagramPagePayloadTest` covers the real page shapes.
-CI runs the suite before the APK is published; 33 tests, all passing.
+CI runs the suite before the APK is published; 46 tests, all passing.
 
 What CI cannot do is run the app. Instagram serves the runner a login wall on every
 endpoint, so the probe job reports shapes and nothing more — behaviour on a real device
 still has to be confirmed by using it.
+
+## Follow-up: YouTube speed and long videos
+
+The report was that YouTube downloads take forever, and that long videos (an hour) do
+not complete smoothly. Facebook, Instagram and TikTok were reported as working well and
+were left alone.
+
+Two things were costing time, and they were the only two touched.
+
+### The video was extracted twice
+
+Showing the format list extracts the video. Starting the download then extracted it
+again from scratch. For YouTube that means starting Python, fetching the watch page and
+solving the throttling challenge a second time; on a Short, that is most of the
+waiting.
+
+The extraction is now kept when the formats are listed (`YoutubeInfoCache`, in the app
+cache, kept for 30 minutes and capped at 8 files) and handed to the download with
+`--load-info-json`. The saved format URLs already carry their solved signatures, so they
+are valid for hours — but only the **first attempt** uses them. If they have expired,
+the retry re-extracts exactly as before, so this can only make the first attempt faster,
+never wrong.
+
+### The finished file was written twice
+
+Every download staged its output in the app cache and copied it out at the end. For a
+one-hour video that is a second full write, and it needs room for the video in internal
+storage as well as on the card. On a phone with a full internal storage that is a
+download that never finishes rather than a slow one.
+
+YouTube now writes straight into the download folder (`-P <outputDir>`), so there is one
+write and no cache space used. Three things keep that from being reckless:
+
+- `cleanup(dir)` only deletes a directory inside `context.cacheDir`. A download folder
+  is never cleared, however the download ended.
+- The finished file is identified by the video id that yt-dlp puts in the file name
+  (`MediaFileLocator`), not by "newest media file in the folder" — in a shared download
+  folder the newest file is often somebody else's.
+- Live streams are excluded and still stage in the cache.
+
+Alongside those, YouTube gets 16 concurrent fragments instead of 8. It is the one
+platform whose downloads are long enough for the parallelism to be worth it, and the
+change is isolated to that platform.
+
+### Not touched
+
+The 3-attempt retry ladder with its 10 second socket timeout, `--extractor-retries 5`,
+the always-on thumbnail conversion, the quick-download fetch-then-download, and the
+`youtube:` extractor arguments. If YouTube is still slow after this, those are the
+places to look next.
+
+### Tests
+
+`YoutubeDownloadTest` reads the video id out of watch, Shorts, shared Shorts and
+youtu.be links; picks the right file out of a folder that already holds other videos;
+and pins the window in which a saved extraction may be reused. `MediaUrlNormalizer` and
+`MediaFileLocator` are pure, so this runs on the JVM.
+
+CI still cannot tell us whether downloading feels faster. It can only confirm the
+suite passes and the APK builds; the speed has to be judged on a device.

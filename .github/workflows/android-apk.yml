@@ -193,14 +193,30 @@ jobs:
             echo "- **Failure says why** - a post that cannot be read reports what each endpoint"
             echo "  returned instead of leaving the screen sitting on an empty picker."
             echo
+            echo "## YouTube and Shorts"
+            echo
+            echo "- **Read once, not twice** - the video was extracted a second time for the"
+            echo "  download after already being extracted to show the format list. On a Short,"
+            echo "  starting Python, fetching the page and solving the throttling challenge a"
+            echo "  second time is most of the wait. The first extraction is now handed to the"
+            echo "  download. If its format URLs have expired, the retry re-extracts as before."
+            echo "- **Long videos no longer need the space twice** - the finished file used to"
+            echo "  be staged in the app cache and then copied out, which for a one-hour video"
+            echo "  is a second full write and a common reason long downloads fail on a phone"
+            echo "  with full storage. YouTube writes straight into the download folder now."
+            echo "- **16 fragments at once** instead of 8, which is what a long download can"
+            echo "  actually keep busy."
+            echo "- Facebook, Instagram and TikTok are untouched by all three."
+            echo
             echo "## Downloads"
             echo
             echo "- **No duplicated soundtrack** - a format that already carries audio is no longer"
             echo "  paired with a second audio stream, which halved the data and dropped the merge."
             echo "- **The nightly yt-dlp update stands aside** - it no longer shares the connection"
             echo "  with a download you are already waiting on."
-            echo "- **33 unit tests** covering mixed carousels, the page payload, the format"
-            echo "  selection rules and the history metadata, run before this APK is published."
+            echo "- **46 unit tests** covering mixed carousels, the page payload, the format"
+            echo "  selection rules, the history metadata and the YouTube download path, run"
+            echo "  before this APK is published."
             echo
             echo "## Install"
             echo
