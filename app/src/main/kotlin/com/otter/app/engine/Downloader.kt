@@ -964,54 +964,16 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         outputDir: File,
         refererUrl: String?
     ): String {
-        val sourceUrl = URL(imageUrl)
-        if (sourceUrl.protocol != "http" && sourceUrl.protocol != "https") {
-            throw IOException("Unsupported image URL scheme")
-        }
-        val referer = refererUrl?.let { runCatching { URL(it) }.getOrNull() }
-            ?.takeIf { it.protocol == "http" || it.protocol == "https" }
-            ?.toExternalForm()
-
         for (attempt in 1..3) {
             val partialFile = File(outputDir, ".otter_${java.util.UUID.randomUUID()}.part")
-            var connection: HttpURLConnection? = null
             try {
-                val httpConnection = sourceUrl.openConnection() as? HttpURLConnection
-                    ?: throw IOException("Unsupported image connection")
-                connection = httpConnection
-                httpConnection.connectTimeout = 10_000
-                httpConnection.readTimeout = 25_000
-                httpConnection.instanceFollowRedirects = true
-                httpConnection.requestMethod = "GET"
-                httpConnection.setRequestProperty("User-Agent", DL_UA)
-                httpConnection.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/jpeg,image/gif,image/*;q=0.9,*/*;q=0.5")
-                httpConnection.setRequestProperty("Accept-Encoding", "identity")
-                httpConnection.setRequestProperty("Connection", "keep-alive")
-                referer?.let { httpConnection.setRequestProperty("Referer", it) }
-
-                val status = httpConnection.responseCode
-                if (status !in 200..299) throw ImageHttpException(status)
-                val contentType = httpConnection.contentType?.substringBefore(';')
-                    ?.trim()?.lowercase(java.util.Locale.ROOT).orEmpty()
-
-                httpConnection.inputStream.use { input ->
-                    FileOutputStream(partialFile).use { output ->
-                        val buffer = ByteArray(65_536)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            if (count == 0) continue
-                            output.write(buffer, 0, count)
-                        }
-                        output.flush()
-                    }
-                }
-
-                if (partialFile.length() == 0L || !isLikelyImageFile(partialFile, contentType, imageUrl)) {
-                    throw IOException("The server response was not an image")
-                }
-
-                val extension = imageExtension(contentType, imageUrl, partialFile)
+                val contentType = ImageDownloadCore.fetchImage(
+                    url = imageUrl,
+                    destination = partialFile,
+                    refererUrl = refererUrl,
+                    userAgent = DL_UA
+                )
+                val extension = ImageDownloadCore.extensionFor(contentType, imageUrl, partialFile)
                 val destination = saveImageWithUniqueName(partialFile, outputDir, baseName, index, extension)
                 com.otter.app.util.FileHelper.scanFile(context, destination.absolutePath)
                 return destination.absolutePath
@@ -1020,70 +982,12 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 throw e
             } catch (e: Exception) {
                 partialFile.delete()
-                if (attempt >= 3 || !isRetryableImageError(e)) throw e
+                Log.w(TAG, "Image ${index + 1} attempt $attempt failed: ${e.message}")
+                if (attempt >= 3 || !ImageDownloadCore.isRetryable(e)) throw e
                 delay(500L * attempt)
-            } finally {
-                connection?.disconnect()
             }
         }
         throw IOException("Image download failed")
-    }
-
-    private fun isRetryableImageError(error: Exception): Boolean {
-        if (error is ImageHttpException) return error.statusCode == 429 || error.statusCode >= 500
-        val message = error.message.orEmpty()
-        return listOf("timeout", "timed out", "connection reset", "connection refused", "network", "unexpected end", "eof")
-            .any { message.contains(it, ignoreCase = true) } ||
-            error is java.net.SocketTimeoutException ||
-            error is java.net.UnknownHostException ||
-            error is java.io.EOFException
-    }
-
-    private fun isLikelyImageFile(file: File, contentType: String, sourceUrl: String): Boolean {
-        if (sniffImageExtension(file) != null) return true
-        if (contentType.startsWith("image/")) return true
-        if (contentType.contains("html") || contentType.contains("json") || contentType.startsWith("text/")) return false
-        return MediaUrlNormalizer.isDirectImageUrl(sourceUrl) &&
-            (contentType.isBlank() || contentType == "application/octet-stream" || contentType == "binary/octet-stream")
-    }
-
-    private fun imageExtension(contentType: String, sourceUrl: String, file: File): String {
-        val mimeExtension = when (contentType.substringBefore(';').lowercase(java.util.Locale.ROOT)) {
-            "image/jpeg", "image/jpg", "image/pjpeg" -> "jpg"
-            "image/png", "image/x-png" -> "png"
-            "image/webp" -> "webp"
-            "image/gif" -> "gif"
-            "image/avif" -> "avif"
-            "image/bmp", "image/x-ms-bmp" -> "bmp"
-            "image/tiff" -> "tif"
-            "image/svg+xml" -> "svg"
-            else -> null
-        }
-        return mimeExtension
-            ?: sniffImageExtension(file)
-            ?: MediaUrlNormalizer.imageExtensionFromUrl(sourceUrl)?.let {
-                if (it == "jpeg") "jpg" else it
-            }
-            ?: "jpg"
-    }
-
-    private fun sniffImageExtension(file: File): String? {
-        return runCatching {
-            val header = ByteArray(16)
-            val count = file.inputStream().use { it.read(header) }
-            if (count >= 3 && header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() && header[2] == 0xFF.toByte()) return@runCatching "jpg"
-            if (count >= 8 && header.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))) return@runCatching "png"
-            if (count >= 6 && String(header, 0, 6, Charsets.US_ASCII).startsWith("GIF8")) return@runCatching "gif"
-            if (count >= 12 && String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "WEBP") return@runCatching "webp"
-            if (count >= 2 && String(header, 0, 2, Charsets.US_ASCII) == "BM") return@runCatching "bmp"
-            if (count >= 4 && (
-                    (header[0] == 'I'.code.toByte() && header[1] == 'I'.code.toByte() && header[2] == '*'.code.toByte() && header[3] == 0.toByte()) ||
-                    (header[0] == 'M'.code.toByte() && header[1] == 'M'.code.toByte() && header[2] == 0.toByte() && header[3] == '*'.code.toByte())
-                )) return@runCatching "tif"
-            val prefix = String(header, 0, count.coerceAtLeast(0), Charsets.UTF_8).trimStart()
-            if (prefix.startsWith("<svg", ignoreCase = true) || prefix.startsWith("<?xml", ignoreCase = true)) return@runCatching "svg"
-            null
-        }.getOrNull()
     }
 
     private fun saveImageWithUniqueName(
@@ -1112,8 +1016,6 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         }
         throw IOException("Could not create a unique image filename")
     }
-
-    private class ImageHttpException(val statusCode: Int) : IOException("HTTP $statusCode")
 
     fun pauseDownload(url: String): ActiveDownload? {
         Log.i(TAG, "pauseDownload: called for url=$url")

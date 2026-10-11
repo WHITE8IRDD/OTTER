@@ -1,7 +1,8 @@
 package com.otter.app.engine
 
-import org.json.JSONArray
-import org.json.JSONObject
+import com.otter.app.engine.MiniJson.Arr
+import com.otter.app.engine.MiniJson.Obj
+import com.otter.app.engine.MiniJson.Value
 import java.net.URL
 import java.util.Locale
 
@@ -92,11 +93,14 @@ object InstagramMediaParser {
         return id
     }
 
-    /** Identity of a media URL: the CDN path is unique per photo, the query is not. */
+    /**
+     * Identity of a media URL: the CDN path is unique per photo version, while the
+     * host differs between delivery edges and the query differs per signature. The
+     * same photo returned by two endpoints (page + embed) must collapse to one tile.
+     */
     fun mediaKey(url: String): String {
         val parsed = runCatching { URL(url) }.getOrNull() ?: return url.substringBefore('?')
-        val host = parsed.host.lowercase(Locale.ROOT)
-        return "$host${parsed.path}"
+        return parsed.path.lowercase(Locale.ROOT)
     }
 
     fun decodeEscapes(value: String): String {
@@ -171,103 +175,115 @@ object InstagramMediaParser {
 
     /** Parse any Instagram JSON payload (page payload, api/v1, graphql, embed). */
     fun parseJson(json: String, source: Source = Source.JSON_API): Result {
-        val root = runCatching { JSONObject(json) }.getOrNull()
-            ?: runCatching { JSONArray(json) }.getOrNull()
+        val root = MiniJson.parseOrNull(json)
             ?: return Result(emptyList(), 0, source, note = "payload was not JSON")
         return parseJsonNode(root, source)
     }
 
-    fun parseJsonNode(root: Any, source: Source = Source.JSON_API): Result {
+    internal fun parseJsonNode(root: Value, source: Source = Source.JSON_API): Result {
         val carousel = findCarousel(root)
-        if (carousel != null && carousel.size >= 2) {
-            return Result(carousel, carousel.size, source)
-        }
         val collected = collectMediaUrls(root)
-        val order = if (carousel != null && carousel.isNotEmpty()) {
-            (carousel + collected).distinctBy { mediaKey(it) }
+        val declared = carousel?.declaredCount ?: 0
+        // Carousel order first, then any other pictures the payload exposes.
+        val order = if (carousel != null && carousel.urls.isNotEmpty()) {
+            (carousel.urls + collected.urls).distinctBy { mediaKey(it) }
         } else {
-            collected
+            collected.urls
         }
-        val ordered = order.take(MAX_URLS)
-        return Result(ordered, 0, source)
+        val expected = when {
+            declared > 0 -> declared
+            collected.sawMediaMarker && order.isNotEmpty() -> 1
+            else -> 0
+        }
+        return Result(order.take(MAX_URLS), expected, source)
     }
+
+    private data class Carousel(val urls: List<String>, val declaredCount: Int)
+
+    private data class Collected(val urls: List<String>, val sawMediaMarker: Boolean)
 
     /**
      * Locate the first object that explicitly describes a multi-slide post and
-     * return its slides in payload order.
+     * return its slides in payload order plus how many slides it declares.
      */
-    private fun findCarousel(root: Any): List<String>? {
-        val queue = ArrayDeque<Any>()
+    private fun findCarousel(root: Value): Carousel? {
+        val queue = ArrayDeque<Value>()
         queue.add(root)
         var visited = 0
         while (queue.isNotEmpty() && visited < 20_000) {
             val node = queue.removeFirst()
             visited++
             when (node) {
-                is JSONObject -> {
-                    slides(node)?.let { if (it.size >= 2) return it }
-                    for (key in node.keys()) {
-                        node.opt(key)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
+                is Obj -> {
+                    slides(node)?.let { carousel ->
+                        if (carousel.declaredCount >= 2 || carousel.urls.size >= 2) return carousel
+                    }
+                    for (child in node.fields.values) {
+                        if (child is Obj || child is Arr) queue.add(child)
                     }
                 }
-                is JSONArray -> {
-                    for (index in 0 until node.length()) {
-                        node.opt(index)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
+                is Arr -> {
+                    for (child in node.items) {
+                        if (child is Obj || child is Arr) queue.add(child)
                     }
                 }
+                else -> Unit
             }
         }
         return null
     }
 
-    private fun slides(node: JSONObject): List<String>? {
-        node.optJSONArray("carousel_media")?.let { array ->
+    private fun slides(node: Obj): Carousel? {
+        node.arr("carousel_media")?.let { array ->
+            if (array.size == 0) return null
             val urls = mutableListOf<String>()
-            for (index in 0 until minOf(array.length(), MAX_SLIDES)) {
-                val child = array.optJSONObject(index) ?: continue
+            for (index in 0 until minOf(array.size, MAX_SLIDES)) {
+                val child = array.obj(index) ?: continue
                 bestImage(child)?.let { if (!urls.contains(it)) urls.add(it) }
             }
-            if (urls.isNotEmpty()) return urls
+            return Carousel(urls, minOf(array.size, MAX_SLIDES))
         }
-        val edges = node.optJSONObject("edge_sidecar_to_children")?.optJSONArray("edges")
-            ?: node.optJSONArray("edges")
-        if (edges != null && node.optInt("media_type", -1) == 8) {
+        val edges = node.obj("edge_sidecar_to_children")?.arr("edges")
+            ?: if (node.int("media_type", -1) == 8) node.arr("edges") else null
+        if (edges != null) {
             val urls = mutableListOf<String>()
-            for (index in 0 until minOf(edges.length(), MAX_SLIDES)) {
-                val child = edges.optJSONObject(index)?.optJSONObject("node") ?: continue
+            for (index in 0 until minOf(edges.size, MAX_SLIDES)) {
+                val child = edges.obj(index)?.obj("node") ?: continue
                 bestImage(child)?.let { if (!urls.contains(it)) urls.add(it) }
             }
-            if (urls.isNotEmpty()) return urls
+            return Carousel(urls, minOf(edges.size, MAX_SLIDES))
         }
-        // `items: [...]` from the web info payload can also hold the carousel.
         return null
     }
 
     /** Best picture URL of a single media node (thumbnails are used for video slides). */
-    private fun bestImage(node: JSONObject): String? {
-        node.optJSONObject("image_versions2")?.optJSONArray("candidates")?.let { candidates ->
+    private fun bestImage(node: Obj): String? {
+        node.obj("image_versions2")?.arr("candidates")?.let { candidates ->
             pickLargest(candidates, "url")?.let { return it }
         }
-        node.optJSONArray("display_resources")?.let { resources ->
+        node.arr("display_resources")?.let { resources ->
             pickLargest(resources, "src")?.let { return it }
         }
-        val display = node.optString("display_url", "")
-        if (display.isNotEmpty()) normalizeUrl(display)?.let { return it }
-        val thumbnail = node.optString("thumbnail_src", "")
-        if (thumbnail.isNotEmpty()) normalizeUrl(thumbnail)?.let { return it }
-        node.optString("display_uri", "").takeIf { it.isNotEmpty() }?.let { uri ->
-            normalizeUrl(uri)?.let { return it }
+        node.string("display_url")?.let { display ->
+            if (display.isNotEmpty()) normalizeUrl(display)?.let { return it }
+        }
+        node.string("thumbnail_src")?.let { thumbnail ->
+            if (thumbnail.isNotEmpty()) normalizeUrl(thumbnail)?.let { return it }
+        }
+        node.string("display_uri")?.let { uri ->
+            if (uri.isNotEmpty()) normalizeUrl(uri)?.let { return it }
         }
         return null
     }
 
-    private fun pickLargest(array: JSONArray, field: String): String? {
+    private fun pickLargest(array: Arr, field: String): String? {
         var bestUrl: String? = null
         var bestWidth = -1
-        for (index in 0 until array.length()) {
-            val candidate = array.optJSONObject(index) ?: continue
-            val url = normalizeUrl(candidate.optString(field, "")) ?: continue
-            val width = candidate.optInt("width", 0)
+        for (index in 0 until array.size) {
+            val candidate = array.obj(index) ?: continue
+            val raw = candidate.string(field) ?: continue
+            val url = normalizeUrl(raw) ?: continue
+            val width = candidate.int("width", 0)
             if (width > bestWidth) {
                 bestWidth = width
                 bestUrl = url
@@ -277,40 +293,45 @@ object InstagramMediaParser {
     }
 
     /** Every picture URL in payload order, deduplicated by CDN path. */
-    private fun collectMediaUrls(root: Any): List<String> {
+    private fun collectMediaUrls(root: Value): Collected {
         val found = LinkedHashMap<String, String>()
-        val queue = ArrayDeque<Any>()
+        var sawMediaMarker = false
+        val queue = ArrayDeque<Value>()
         queue.add(root)
         var visited = 0
         while (queue.isNotEmpty() && visited < 40_000 && found.size < MAX_URLS) {
             val node = queue.removeFirst()
             visited++
             when (node) {
-                is JSONObject -> {
-                    for (field in listOf("display_url", "thumbnail_src", "display_uri", "src", "url")) {
-                        val value = node.optString(field, "")
-                        if (value.isNotEmpty() && looksLikeMediaCdn(value)) {
+                is Obj -> {
+                    if (node.has("media_type") || node.has("image_versions2")) sawMediaMarker = true
+                    // Node level picture fields only. Bare "url"/"src" fields belong to
+                    // size candidates, which are resolved to their largest entry below.
+                    for (field in listOf("display_url", "thumbnail_src", "display_uri")) {
+                        val value = node.string(field)
+                        if (!value.isNullOrEmpty() && looksLikeMediaCdn(value)) {
                             normalizeUrl(value)?.let { add(found, it) }
                         }
                     }
-                    node.optJSONObject("image_versions2")?.optJSONArray("candidates")?.let { candidates ->
+                    node.obj("image_versions2")?.arr("candidates")?.let { candidates ->
                         pickLargest(candidates, "url")?.let { add(found, it) }
                     }
-                    node.optJSONArray("display_resources")?.let { resources ->
+                    node.arr("display_resources")?.let { resources ->
                         pickLargest(resources, "src")?.let { add(found, it) }
                     }
-                    for (key in node.keys()) {
-                        node.opt(key)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
+                    for (child in node.fields.values) {
+                        if (child is Obj || child is Arr) queue.add(child)
                     }
                 }
-                is JSONArray -> {
-                    for (index in 0 until node.length()) {
-                        node.opt(index)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
+                is Arr -> {
+                    for (child in node.items) {
+                        if (child is Obj || child is Arr) queue.add(child)
                     }
                 }
+                else -> Unit
             }
         }
-        return found.values.toList()
+        return Collected(found.values.toList(), sawMediaMarker)
     }
 
     private fun add(target: MutableMap<String, String>, url: String) {

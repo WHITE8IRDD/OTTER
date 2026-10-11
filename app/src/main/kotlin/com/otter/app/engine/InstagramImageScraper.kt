@@ -17,15 +17,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import com.otter.app.data.cookies.CookieManager as AppCookieManager
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 import kotlin.coroutines.resume
 
@@ -53,13 +48,9 @@ class InstagramImageScraper(private val context: Context) {
         private const val WEBVIEW_TIMEOUT_MS = 30_000L
         private const val OVERALL_HTTP_BUDGET_MS = 50_000L
 
-        const val DESKTOP_UA =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        const val MOBILE_UA =
-            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-        const val IG_APP_ID = "936619743392459"
+        const val DESKTOP_UA = InstagramPostFetcher.DESKTOP_UA
+        const val MOBILE_UA = InstagramPostFetcher.MOBILE_UA
+        const val IG_APP_ID = InstagramPostFetcher.IG_APP_ID
 
         /** WebView renderer: walks the gallery, keeping the full signed URLs. */
         private val JS_EXTRACTOR = """
@@ -156,113 +147,41 @@ class InstagramImageScraper(private val context: Context) {
     suspend fun scrape(url: String): List<String> = scrapeDetailed(url).imageUrls
 
     suspend fun scrapeDetailed(postUrl: String): ScrapeResult = withContext(Dispatchers.IO) {
-        val startedAt = System.currentTimeMillis()
-        val shortcode = InstagramMediaParser.shortcodeFromUrl(postUrl)
-        val canonical = if (shortcode.isNotEmpty()) {
-            "https://www.instagram.com/p/$shortcode/"
-        } else {
-            postUrl
-        }
-        val mediaId = InstagramMediaParser.mediaIdFromShortcode(shortcode)
         val cookies = loadCookiesForDomain("instagram.com")
-        val csrf = extractCookieValue(cookies, "csrftoken")
+        val fetched = InstagramPostFetcher().fetch(postUrl, cookies)
 
         val merged = LinkedHashMap<String, String>()
-        var expected = 0
-        var note: String? = null
-        val sources = mutableListOf<String>()
+        fetched.imageUrls.forEach { url -> merged[InstagramMediaParser.mediaKey(url)] = url }
+        val sources = fetched.sources.toMutableList()
+        var expected = fetched.expectedCount
 
-        fun absorb(result: InstagramMediaParser.Result?, label: String) {
-            if (result == null) return
-            result.imageUrls.forEach { url ->
-                merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url)
-            }
-            if (result.expectedCount > expected) expected = result.expectedCount
-            if (!result.note.isNullOrBlank()) note = result.note
-            if (result.imageUrls.isNotEmpty()) {
-                sources += "$label(${result.imageUrls.size}${if (result.expectedCount > 0) "/${result.expectedCount}" else ""})"
+        // WebView rendering stays as the last resort for pages whose payload the
+        // static endpoints did not expose (and only when an Activity is available).
+        val needsWebView = merged.isEmpty() ||
+            (expected > 0 && merged.size < expected) ||
+            (expected == 0 && merged.size < 2)
+        if (needsWebView && context is Activity) {
+            val canonical = if (fetched.shortcode.isNotEmpty()) {
+                "https://www.instagram.com/p/${fetched.shortcode}/"
             } else {
-                sources += "$label(0)"
+                postUrl
             }
-        }
-
-        fun complete(): Boolean =
-            merged.isNotEmpty() && (expected == 0 && merged.size >= 2 || expected > 0 && merged.size >= expected)
-
-        fun budgetLeft(): Boolean = System.currentTimeMillis() - startedAt < OVERALL_HTTP_BUDGET_MS
-
-        // 1. Post page: all recent payload variants are embedded in the HTML.
-        if (!complete()) {
-            val page = fetchText(canonical, cookies, DESKTOP_UA)
-            if (page != null) {
-                val parsed = InstagramMediaParser.parseHtml(page, canonical)
-                absorb(parsed, "page")
-                if (parsed.imageUrls.isEmpty() && InstagramMediaParser.looksLikeLoginWall(page)) {
-                    note = "Instagram showed a login wall"
-                }
-            } else {
-                sources += "page(http-error)"
-            }
-        }
-
-        // 2. Mobile page: some payloads are only served to mobile user agents.
-        if (!complete() && budgetLeft()) {
-            val page = fetchText(canonical, cookies, MOBILE_UA)
-            if (page != null) absorb(InstagramMediaParser.parseHtml(page, canonical), "page-mobile")
-        }
-
-        // 3. Web API with the public app id.
-        if (!complete() && mediaId > 0 && budgetLeft()) {
-            val headers = linkedMapOf(
-                "X-IG-App-ID" to IG_APP_ID,
-                "Accept" to "*/*",
-                "Referer" to "https://www.instagram.com/",
-                "X-Requested-With" to "XMLHttpRequest"
-            )
-            if (csrf.isNotEmpty()) headers["X-CSRFToken"] = csrf
-            val body = fetchText(
-                "https://www.instagram.com/api/v1/media/$mediaId/info/",
-                cookies,
-                MOBILE_UA,
-                headers
-            )
-            if (body != null) absorb(InstagramMediaParser.parseJson(body), "web-api")
-        }
-
-        // 4. Embed page (lighter, often served without a session).
-        if (!complete() && shortcode.isNotEmpty() && budgetLeft()) {
-            val embed = fetchText(
-                "https://www.instagram.com/p/$shortcode/embed/captioned/",
-                cookies,
-                DESKTOP_UA
-            )
-            if (embed != null) absorb(InstagramMediaParser.parseHtml(embed, canonical), "embed")
-        }
-
-        // 5. Legacy `?__a=1` JSON.
-        if (!complete() && budgetLeft()) {
-            val body = fetchText("$canonical?__a=1&__d=dis", cookies, MOBILE_UA)
-            if (body != null) absorb(InstagramMediaParser.parseJson(body), "a1")
-        }
-
-        // 6. WebView rendering — only when the static payloads could not be read fully.
-        if (!complete() && context is Activity) {
             val rendered = scrapeWithWebView(canonical)
             if (rendered.isNotEmpty()) {
                 rendered.forEach { url -> merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url) }
                 sources += "webview(${rendered.size})"
-                if (expected == 0) expected = rendered.size
+                if (expected < rendered.size) expected = rendered.size
             } else {
                 sources += "webview(0)"
             }
-        } else if (!complete()) {
-            sources += "webview(skipped-no-activity)"
+        } else if (needsWebView) {
+            sources += "webview(no-activity)"
         }
 
         val urls = merged.values.toList()
         if (urls.isEmpty()) {
-            Log.w(TAG, "No Instagram images found for $canonical (${sources.joinToString()})")
-            if (note == null) note = "Instagram returned no readable media for this post"
+            Log.w(TAG, "No Instagram images for ${fetched.shortcode.ifEmpty { postUrl }} " +
+                "(${sources.joinToString()} ${fetched.httpStatuses.joinToString()})")
         } else {
             Log.i(TAG, "Instagram images: ${urls.size} of ${if (expected > 0) expected else "?"} " +
                 "via ${sources.joinToString()}")
@@ -271,53 +190,10 @@ class InstagramImageScraper(private val context: Context) {
         ScrapeResult(
             imageUrls = urls,
             expectedCount = if (expected > 0) expected else urls.size,
-            shortcode = shortcode,
+            shortcode = fetched.shortcode,
             sources = sources,
-            note = note
+            note = fetched.note
         )
-    }
-
-    private fun fetchText(
-        url: String,
-        cookies: String,
-        userAgent: String,
-        extraHeaders: Map<String, String> = emptyMap()
-    ): String? {
-        val connection = try {
-            URL(url).openConnection() as HttpURLConnection
-        } catch (e: Exception) {
-            Log.w(TAG, "Bad URL $url: ${e.message}")
-            return null
-        }
-        return try {
-            connection.apply {
-                setRequestProperty("User-Agent", userAgent)
-                setRequestProperty(
-                    "Accept",
-                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                )
-                setRequestProperty("Accept-Language", "en-US,en;q=0.9")
-                if (cookies.isNotEmpty()) setRequestProperty("Cookie", cookies)
-                extraHeaders.forEach { (key, value) -> setRequestProperty(key, value) }
-                instanceFollowRedirects = true
-                connectTimeout = HTTP_TIMEOUT_MS
-                readTimeout = HTTP_TIMEOUT_MS
-            }
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                Log.i(TAG, "GET $url -> $code")
-                null
-            } else {
-                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "GET $url failed: ${e.message}")
-            null
-        } finally {
-            connection.disconnect()
-        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")

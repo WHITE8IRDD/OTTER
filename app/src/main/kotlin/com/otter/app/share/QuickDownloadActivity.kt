@@ -78,7 +78,9 @@ class QuickDownloadActivity : ComponentActivity() {
                 try {
                     ensureEngineReady()
                     val outputDir = withContext(Dispatchers.IO) {
-                        DownloadRepository(applicationContext).downloadPath.first()
+                        val preferred = DownloadRepository(applicationContext).downloadPath.first()
+                        com.otter.app.util.StorageAccess
+                            .resolveWritableDirectory(applicationContext, preferred).directory
                     }
                     val prefs = com.otter.app.data.datastore.UserPreferences(applicationContext)
                     val dlSubtitles = withContext(Dispatchers.IO) { prefs.getDownloadSubtitlesOnce() }

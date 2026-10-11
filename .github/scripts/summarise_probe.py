@@ -40,6 +40,8 @@ def main() -> str:
         lines.append("```")
 
     for path in sorted(pathlib.Path(".").glob("probe_*.txt")):
+        if path.name in ("probe_status.txt", "probe_console.txt"):
+            continue
         text = path.read_text(errors="replace")
         lines.append(f"\n## {path.name}  size={len(text)}")
         lines.append("markers: " + ", ".join(f"{m}={text.count(m)}" for m in MARKERS))

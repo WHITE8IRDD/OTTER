@@ -19,6 +19,7 @@ import com.otter.app.service.DownloadService
 import com.otter.app.service.DownloadStateHolder
 import com.otter.app.R
 import com.otter.app.util.FileHelper
+import com.otter.app.util.StorageAccess
 import com.otter.app.util.isValidUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -233,6 +234,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCarouselIndices.value = emptySet()
     }
 
+    /**
+     * Download folder that can actually be written on this device. Falls back to
+     * the app's own external folder when the chosen path needs "All files access".
+     */
+    private suspend fun writableOutputDir(): String {
+        val preferred = repository.downloadPath.first()
+        return StorageAccess.resolveWritableDirectory(getApplication(), preferred).directory
+    }
+
     fun downloadCarouselSelected() {
         val info = _currentVideoInfo.value ?: return
         val indices = _selectedCarouselIndices.value
@@ -242,17 +252,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _showFormatSheet.value = false
 
         viewModelScope.launch {
-            val outputDir = repository.downloadPath.first()
+            val preferredDir = repository.downloadPath.first()
+            val target = StorageAccess.resolveWritableDirectory(getApplication(), preferredDir)
             _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
             val summary = repository.downloadImages(
                 imageUrls = selectedUrls,
                 baseName = info.title,
-                outputDir = outputDir,
+                outputDir = target.directory,
                 refererUrl = info.originalUrl,
                 onProgress = { state -> _downloadState.value = state }
             )
             if (summary.savedCount > 0) {
-                val toastMsg = if (summary.failedCount > 0) {
+                val baseMessage = if (summary.failedCount > 0) {
                     getApplication<Application>().getString(
                         R.string.images_saved_partial,
                         summary.savedCount,
@@ -263,7 +274,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     getApplication<Application>().getString(R.string.images_saved, summary.savedCount)
                 }
-                Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
+                val toastMsg = if (target.usedFallback) {
+                    "$baseMessage " + getApplication<Application>().getString(R.string.storage_fallback_hint)
+                } else {
+                    baseMessage
+                }
+                Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -394,7 +410,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             ?: info.formats.firstOrNull { !it.isAudioOnly }
         if (bestFormat != null) {
             viewModelScope.launch {
-                val outputDir = repository.downloadPath.first()
+                val outputDir = writableOutputDir()
                 val audioTrack = _selectedAudioTrack.value
                 val safeFormatId = if (bestFormat.isAudioOnly) {
                     audioTrack?.formatId ?: "bestaudio[ext=m4a]/bestaudio"
@@ -415,7 +431,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val info = _currentVideoInfo.value ?: return
 
         viewModelScope.launch {
-            val outputDir = repository.downloadPath.first()
+            val outputDir = writableOutputDir()
             _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
             repository.downloadThumbnailOnly(url, outputDir) { state ->
                 _downloadState.value = state
@@ -434,7 +450,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val info = _currentVideoInfo.value ?: return
 
         viewModelScope.launch {
-            val outputDir = repository.downloadPath.first()
+            val outputDir = writableOutputDir()
             val audioTrack = _selectedAudioTrack.value
             val safeFormatId = if (format.isAudioOnly) {
                 audioTrack?.formatId ?: "bestaudio[ext=m4a]/bestaudio"

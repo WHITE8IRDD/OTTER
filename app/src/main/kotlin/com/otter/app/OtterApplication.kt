@@ -2,8 +2,11 @@ package com.otter.app
 
 import android.app.Application
 import android.util.Log
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.otter.app.engine.FormatParser
 import com.otter.app.engine.YtDlpUpdater
+import com.otter.app.util.MediaImageHeaders
 import com.otter.app.util.NotificationHelper
 import com.yausername.aria2c.Aria2c
 import com.yausername.ffmpeg.FFmpeg
@@ -16,7 +19,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class OtterApplication : Application() {
+class OtterApplication : Application(), ImageLoaderFactory {
+
+    /**
+     * Coil loader used for every preview thumbnail. Instagram's CDN refuses
+     * requests without a browser user agent and an instagram.com referer.
+     */
+    override fun newImageLoader(): ImageLoader = MediaImageHeaders.buildImageLoader(this)
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

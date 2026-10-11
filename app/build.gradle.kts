@@ -5,16 +5,43 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Release signing is optional and never kept in the repository: provide
+// keystore.properties (git-ignored) or the OTTER_KEYSTORE_* environment
+// variables. Without them the release build stays unsigned and CI publishes a
+// debug APK for device testing instead.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = java.util.Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+fun signingValue(key: String, envName: String): String? =
+    keystoreProperties.getProperty(key)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(envName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = signingValue("storeFile", "OTTER_KEYSTORE_FILE")
+val releaseStorePassword = signingValue("storePassword", "OTTER_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "OTTER_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "OTTER_KEY_PASSWORD")
+val hasReleaseSigning = releaseStoreFile != null &&
+    releaseStorePassword != null &&
+    releaseKeyAlias != null &&
+    releaseKeyPassword != null &&
+    file(releaseStoreFile).exists()
+
 android {
     namespace = "com.otter.app"
     compileSdk = 35
 
     signingConfigs {
-        create("release") {
-            storeFile = file("../../release.keystore")
-            storePassword = "otter123"
-            keyAlias = "otter"
-            keyPassword = "otter123"
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -32,7 +59,8 @@ android {
             isEnable = true
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = true
+            // OTTER 26.1 ships ABI-specific APKs; phone testing uses arm64-v8a.
+            isUniversalApk = false
         }
     }
 
@@ -40,7 +68,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs["release"]
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -125,4 +153,13 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+}
+
+// Network-backed Instagram verification: ./gradlew :app:testDebugUnitTest -PotterLive=true
+tasks.withType(org.gradle.api.tasks.testing.Test::class.java).configureEach {
+    systemProperty("otter.live", (project.findProperty("otterLive") as String?) ?: "false")
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = true
+    }
 }

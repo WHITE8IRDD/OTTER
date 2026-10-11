@@ -333,4 +333,6 @@
 
     <!-- Mascot System -->
     <string name="fetching_message">Recherche de vos médias…</string>
+    <string name="carousel_partial_warning">%1$d photo(s) sur %2$d chargée(s) — Instagram n’a pas renvoyé le reste</string>
+    <string name="storage_fallback_hint">Enregistré dans le dossier de l’appli — autorisez « Accès à tous les fichiers » pour enregistrer dans Download/Otter.</string>
 </resources>

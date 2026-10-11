@@ -621,6 +621,27 @@ private fun CarouselGalleryContent(
                 }
             }
 
+            if (videoInfo.carouselExpectedCount > videoInfo.carouselImages.size) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.carousel_partial_warning,
+                            videoInfo.carouselImages.size,
+                            videoInfo.carouselExpectedCount
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),

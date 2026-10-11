@@ -187,19 +187,21 @@ class FormatParser(private val context: Context? = null) {
 
         if (isInstaCarousel && context != null) {
             val scraper = InstagramImageScraper(context)
-            val scraped = scraper.scrape(url)
-            if (scraped.isNotEmpty()) {
-                Log.i(TAG, "Scraper found ${scraped.size} images for Instagram carousel")
+            val scraped = scraper.scrapeDetailed(url)
+            if (scraped.imageUrls.isNotEmpty()) {
+                Log.i(TAG, "Scraper found ${scraped.imageUrls.size} of ${scraped.expectedCount} " +
+                    "images for Instagram carousel via ${scraped.sources.joinToString()}")
                 val info = createImageGalleryInfo(
                     sourceUrl = url,
                     title = "Instagram Post",
                     extractor = "Instagram",
-                    images = scraped
+                    images = scraped.imageUrls,
+                    expectedCount = scraped.expectedCount
                 )
                 videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
                 return@withContext Result.success(info)
             }
-            Log.i(TAG, "Scraper returned empty, falling back to yt-dlp")
+            Log.i(TAG, "Scraper returned empty (${scraped.note ?: "no media"}), falling back to yt-dlp")
         }
 
         // Pre-flight: ensure yt-dlp binary is responsive before first attempt
@@ -296,10 +298,11 @@ class FormatParser(private val context: Context? = null) {
                 if (carouselImages.isEmpty() && responseType == "playlist" && isInstaPost && context != null) {
                     try {
                         val scraper = InstagramImageScraper(context)
-                        val scraped = scraper.scrape(url)
-                        if (scraped.isNotEmpty()) {
-                            carouselImages = scraped
-                            Log.i(TAG, "WebView scraper found ${scraped.size} images for Instagram carousel")
+                        val scraped = scraper.scrapeDetailed(url)
+                        if (scraped.imageUrls.isNotEmpty()) {
+                            carouselImages = scraped.imageUrls
+                            Log.i(TAG, "Post scraper found ${scraped.imageUrls.size} of " +
+                                "${scraped.expectedCount} images for Instagram carousel")
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Instagram WebView scraper fallback failed", e)
@@ -343,14 +346,16 @@ class FormatParser(private val context: Context? = null) {
                 if (isInstaNoVideo && context != null) {
                     try {
                         val scraper = InstagramImageScraper(context)
-                        val scraped = scraper.scrape(url)
-                        if (scraped.isNotEmpty()) {
-                            Log.i(TAG, "Scraper found ${scraped.size} images for Instagram carousel (engine fallback)")
+                        val scraped = scraper.scrapeDetailed(url)
+                        if (scraped.imageUrls.isNotEmpty()) {
+                            Log.i(TAG, "Scraper found ${scraped.imageUrls.size} of ${scraped.expectedCount} " +
+                                "images for Instagram carousel (engine fallback)")
                             val info = createImageGalleryInfo(
                                 sourceUrl = url,
                                 title = "Instagram Post",
                                 extractor = "Instagram",
-                                images = scraped
+                                images = scraped.imageUrls,
+                                expectedCount = scraped.expectedCount
                             )
                             videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
                             return@withContext Result.success(info)
@@ -407,7 +412,8 @@ class FormatParser(private val context: Context? = null) {
         sourceUrl: String,
         title: String,
         extractor: String,
-        images: List<String>
+        images: List<String>,
+        expectedCount: Int = 0
     ): VideoInfo {
         val imageUrls = images.filter { it.isNotBlank() }.distinct().take(40)
         return VideoInfo(
@@ -422,6 +428,7 @@ class FormatParser(private val context: Context? = null) {
             extractor = extractor,
             isPlaylist = false,
             carouselImages = imageUrls,
+            carouselExpectedCount = maxOf(expectedCount, imageUrls.size),
             isCarousel = imageUrls.isNotEmpty()
         )
     }

@@ -333,4 +333,6 @@
 
     <!-- Mascot System -->
     <string name="fetching_message">جارٍ العثور على الوسائط…</string>
+    <string name="carousel_partial_warning">تم تحميل %1$d من %2$d صورة — لم يُرجع إنستغرام البقية</string>
+    <string name="storage_fallback_hint">تم الحفظ في مجلد التطبيق — امنح «الوصول إلى جميع الملفات» للحفظ في Download/Otter.</string>
 </resources>

@@ -21,6 +21,8 @@ data class VideoInfo(
     val tags: List<String> = emptyList(),
     val hashtags: List<String> = emptyList(),
     val carouselImages: List<String> = emptyList(),
+    /** Slides Instagram declared for this post (0 when unknown). */
+    val carouselExpectedCount: Int = 0,
     val isCarousel: Boolean = false,
     val subtitleTracks: List<SubtitleTrack> = emptyList(),
     val audioTracks: List<AudioTrack> = emptyList()

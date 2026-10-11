@@ -333,4 +333,6 @@
 
     <!-- Mascot System -->
     <string name="fetching_message">Finding your media…</string>
+    <string name="carousel_partial_warning">%1$d of %2$d photos loaded — Instagram did not return the rest</string>
+    <string name="storage_fallback_hint">Saved to the app folder — allow “All files access” to save into Download/Otter.</string>
 </resources>

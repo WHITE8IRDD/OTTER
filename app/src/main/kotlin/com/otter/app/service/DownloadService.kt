@@ -89,10 +89,12 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val formatId = intent.getStringExtra(EXTRA_FORMAT_ID) ?: "best"
         var outputDir = intent.getStringExtra(EXTRA_OUTPUT_DIR) ?: ""
         if (outputDir.isBlank()) {
-            val savedPath = runBlocking(Dispatchers.IO) { repository.downloadPath.first() }
-            outputDir = if (savedPath.isNotBlank()) savedPath
-                else "${getExternalFilesDir(null)?.parentFile?.parentFile?.absolutePath}/Download/Otter/"
+            outputDir = runBlocking(Dispatchers.IO) { repository.downloadPath.first() }
         }
+        // The chosen folder may not be writable without "All files access"; never
+        // start a download that is guaranteed to fail.
+        outputDir = com.otter.app.util.StorageAccess
+            .resolveWritableDirectory(applicationContext, outputDir).directory
         val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.default_video_title)
         val thumbUrl = intent.getStringExtra(EXTRA_THUMBNAIL_URL)
         val saveThumbnail = intent.getBooleanExtra(EXTRA_SAVE_THUMBNAIL, false)
