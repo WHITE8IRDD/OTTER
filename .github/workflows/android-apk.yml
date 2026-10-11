@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   # Diagnostic + live verification of the Instagram carousel pipeline.
@@ -56,13 +56,23 @@ jobs:
           probe iapi            "https://i.instagram.com/api/v1/media/${MEDIA_ID}/info/" -H 'X-IG-App-ID: 936619743392459'
           echo "probe finished"
 
-      - name: Upload probe dumps
+      - name: Publish probe output as a commit comment
         if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: instagram-probe
-          path: probe_*.txt
-          if-no-files-found: warn
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, pathlib
+          parts = []
+          for f in sorted(pathlib.Path('.').glob('probe_*.txt')):
+              parts.append(f"### {f.name} ({f.stat().st_size} bytes)\n" + f.read_text(errors='replace')[:2500])
+          body = "Instagram probe from CI\n\n" + "\n\n".join(parts) if parts else "Instagram probe produced no dumps"
+          body = body[:60000]
+          payload = json.dumps({"body": body})
+          subprocess.run(["gh", "api", "-X", "POST",
+                          f"repos/{os.environ['GITHUB_REPOSITORY']}/commits/{os.environ['GITHUB_SHA']}/comments",
+                          "--input", "-"], input=payload, text=True, check=True)
+          PY
 
   build:
     runs-on: ubuntu-latest
@@ -130,6 +140,22 @@ jobs:
           details = "\n".join(dict.fromkeys(selected))[:3000]
           encoded = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Gradle failure::{encoded}")
+          Path("ci-failure.txt").write_text(details)
+          print(details)
+          PY
+
+      - name: Publish failure details as a commit comment
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          path = pathlib.Path("ci-failure.txt")
+          body = "CI failure\n\n```\n" + (path.read_text(errors="replace") if path.exists() else "no details collected")[:60000] + "\n```"
+          subprocess.run(["gh", "api", "-X", "POST",
+                          f"repos/{os.environ['GITHUB_REPOSITORY']}/commits/{os.environ['GITHUB_SHA']}/comments",
+                          "--input", "-"], input=json.dumps({"body": body}), text=True, check=True)
           PY
 
       - name: Collect APK artifacts
