@@ -324,7 +324,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 DownloadStateHolder.state.collect { state ->
                     if (state is DownloadState.Success || state is DownloadState.Error) {
                         terminal.complete(state)
-                        cancel()
                     }
                 }
             }

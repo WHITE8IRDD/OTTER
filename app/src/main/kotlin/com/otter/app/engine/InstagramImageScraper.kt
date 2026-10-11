@@ -433,7 +433,7 @@ class InstagramImageScraper(private val context: Context) {
 
                             webChromeClient = object : WebChromeClient() {
                                 override fun onConsoleMessage(msg: android.webkit.ConsoleMessage?): Boolean {
-                                    if (msg != null) Log.i(TAG, "JS[${msg.messageLevel()}]: ${msg.message}")
+                                    if (msg != null) Log.i(TAG, "JS[${msg.messageLevel()}]: ${msg.message()}")
                                     return true
                                 }
                             }

@@ -413,7 +413,7 @@ object InstagramMediaParser {
                     val preview = poster ?: display.orEmpty()
 
                     if (isVideo) {
-                        node.optJSONObject("video_versions")?.let { versions ->
+                        node.optJSONArray("video_versions")?.let { versions ->
                             consumed.add("video_versions")
                             pickLargest(versions, "url")?.let { videos.add(it, preview) }
                         }
