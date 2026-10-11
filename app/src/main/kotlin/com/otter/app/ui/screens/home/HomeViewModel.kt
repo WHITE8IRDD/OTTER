@@ -244,16 +244,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val outputDir = repository.downloadPath.first()
             _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
-            repository.downloadImages(selectedUrls, info.title, outputDir) { state ->
-                _downloadState.value = state
-                if (state is DownloadState.Success) {
-                    val toastMsg = if (selectedUrls.size == 1) {
-                        getApplication<Application>().getString(R.string.image_saved)
-                    } else {
-                        getApplication<Application>().getString(R.string.images_saved, selectedUrls.size)
-                    }
-                    Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
+            val summary = repository.downloadImages(
+                imageUrls = selectedUrls,
+                baseName = info.title,
+                outputDir = outputDir,
+                refererUrl = info.originalUrl,
+                onProgress = { state -> _downloadState.value = state }
+            )
+            if (summary.savedCount > 0) {
+                val toastMsg = if (summary.failedCount > 0) {
+                    getApplication<Application>().getString(
+                        R.string.images_saved_partial,
+                        summary.savedCount,
+                        summary.failedCount
+                    )
+                } else if (summary.savedCount == 1) {
+                    getApplication<Application>().getString(R.string.image_saved)
+                } else {
+                    getApplication<Application>().getString(R.string.images_saved, summary.savedCount)
                 }
+                Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
             }
         }
     }

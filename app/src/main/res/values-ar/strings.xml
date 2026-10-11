@@ -23,18 +23,19 @@
     <!-- HomeScreen -->
     <string name="link_detected">تم اكتشاف رابط</string>
     <string name="btn_use">استخدام</string>
-    <string name="paste_video_link">ألصق رابط فيديو</string>
-    <string name="url_placeholder">https://youtube.com/watch?v=…</string>
+    <string name="paste_video_link">ألصق رابط وسائط</string>
+    <string name="url_placeholder">رابط Shorts أو منشور أو صفحة وسائط</string>
     <string name="btn_fetching">جارٍ الجلب…</string>
     <string name="btn_fetch_download">جلب وتنزيل</string>
     <string name="quick_download_label">تنزيل سريع</string>
     <string name="quick_download_subtitle">تخطي اختيار الجودة</string>
     <string name="info_loaded">تم تحميل المعلومات</string>
     <string name="btn_download_another">تنزيل آخر</string>
-    <string name="empty_state_videos">لا توجد فيديوهات بعد!\nأضف بعض الروابط!</string>
+    <string name="empty_state_videos">لا توجد تنزيلات بعد!\nأضف رابط وسائط!</string>
     <string name="btn_cancel">إلغاء</string>
     <string name="error_state_title">عذراً! حدث خطأ ما</string>
     <string name="btn_try_again">حاول مرة أخرى</string>
+    <string name="error_title_friendly">تعذر جلب هذا الرابط</string>
     <string name="btn_cookie_settings">إعدادات الكوكيز</string>
     <string name="platforms_footer">YouTube • Facebook • Instagram • Twitter/X • TikTok</string>
 
@@ -47,7 +48,7 @@
     <!-- HomeScreen - About -->
     <string name="about_app_name">OTTER</string>
     <string name="about_description">برنامج تنزيل وسائط مفتوح المصدر لنظام Android. مدعوم بمحرك •AV®.</string>
-    <string name="about_description2">Otter يتيح لك تنزيل الفيديو والصوت والصور والترجمة من 5 منصات شائعة.</string>
+    <string name="about_description2">نزّل الفيديو والصوت والصور والترجمات من المنصات الشهيرة والعديد من المواقع المدعومة الأخرى.</string>
     <string name="about_description3">مبني بـ Jetpack Compose. خفيف وسريع ومفتوح المصدر بالكامل.</string>
     <string name="social_instagram">Instagram</string>
     <string name="social_instagram_handle">@acee.visuals</string>
@@ -63,13 +64,14 @@
     <string name="content_desc_language">تغيير اللغة</string>
 
     <!-- HomeViewModel -->
-    <string name="fetching_video_info">جارٍ جلب معلومات الفيديو…</string>
+    <string name="fetching_video_info">جارٍ جلب معلومات الوسائط…</string>
     <string name="images_saved">%d صورة محفوظة</string>
+    <string name="images_saved_partial">تم حفظ %1$d صورة وتعذر تنزيل %2$d.</string>
     <string name="image_saved">تم حفظ صورة واحدة</string>
     <string name="enter_valid_url">الرجاء إدخال رابط صالح</string>
     <string name="fetching_post">جارٍ جلب المنشور…</string>
-    <string name="failed_fetch_video">فشل في جلب معلومات الفيديو</string>
-    <string name="no_suitable_format">لم يتم العثور على صيغة مناسبة</string>
+    <string name="failed_fetch_video">تعذر العثور على وسائط قابلة للتنزيل لهذا الرابط</string>
+    <string name="no_suitable_format">لم يتم العثور على صيغة قابلة للتنزيل</string>
     <string name="video_thumbnail_saved">تم حفظ الفيديو والصورة المصغرة</string>
     <!-- Friendly error messages -->
     <string name="error_network_timeout">انتهت مهلة الاتصال. تحقق من اتصالك بالإنترنت وحاول مرة أخرى.</string>
@@ -93,7 +95,7 @@
     <string name="error_twitter_rate_limit">X/Twitter يحد من المعدل. انتظر دقيقة وحاول مرة أخرى.</string>
     <string name="error_tiktok_extractor">مشكلة في مستخرج TikTok. قد يحتاج المحرك إلى تحديث — حاول مرة أخرى بعد لحظة.</string>
     <string name="error_facebook_login">يتطلب Facebook تسجيل الدخول. أضف ملفات تعريف الارتباط في الإعدادات.</string>
-    <string name="error_generic_with_hint">تعذرت معالجة هذا الفيديو. تحقق من الرابط أو اتصالك، أو حاول مرة أخرى بعد لحظة.</string>
+    <string name="error_generic_with_hint">تعذرت معالجة رابط الوسائط. تحقق من الرابط أو إمكانية الوصول أو الاتصال ثم حاول مجددًا.</string>
     <string name="fetching_attempt">جاري الجلب… (المحاولة %1$d من %2$d)</string>
     <string name="downloading_attempt">جاري التنزيل… (المحاولة %1$d من %2$d)</string>
     <string name="retrying_in_seconds">إعادة المحاولة خلال %1$d ثانية…</string>
@@ -130,7 +132,7 @@
     <string name="setting_notification_settings">إعدادات الإشعارات</string>
     <string name="settings_site_cookies">كوكيز المواقع</string>
     <string name="setting_manage_cookies">إدارة الكوكيز</string>
-    <string name="setting_manage_cookies_sub">مطلوب لـ Instagram و YouTube الخاص والمحتوى المقيد بالعمر</string>
+    <string name="setting_manage_cookies_sub">للمواقع التي تتطلب تسجيل الدخول، بما فيها Instagram ومحتوى YouTube المقيد</string>
     <string name="settings_download_engine">محرك التنزيل</string>
     <string name="setting_engine_version">إصدار محرك •AV®</string>
     <string name="btn_checking_updates">جارٍ التحديث…</string>
@@ -140,7 +142,7 @@
     <string name="setting_save_to">حفظ في</string>
     <string name="btn_reset_default">إعادة للافتراضي</string>
     <string name="settings_supported_platforms">المنصات المدعومة</string>
-    <string name="supported_platforms_intro">يدعم Otter رسميًا هذه المنصات الخمس الشهيرة:</string>
+    <string name="supported_platforms_intro">فيما يلي أشهر المنصات. يدعم yt-dlp مواقع أخرى كثيرة، وقد يختلف التوفر حسب الموقع.</string>
     <string name="supported_platforms_youtube_desc">الفيديوهات، Shorts، والبث المباشر</string>
     <string name="supported_platforms_facebook_desc">المنشورات، fb.watch، watch.facebook.com</string>
     <string name="supported_platforms_instagram_desc">Reels، معارض الصور، المنشورات</string>
@@ -154,7 +156,7 @@
     <string name="setting_app_name">Otter</string>
     <string name="setting_version_info">الإصدار %s • مدعوم بمحرك •AV® • مبني بـ Jetpack Compose</string>
     <string name="setting_engine_info">المحرك</string>
-    <string name="setting_engine_info_sub">مدعوم بمحرك •AV® — استخراج وسائط فائق السرعة لـ 5 منصات شائعة</string>
+    <string name="setting_engine_info_sub">مدعوم بمحرك •AV® ومستخرجات yt-dlp لمواقع كثيرة وروابط الوسائط المباشرة</string>
     <string name="settings_app_language">لغة التطبيق</string>
 
     <!-- SettingsViewModel -->
@@ -165,7 +167,10 @@
 
     <!-- HistoryScreen -->
     <string name="history_title">السجل</string>
-    <string name="history_subtitle">فيديوهاتك التي تم تنزيلها</string>
+    <string name="history_subtitle">الفيديوهات التي نزّلتها</string>
+    <string name="history_empty_title">لم يتم تنزيل شيء بعد</string>
+    <string name="history_empty_subtitle">ستظهر الفيديوهات التي نزّلتها هنا</string>
+    <string name="history_empty_cta">نزّل أول فيديو لك</string>
     <string name="btn_clear_all">مسح الكل</string>
     <string name="clear_history_title">مسح السجل</string>
     <string name="clear_history_message">إزالة سجل التنزيل بالكامل؟ لن يتم حذف الملفات الفعلية.</string>
@@ -224,8 +229,8 @@
     <string name="show_more">عرض أكثر</string>
     <string name="btn_download_thumbnail">تنزيل الصورة المصغرة فقط</string>
     <string name="toggle_save_thumbnail">حفظ الصورة المصغرة مع الفيديو أيضاً</string>
-    <string name="carousel_empty">لا توجد صور متاحة في العرض الدوار</string>
-    <string name="carousel_empty_sub">أضف كوكيز Instagram في الإعدادات لعرض وتنزيل صور العرض الدوار</string>
+    <string name="carousel_empty">لم يتم العثور على صور قابلة للتنزيل</string>
+    <string name="carousel_empty_sub">قد يتطلب الموقع ملفات تعريف ارتباط أو قد لا يعرض الصور في مصدر الصفحة.</string>
     <string name="carousel_selected">%1$d/%2$d محدد</string>
     <string name="btn_select_all">تحديد الكل</string>
     <string name="btn_clear_format">مسح</string>
@@ -244,6 +249,7 @@
 
     <!-- QuickDownloadActivity -->
     <string name="tiktok_normal_flow">التنزيل السريع غير متاح لـ TikTok — جارٍ فتح التدفق العادي</string>
+    <string name="quick_download_picker_flow">جارٍ فتح محدد الوسائط…</string>
     <string name="quick_download_title">تنزيل سريع</string>
     <string name="quick_download_started">بدأ التنزيل السريع</string>
     <string name="quick_download_failed">فشل: %s</string>
@@ -321,10 +327,10 @@
     <string name="resume_error_title">فشل الاستئناف</string>
     <string name="resume_error_unknown">تعذر استئناف التنزيل</string>
     <string name="fetch_stage_connecting">جارٍ الاتصال…</string>
-    <string name="fetch_stage_reading">جارٍ قراءة معلومات الفيديو…</string>
+    <string name="fetch_stage_reading">جارٍ قراءة معلومات الوسائط…</string>
     <string name="fetch_stage_parsing">جارٍ تحليل التنسيقات…</string>
     <string name="fetch_stage_finishing">على وشك الانتهاء…</string>
 
     <!-- Mascot System -->
-    <string name="fetching_message">جارٍ التقاط الفيديو…</string>
+    <string name="fetching_message">جارٍ العثور على الوسائط…</string>
 </resources>

@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import com.otter.app.MainActivity
 import com.otter.app.R
 import com.otter.app.data.repository.DownloadRepository
+import com.otter.app.engine.MediaUrlNormalizer
 import com.otter.app.service.DownloadService
 import com.otter.app.util.extractUrlFromText
 import com.otter.app.util.isValidUrl
@@ -62,12 +63,13 @@ class QuickDownloadActivity : ComponentActivity() {
             if (isTikTokUrl(sharedUrl)) {
                 Log.i(TAG, "Redirecting TikTok URL to normal flow via MainActivity")
                 Toast.makeText(this, getString(R.string.tiktok_normal_flow), Toast.LENGTH_SHORT).show()
-                val mainIntent = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra(ShareActivity.EXTRA_SHARED_URL, sharedUrl)
-                }
-                startActivity(mainIntent)
-                finish()
+                openNormalFlow(sharedUrl)
+                return
+            }
+            if (MediaUrlNormalizer.isDirectImageUrl(sharedUrl) || isInstagramPostUrl(sharedUrl)) {
+                Log.i(TAG, "Opening image/gallery link in the selectable media flow")
+                Toast.makeText(this, getString(R.string.quick_download_picker_flow), Toast.LENGTH_SHORT).show()
+                openNormalFlow(sharedUrl)
                 return
             }
 
@@ -131,9 +133,20 @@ class QuickDownloadActivity : ComponentActivity() {
         return text.extractUrlFromText()
     }
 
-    private fun isTikTokUrl(url: String): Boolean {
-        return url.contains("tiktok.com", ignoreCase = true) ||
-               url.contains("vm.tiktok.com", ignoreCase = true) ||
-               url.contains("vt.tiktok.com", ignoreCase = true)
+    private fun openNormalFlow(url: String) {
+        val mainIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(ShareActivity.EXTRA_SHARED_URL, url)
+        }
+        startActivity(mainIntent)
+        finish()
     }
+
+    private fun isInstagramPostUrl(url: String): Boolean {
+        return MediaUrlNormalizer.hostMatches(url, "instagram.com") &&
+            url.contains("/p/", ignoreCase = true) && !url.contains("/reel/", ignoreCase = true)
+    }
+
+    private fun isTikTokUrl(url: String): Boolean =
+        MediaUrlNormalizer.hostMatches(url, "tiktok.com")
 }

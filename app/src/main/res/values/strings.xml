@@ -23,15 +23,15 @@
     <!-- HomeScreen -->
     <string name="link_detected">Link detected</string>
     <string name="btn_use">USE</string>
-    <string name="paste_video_link">Paste a video link</string>
-    <string name="url_placeholder">https://youtube.com/watch?v=…</string>
+    <string name="paste_video_link">Paste a media link</string>
+    <string name="url_placeholder">YouTube Shorts, post, or media page URL</string>
     <string name="btn_fetching">FETCHING…</string>
     <string name="btn_fetch_download">FETCH &amp; DOWNLOAD</string>
     <string name="quick_download_label">Quick download</string>
     <string name="quick_download_subtitle">Skip quality picker</string>
     <string name="info_loaded">Info loaded</string>
     <string name="btn_download_another">DOWNLOAD ANOTHER</string>
-    <string name="empty_state_videos">No videos here yet!\nFeed me some links!</string>
+    <string name="empty_state_videos">No downloads here yet!\nFeed me a media link!</string>
     <string name="btn_cancel">CANCEL</string>
     <string name="error_state_title">Oops! Something went wrong</string>
     <string name="btn_try_again">TRY AGAIN</string>
@@ -48,7 +48,7 @@
     <!-- HomeScreen - About -->
     <string name="about_app_name">OTTER</string>
     <string name="about_description">Open-source media downloader for Android. Powered by the •AV® engine.</string>
-    <string name="about_description2">Otter lets you download video, audio, images, and subtitles from 5 popular platforms.</string>
+    <string name="about_description2">Download video, audio, images, and subtitles from popular platforms and many other supported media sites.</string>
     <string name="about_description3">Built with Jetpack Compose. Lightweight, fast, and fully open source.</string>
     <string name="social_instagram">Instagram</string>
     <string name="social_instagram_handle">@acee.visuals</string>
@@ -64,13 +64,14 @@
     <string name="content_desc_language">Change language</string>
 
     <!-- HomeViewModel -->
-    <string name="fetching_video_info">Fetching video info…</string>
+    <string name="fetching_video_info">Fetching media info…</string>
     <string name="images_saved">%d images saved</string>
+    <string name="images_saved_partial">%1$d saved, %2$d failed.</string>
     <string name="image_saved">1 image saved</string>
     <string name="enter_valid_url">Please enter a valid URL</string>
     <string name="fetching_post">Fetching post…</string>
-    <string name="failed_fetch_video">Failed to fetch video info</string>
-    <string name="no_suitable_format">No suitable format found</string>
+    <string name="failed_fetch_video">Couldn\'t find downloadable media for this link</string>
+    <string name="no_suitable_format">No downloadable format found</string>
     <string name="video_thumbnail_saved">Video + Thumbnail saved</string>
     <!-- Friendly error messages -->
     <string name="error_network_timeout">Connection timed out. Check your internet and try again.</string>
@@ -94,7 +95,7 @@
     <string name="error_twitter_rate_limit">X/Twitter is rate-limiting. Wait a minute and try again.</string>
     <string name="error_tiktok_extractor">TikTok extractor issue. The engine may need updating — try again in a moment.</string>
     <string name="error_facebook_login">Facebook requires login. Add cookies in Settings → Cookies.</string>
-    <string name="error_generic_with_hint">Couldn\'t process this video. Check the URL, your connection, or try again in a moment.</string>
+    <string name="error_generic_with_hint">Couldn\'t process this media link. Check the URL, access, or your connection and try again.</string>
     <string name="fetching_attempt">Fetching… (attempt %1$d of %2$d)</string>
     <string name="downloading_attempt">Downloading… (attempt %1$d of %2$d)</string>
     <string name="retrying_in_seconds">Retrying in %1$ds…</string>
@@ -131,7 +132,7 @@
     <string name="setting_notification_settings">Notification settings</string>
     <string name="settings_site_cookies">Site Cookies</string>
     <string name="setting_manage_cookies">Manage Cookies</string>
-    <string name="setting_manage_cookies_sub">Required for Instagram, private YouTube, and age-restricted content</string>
+    <string name="setting_manage_cookies_sub">For sites that require sign-in, including Instagram and restricted YouTube content</string>
     <string name="settings_download_engine">Download Engine</string>
     <string name="setting_engine_version">•AV® engine version</string>
     <string name="btn_checking_updates">Updating…</string>
@@ -141,7 +142,7 @@
     <string name="setting_save_to">Save to</string>
     <string name="btn_reset_default">Reset to default</string>
     <string name="settings_supported_platforms">Supported Platforms</string>
-    <string name="supported_platforms_intro">Otter officially supports these 5 popular platforms:</string>
+    <string name="supported_platforms_intro">Top platforms are listed below. yt-dlp also supports many other sites; availability varies by site.</string>
     <string name="supported_platforms_youtube_desc">Videos, Shorts, and live streams</string>
     <string name="supported_platforms_facebook_desc">Posts, fb.watch, watch.facebook.com</string>
     <string name="supported_platforms_instagram_desc">Reels, image carousels, posts</string>
@@ -155,7 +156,7 @@
     <string name="setting_app_name">Otter</string>
     <string name="setting_version_info">Version %s • Powered by •AV® engine • Built with Jetpack Compose</string>
     <string name="setting_engine_info">Engine</string>
-    <string name="setting_engine_info_sub">Powered by •AV® engine — ultra-fast media extraction for 5 popular platforms</string>
+    <string name="setting_engine_info_sub">Powered by •AV® and yt-dlp extractors for many sites and direct media links</string>
     <string name="settings_app_language">App Language</string>
 
     <!-- SettingsViewModel -->
@@ -228,8 +229,8 @@
     <string name="show_more">Show more</string>
     <string name="btn_download_thumbnail">DOWNLOAD THUMBNAIL ONLY</string>
     <string name="toggle_save_thumbnail">Also save thumbnail with video</string>
-    <string name="carousel_empty">No carousel images available</string>
-    <string name="carousel_empty_sub">Add Instagram cookies in Settings to view and download carousel images</string>
+    <string name="carousel_empty">No downloadable images found</string>
+    <string name="carousel_empty_sub">This page may require site cookies or may not expose its images in the page source.</string>
     <string name="carousel_selected">%1$d/%2$d selected</string>
     <string name="btn_select_all">SELECT ALL</string>
     <string name="btn_clear_format">CLEAR</string>
@@ -248,6 +249,7 @@
 
     <!-- QuickDownloadActivity -->
     <string name="tiktok_normal_flow">Quick Download not available for TikTok — opening normal flow</string>
+    <string name="quick_download_picker_flow">Opening media picker…</string>
     <string name="quick_download_title">Quick Download</string>
     <string name="quick_download_started">Quick download started</string>
     <string name="quick_download_failed">Failed: %s</string>
@@ -325,10 +327,10 @@
     <string name="resume_error_title">Resume Failed</string>
     <string name="resume_error_unknown">Could not resume download</string>
     <string name="fetch_stage_connecting">Connecting…</string>
-    <string name="fetch_stage_reading">Reading video info…</string>
+    <string name="fetch_stage_reading">Reading media info…</string>
     <string name="fetch_stage_parsing">Parsing formats…</string>
     <string name="fetch_stage_finishing">Almost there…</string>
 
     <!-- Mascot System -->
-    <string name="fetching_message">Catching your video…</string>
+    <string name="fetching_message">Finding your media…</string>
 </resources>

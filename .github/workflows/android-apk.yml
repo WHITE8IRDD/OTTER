@@ -1,0 +1,83 @@
+name: Android APK
+
+on:
+  push:
+    branches:
+      - arena/23a7b6e2-otter
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android 35 build packages
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Run unit tests and build universal debug APK
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug 2>&1 | tee build.log
+
+      - name: Report Gradle failure details
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import re
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          log = Path("build.log")
+          if log.exists():
+              lines = log.read_text(errors="replace").splitlines()
+              marker = re.compile(r"(?i)(FAILURE:|what went wrong:|execution failed for task|could not (find|resolve)|no matching variant|^e:|error:|failed to)")
+              log_details = []
+              for index, line in enumerate(lines):
+                  if marker.search(line):
+                      log_details.extend(lines[max(0, index - 1):min(len(lines), index + 5)])
+              test_details = []
+              for report in Path("app/build/test-results/testDebugUnitTest").glob("TEST-*.xml"):
+                  try:
+                      root = ET.parse(report).getroot()
+                      for testcase in root.iter("testcase"):
+                          for failure in list(testcase.findall("failure")) + list(testcase.findall("error")):
+                              test_details.append(f"FAILED {testcase.attrib.get('classname', '')}.{testcase.attrib.get('name', '')}: {failure.attrib.get('message', '')}")
+                              if failure.text:
+                                  test_details.extend(failure.text.splitlines()[:12])
+                  except ET.ParseError:
+                      pass
+              selected = test_details + log_details
+              if not selected:
+                  selected = lines[-20:]
+              details = "\n".join(dict.fromkeys(selected))[:3000]
+              encoded = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=Gradle failure::{encoded}")
+          PY
+
+      - name: Rename universal APK
+        run: |
+          mkdir -p build-artifacts
+          cp app/build/outputs/apk/debug/app-universal-debug.apk "build-artifacts/OTTER 26.1.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: OTTER-26.1
+          path: build-artifacts/OTTER 26.1.apk
+          if-no-files-found: error
