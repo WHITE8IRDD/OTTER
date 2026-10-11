@@ -93,13 +93,15 @@ jobs:
                       for failure in list(testcase.findall("failure")) + list(testcase.findall("error")):
                           test_details.append(f"FAILED {testcase.attrib.get('classname', '')}.{testcase.attrib.get('name', '')}: {failure.attrib.get('message', '')}")
                           if failure.text:
-                              test_details.extend(failure.text.splitlines()[:12])
+                              text = failure.text
+                              keep = [line for line in text.splitlines() if "Caused by" in line or "expected:" in line or "ExceptionInInitializer" in line]
+                              test_details.extend((keep + text.splitlines()[:25])[:25])
               except ET.ParseError:
                   pass
           selected = test_details + log_details
           if not selected:
               selected = lines[-20:]
-          details = "\n".join(dict.fromkeys(selected))[:3000]
+          details = "\n".join(dict.fromkeys(selected))[:6000]
           encoded = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Gradle failure::{encoded}")
           Path("ci-failure.txt").write_text(details)
