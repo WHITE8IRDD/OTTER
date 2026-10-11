@@ -57,6 +57,10 @@ jobs:
     timeout-minutes: 60
     outputs:
       apk_kind: ${{ steps.collect.outputs.apk_kind }}
+    # The secrets context cannot be used in a step `if:`, so the optional signing
+    # flag is exposed through job-level env instead.
+    env:
+      KEYSTORE_BASE64: ${{ secrets.OTTER_KEYSTORE_BASE64 }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -76,9 +80,8 @@ jobs:
 
       # Optional: only runs when the repository defines these secrets.
       - name: Configure release signing (optional)
-        if: ${{ secrets.OTTER_KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_BASE64 != ''
         env:
-          KEYSTORE_BASE64: ${{ secrets.OTTER_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.OTTER_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.OTTER_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.OTTER_KEY_PASSWORD }}
