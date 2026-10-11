@@ -30,6 +30,9 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         private const val TAG = "Downloader"
         private const val OUTPUT_TEMPLATE_DEFAULT = "%(title).200B [%(id)s].%(ext)s"
 
+        /** Where the engine unpacks its CA bundle: `<packages>/<name>/usr/etc/tls/cert.pem`. */
+        private const val ENGINE_PACKAGES_DIR = "youtubedl-android/packages"
+
         private val progressRegex = Regex(
             """\[download\]\s+(\d+\.?\d*)%\s+of\s+~?\s*(\d+\.?\d*)([KMG]i?B|B)\s+at\s+(\d+\.?\d*)([KMG]i?B|B)/s\s+ETA\s+(\d+):(\d+)(?::(\d+))?"""
         )
@@ -296,7 +299,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val rateLimit: Boolean,
         val maxRate: String,
         val concurrentFragments: Int,
-        val retries: Int
+        val retries: Int,
+        val useAria2c: Boolean
     )
 
     private suspend fun readSettings(): DownloadSettings = DownloadSettings(
@@ -308,10 +312,19 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         rateLimit = preferences.rateLimit.first(),
         maxRate = preferences.maxRate.first(),
         concurrentFragments = preferences.concurrentFragments.first(),
-        retries = preferences.retries.first()
+        retries = preferences.retries.first(),
+        useAria2c = preferences.useAria2c.first()
     )
 
-    private fun applySettings(request: YoutubeDLRequest, settings: DownloadSettings) {
+    /**
+     * @param allowExternal false on a retry, so a failure caused by the external
+     * downloader falls back to the downloader yt-dlp ships with.
+     */
+    private fun applySettings(
+        request: YoutubeDLRequest,
+        settings: DownloadSettings,
+        allowExternal: Boolean = true
+    ) {
         if (settings.playlist) {
             request.addOption("--yes-playlist")
         } else {
@@ -333,7 +346,41 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         if (settings.rateLimit) {
             request.addOption("--limit-rate", settings.maxRate)
         }
+        if (settings.useAria2c && allowExternal) enableAria2c(request)
         request.addOption("--concurrent-fragments", settings.concurrentFragments.toString())
+    }
+
+    /**
+     * Hands the download to aria2c, which splits one file across several connections.
+     *
+     * That is what a progressive (already muxed) format needs: yt-dlp fetches those
+     * with a single connection, and `--concurrent-fragments` only ever applied to
+     * segmented formats. Segmented formats keep the downloader yt-dlp ships with,
+     * because aria2c does not speak those protocols.
+     *
+     * Two details matter. aria2c defaults to one connection per server (`-x 1`), so
+     * asking it to split is the whole point. And it cannot find Android's CA store by
+     * itself, so it needs the certificate bundle the engine unpacks — without one
+     * every HTTPS download would fail, so we simply keep the built-in downloader.
+     */
+    private fun enableAria2c(request: YoutubeDLRequest) {
+        val cert = File(context.noBackupFilesDir, ENGINE_PACKAGES_DIR).listFiles()
+            ?.firstNotNullOfOrNull { pkg -> File(pkg, "usr/etc/tls/cert.pem").takeIf { it.exists() } }
+        if (cert == null) {
+            Log.w(TAG, "aria2c enabled but no CA bundle was unpacked; using the built-in downloader")
+            return
+        }
+        request.addOption("--downloader", "libaria2c.so")
+        // Appended as raw commands rather than options: yt-dlp keeps only the last
+        // value it is given for a downloader's arguments, and the engine adds its own
+        // when the request runs, which would otherwise discard these.
+        request.addCommands(
+            listOf(
+                "--external-downloader-args",
+                "aria2c:-x 8 -s 8 -k 1M --min-split-size=1M --file-allocation=none" +
+                    " --ca-certificate=${cert.absolutePath}"
+            )
+        )
     }
 
     private val recoverablePatterns = listOf(
@@ -395,7 +442,13 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 counter++
             }
         }
-        srcFile.copyTo(destFile)
+        // A rename is instant; a copy rewrites the whole file, which on a large video
+        // is the slowest part of finishing a download. Renaming only works inside one
+        // filesystem, so fall back to a copy when it is refused.
+        if (!srcFile.renameTo(destFile)) {
+            srcFile.copyTo(destFile)
+            srcFile.delete()
+        }
         Log.i(TAG, "copyToExternal: $internalPath -> $destFile")
         com.otter.app.util.FileHelper.scanFile(context, destFile.absolutePath)
         return destFile.absolutePath
@@ -445,6 +498,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         autoCaptionLangs: String = "",
         title: String = ""
     ) = withContext(Dispatchers.IO) {
+        EngineLock.markUsed()
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -481,7 +535,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     addOption("--no-mtime")
                     addOption("--continue")
                     addOption("--socket-timeout", if (isLive) "30" else "15")
-                    applySettings(this, settings)
+                    applySettings(this, settings, allowExternal = attempt == 1)
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
 
@@ -653,6 +707,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         autoCaptionLangs: String = "",
         title: String = ""
     ) = withContext(Dispatchers.IO) {
+        EngineLock.markUsed()
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -693,7 +748,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
                     addOption("--continue")
                     addOption("--socket-timeout", if (isLive) "30" else "15")
-                    applySettings(this, settings)
+                    applySettings(this, settings, allowExternal = attempt == 1)
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
 

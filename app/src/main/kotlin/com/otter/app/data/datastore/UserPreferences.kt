@@ -59,7 +59,7 @@ class UserPreferences(private val context: Context) {
     }
 
     val useAria2c: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_USE_ARIA2C] ?: false
+        prefs[KEY_USE_ARIA2C] ?: true
     }
 
     val darkMode: Flow<Boolean> = context.dataStore.data.map { prefs ->

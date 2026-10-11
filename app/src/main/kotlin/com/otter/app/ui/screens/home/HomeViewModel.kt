@@ -458,19 +458,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * The yt-dlp format spec for a picked format.
+     *
+     * A format that already carries its own audio must not be paired with another
+     * audio stream: that downloads the soundtrack twice and forces a merge the single
+     * file never needed, which is most of the wait on a muxed pick. Specs that are
+     * already combined (`bestvideo+bestaudio`) are passed straight through.
+     */
+    private fun formatSpecFor(format: VideoFormat, audioTrack: AudioTrack?): String {
+        if (format.isAudioOnly) return audioTrack?.formatId ?: "bestaudio[ext=m4a]/bestaudio"
+        if (format.formatId.contains("+") || format.isMuxed) return "${format.formatId}/best"
+        return "${format.formatId}+${audioTrack?.formatId ?: "bestaudio"}/best"
+    }
+
     private fun downloadBestFormat(info: VideoInfo, url: String) {
         val bestFormat = info.formats.firstOrNull { it.formatId == "bestvideo+bestaudio" }
             ?: info.formats.firstOrNull { !it.isAudioOnly }
         if (bestFormat != null) {
             viewModelScope.launch {
                 val outputDir = repository.downloadPath.first()
-                val audioTrack = _selectedAudioTrack.value
-                val safeFormatId = if (bestFormat.isAudioOnly) {
-                    audioTrack?.formatId ?: "bestaudio[ext=m4a]/bestaudio"
-                } else {
-                    val audioId = audioTrack?.formatId ?: "bestaudio"
-                    "${bestFormat.formatId}+$audioId/best"
-                }
+                val safeFormatId = formatSpecFor(bestFormat, _selectedAudioTrack.value)
                 startDownloadService(url, safeFormatId, outputDir, info, bestFormat.formatId, bestFormat.ext, bestFormat.isAudioOnly)
             }
         } else {
@@ -504,13 +512,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val outputDir = repository.downloadPath.first()
-            val audioTrack = _selectedAudioTrack.value
-            val safeFormatId = if (format.isAudioOnly) {
-                audioTrack?.formatId ?: "bestaudio[ext=m4a]/bestaudio"
-            } else {
-                val audioId = audioTrack?.formatId ?: "bestaudio"
-                "${format.formatId}+$audioId/best"
-            }
+            val safeFormatId = formatSpecFor(format, _selectedAudioTrack.value)
             startDownloadService(url, safeFormatId, outputDir, info, format.formatId, format.ext, format.isAudioOnly)
         }
     }

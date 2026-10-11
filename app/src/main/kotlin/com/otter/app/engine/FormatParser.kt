@@ -168,6 +168,7 @@ class FormatParser(private val context: Context? = null) {
         onRetryMessage: ((String) -> Unit)? = null,
         onRetryStatus: ((Int, Int) -> Unit)? = null
     ): Result<VideoInfo> = withContext(Dispatchers.IO) {
+        EngineLock.markUsed()
         Log.i(TAG, "fetchVideoInfo START url=$url")
         val resolvedUrl = MediaUrlNormalizer.normalizeYouTubeShortsUrl(resolveTikTokShortUrl(url))
         val isInstaCarousel = isInstagramPostUrl(resolvedUrl)

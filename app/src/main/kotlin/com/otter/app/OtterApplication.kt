@@ -2,6 +2,7 @@ package com.otter.app
 
 import android.app.Application
 import android.util.Log
+import com.otter.app.engine.EngineLock
 import com.otter.app.engine.FormatParser
 import com.otter.app.engine.YtDlpUpdater
 import com.otter.app.util.NotificationHelper
@@ -46,11 +47,17 @@ class OtterApplication : Application() {
 
     private suspend fun autoUpdateYtDlp() {
         val updater = YtDlpUpdater(this)
-        if (updater.shouldAutoUpdate() || updater.getVersion() == "Unknown") {
-            Log.i(TAG, "Auto-updating engine (nightly channel)...")
-            updater.update { progress ->
-                Log.i(TAG, "Engine update: $progress")
-            }
+        if (!(updater.shouldAutoUpdate() || updater.getVersion() == "Unknown")) return
+        // The update is a fresh yt-dlp binary: tens of megabytes pulled over the same
+        // connection the user is about to download with. If they have already started
+        // fetching or downloading in this session, leave it for the next launch.
+        if (EngineLock.wasUsed) {
+            Log.i(TAG, "Skipping yt-dlp update: the engine is in use")
+            return
+        }
+        Log.i(TAG, "Auto-updating engine (nightly channel)...")
+        updater.update { progress ->
+            Log.i(TAG, "Engine update: $progress")
         }
     }
 
