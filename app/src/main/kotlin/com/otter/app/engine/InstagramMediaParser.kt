@@ -174,22 +174,36 @@ object InstagramMediaParser {
     // ------------------------------------------------------------------ JSON walk
 
     /** Parse any Instagram JSON payload (page payload, api/v1, graphql, embed). */
-    fun parseJson(json: String, source: Source = Source.JSON_API): Result {
+    fun parseJson(
+        json: String,
+        source: Source = Source.JSON_API,
+        expectedMediaId: Long = 0L
+    ): Result {
         val root = MiniJson.parseOrNull(json)
             ?: return Result(emptyList(), 0, source, note = "payload was not JSON")
-        return parseJsonNode(root, source)
+        return parseJsonNode(root, source, expectedMediaId)
     }
 
-    internal fun parseJsonNode(root: Value, source: Source = Source.JSON_API): Result {
-        val carousel = findCarousel(root)
+    internal fun parseJsonNode(
+        root: Value,
+        source: Source = Source.JSON_API,
+        expectedMediaId: Long = 0L
+    ): Result {
+        val carousel = findCarousel(root, expectedMediaId)
+        if (carousel != null && carousel.urls.size >= 2) {
+            // The post's own slides, in payload order. Pictures from "more posts"
+            // previews on the same page must never end up in the picker.
+            val expected = maxOf(carousel.declaredCount, carousel.urls.size)
+            return Result(carousel.urls, expected.coerceAtMost(MAX_SLIDES), source)
+        }
+        if (expectedMediaId > 0L) {
+            findPostImage(root, expectedMediaId)?.let { single ->
+                return Result(listOf(single), 1, source)
+            }
+        }
         val collected = collectMediaUrls(root)
         val declared = carousel?.declaredCount ?: 0
-        // Carousel order first, then any other pictures the payload exposes.
-        val order = if (carousel != null && carousel.urls.isNotEmpty()) {
-            (carousel.urls + collected.urls).distinctBy { mediaKey(it) }
-        } else {
-            collected.urls
-        }
+        val order = carousel?.urls.orEmpty().ifEmpty { collected.urls }
         val expected = when {
             declared > 0 -> declared
             collected.sawMediaMarker && order.isNotEmpty() -> 1
@@ -198,15 +212,9 @@ object InstagramMediaParser {
         return Result(order.take(MAX_URLS), expected, source)
     }
 
-    private data class Carousel(val urls: List<String>, val declaredCount: Int)
-
-    private data class Collected(val urls: List<String>, val sawMediaMarker: Boolean)
-
-    /**
-     * Locate the first object that explicitly describes a multi-slide post and
-     * return its slides in payload order plus how many slides it declares.
-     */
-    private fun findCarousel(root: Value): Carousel? {
+    /** Picture of the post itself (the node whose id/pk matches the media id). */
+    private fun findPostImage(root: Value, mediaId: Long): String? {
+        val needle = mediaId.toString()
         val queue = ArrayDeque<Value>()
         queue.add(root)
         var visited = 0
@@ -215,8 +223,9 @@ object InstagramMediaParser {
             visited++
             when (node) {
                 is Obj -> {
-                    slides(node)?.let { carousel ->
-                        if (carousel.declaredCount >= 2 || carousel.urls.size >= 2) return carousel
+                    val ids = listOf("id", "pk", "media_id").mapNotNull { node.string(it) }
+                    if (ids.any { it.contains(needle) }) {
+                        bestImage(node)?.let { return it }
                     }
                     for (child in node.fields.values) {
                         if (child is Obj || child is Arr) queue.add(child)
@@ -233,22 +242,111 @@ object InstagramMediaParser {
         return null
     }
 
+    private data class Carousel(val urls: List<String>, val declaredCount: Int)
+
+    private data class Collected(val urls: List<String>, val sawMediaMarker: Boolean)
+
+    /**
+     * Locate the object that describes the post's own multi-slide carousel and
+     * return its slides in payload order plus how many slides it declares.
+     *
+     * A page can carry several carousels (the post plus "more posts" previews), so
+     * the candidate whose subtree contains this post's media id wins; otherwise the
+     * first carousel with real slides wins.
+     */
+    private fun findCarousel(root: Value, expectedMediaId: Long = 0L): Carousel? {
+        var best: Carousel? = null
+        var bestScore = Int.MIN_VALUE
+        val queue = ArrayDeque<Value>()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty() && visited < 20_000) {
+            val node = queue.removeFirst()
+            visited++
+            when (node) {
+                is Obj -> {
+                    slides(node)?.let { carousel ->
+                        if (carousel.declaredCount >= 2 || carousel.urls.size >= 2) {
+                            val idMatch = expectedMediaId > 0L &&
+                                subtreeContainsMediaId(node, expectedMediaId)
+                            val score = (if (idMatch) 1_000 else 0) +
+                                carousel.declaredCount * 2 + carousel.urls.size
+                            if (score > bestScore) {
+                                bestScore = score
+                                best = carousel
+                            }
+                        }
+                    }
+                    for (child in node.fields.values) {
+                        if (child is Obj || child is Arr) queue.add(child)
+                    }
+                }
+                is Arr -> {
+                    for (child in node.items) {
+                        if (child is Obj || child is Arr) queue.add(child)
+                    }
+                }
+                else -> Unit
+            }
+        }
+        return best
+    }
+
+    /** True when this subtree mentions the numeric media id we are looking for. */
+    private fun subtreeContainsMediaId(node: Obj, mediaId: Long): Boolean {
+        val needle = mediaId.toString()
+        val queue = ArrayDeque<Value>()
+        queue.add(node)
+        var visited = 0
+        while (queue.isNotEmpty() && visited < 4_000) {
+            val current = queue.removeFirst()
+            visited++
+            when (current) {
+                is Obj -> {
+                    for (field in listOf("id", "pk", "media_id", "code")) {
+                        val value = current.string(field) ?: continue
+                        if (value.contains(needle)) return true
+                    }
+                    for (child in current.fields.values) {
+                        if (child is Obj || child is Arr) queue.add(child)
+                    }
+                }
+                is Arr -> {
+                    for (child in current.items) {
+                        if (child is Obj || child is Arr) queue.add(child)
+                    }
+                }
+                else -> Unit
+            }
+        }
+        return false
+    }
+
+    /** Carousel entries are either media objects or wrapped in `node`/`media`. */
+    private fun unwrapMedia(node: Obj): Obj {
+        node.obj("node")?.let { return it }
+        node.obj("media")?.let { return it }
+        return node
+    }
+
     private fun slides(node: Obj): Carousel? {
         node.arr("carousel_media")?.let { array ->
             if (array.size == 0) return null
             val urls = mutableListOf<String>()
             for (index in 0 until minOf(array.size, MAX_SLIDES)) {
-                val child = array.obj(index) ?: continue
+                val child = unwrapMedia(array.obj(index) ?: continue)
                 bestImage(child)?.let { if (!urls.contains(it)) urls.add(it) }
             }
-            return Carousel(urls, minOf(array.size, MAX_SLIDES))
+            // Newer payloads inline only a window of the slides but still declare the total.
+            val declared = maxOf(node.int("carousel_media_count", array.size), urls.size)
+            return Carousel(urls, declared.coerceAtMost(MAX_SLIDES))
         }
         val edges = node.obj("edge_sidecar_to_children")?.arr("edges")
             ?: if (node.int("media_type", -1) == 8) node.arr("edges") else null
         if (edges != null) {
             val urls = mutableListOf<String>()
             for (index in 0 until minOf(edges.size, MAX_SLIDES)) {
-                val child = edges.obj(index)?.obj("node") ?: continue
+                val child = unwrapMedia(edges.obj(index)?.obj("node") ?: continue)
                 bestImage(child)?.let { if (!urls.contains(it)) urls.add(it) }
             }
             return Carousel(urls, minOf(edges.size, MAX_SLIDES))
@@ -355,20 +453,25 @@ object InstagramMediaParser {
 
     fun parseHtml(html: String, pageUrl: String? = null): Result {
         val shortcode = pageUrl?.let(::shortcodeFromUrl).orEmpty()
+        val mediaId = if (shortcode.isNotEmpty()) mediaIdFromShortcode(shortcode) else 0L
         val merged = LinkedHashMap<String, String>()
         var expected = 0
 
         for (blob in jsonBlobs(html)) {
-            val partial = runCatching { parseJson(blob, Source.HTML_PAYLOAD) }.getOrNull() ?: continue
+            val partial = runCatching { parseJson(blob, Source.HTML_PAYLOAD, mediaId) }.getOrNull() ?: continue
             if (partial.expectedCount > expected) expected = partial.expectedCount
             for (url in partial.imageUrls) add(merged, url)
         }
 
-        if (merged.size < 2) {
-            // Raw scan of the HTML (handles pages whose payload is inline JSON without a script tag).
-            for (match in anyCdnUrl.findAll(html)) {
-                val url = normalizeUrl(match.value) ?: continue
-                if (hasImageExtension(url)) add(merged, url)
+        if (merged.isEmpty()) {
+            // Raw scan (only when no payload was understood at all): handles pages whose
+            // inline JSON has no script tag and JS payloads with escaped slashes.
+            val scanTargets = if (html.contains("\\/")) listOf(html, decodeEscapes(html)) else listOf(html)
+            for (target in scanTargets) {
+                for (match in anyCdnUrl.findAll(target)) {
+                    val url = normalizeUrl(match.value) ?: continue
+                    if (hasImageExtension(url)) add(merged, url)
+                }
             }
         }
 

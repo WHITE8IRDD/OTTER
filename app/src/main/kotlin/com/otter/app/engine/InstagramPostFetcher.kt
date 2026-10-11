@@ -18,6 +18,8 @@ import java.util.Locale
 class InstagramPostFetcher(
     private val desktopUserAgent: String = DESKTOP_UA,
     private val mobileUserAgent: String = MOBILE_UA,
+    private val crawlerUserAgent: String = CRAWLER_UA,
+    private val facebookbotUserAgent: String = FACEBOOKBOT_UA,
     private val timeoutMs: Int = 15_000,
     private val overallBudgetMs: Long = 50_000L,
     private val clock: () -> Long = System::currentTimeMillis
@@ -31,6 +33,16 @@ class InstagramPostFetcher(
             "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
         const val IG_APP_ID = "936619743392459"
+
+        /**
+         * Crawler user agents get Instagram's server-rendered page, which still
+         * contains the whole carousel payload (the browser page is a JS shell for
+         * logged-out clients: that is why the picker showed 1/1 and no pictures).
+         */
+        const val CRAWLER_UA =
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        const val FACEBOOKBOT_UA =
+            "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
     }
 
     data class Result(
@@ -51,6 +63,9 @@ class InstagramPostFetcher(
         val startedAt = clock()
         val shortcode = InstagramMediaParser.shortcodeFromUrl(postUrl)
         val canonical = if (shortcode.isNotEmpty()) "https://www.instagram.com/p/$shortcode/" else postUrl
+        // Post pages are requested with the URL the user gave us (img_index, mdxt and
+        // friends included); only the API/embed endpoints use the canonical form.
+        val pageUrl = if (shortcode.isNotEmpty() && postUrl.contains("/p/$shortcode")) postUrl else canonical
         val mediaId = InstagramMediaParser.mediaIdFromShortcode(shortcode)
         val csrf = cookieValue(cookies, "csrftoken")
 
@@ -85,9 +100,9 @@ class InstagramPostFetcher(
 
         // 1. Post page: current payloads embed the whole carousel in the HTML.
         if (!complete()) {
-            val page = get(canonical, "page", desktopUserAgent)
+            val page = get(pageUrl, "page", desktopUserAgent)
             if (page != null) {
-                val parsed = InstagramMediaParser.parseHtml(page, canonical)
+                val parsed = InstagramMediaParser.parseHtml(page, pageUrl)
                 absorb(parsed, "page")
                 if (parsed.imageUrls.isEmpty() && InstagramMediaParser.looksLikeLoginWall(page)) {
                     note = "Instagram showed a login wall"
@@ -97,8 +112,19 @@ class InstagramPostFetcher(
 
         // 2. Mobile page: some payloads are only served to mobile clients.
         if (!complete() && budgetLeft()) {
-            val page = get(canonical, "page-mobile", mobileUserAgent)
-            if (page != null) absorb(InstagramMediaParser.parseHtml(page, canonical), "page-mobile")
+            val page = get(pageUrl, "page-mobile", mobileUserAgent)
+            if (page != null) absorb(InstagramMediaParser.parseHtml(page, pageUrl), "page-mobile")
+        }
+
+        // 2b. Crawler page: Instagram still ships the full payload to bots, so this
+        //     is what makes carousels readable for clients without a session.
+        if (!complete() && budgetLeft()) {
+            val page = get(pageUrl, "page-crawler", crawlerUserAgent)
+            if (page != null) absorb(InstagramMediaParser.parseHtml(page, pageUrl), "page-crawler")
+        }
+        if (!complete() && budgetLeft()) {
+            val page = get(pageUrl, "page-facebookbot", facebookbotUserAgent)
+            if (page != null) absorb(InstagramMediaParser.parseHtml(page, pageUrl), "page-facebookbot")
         }
 
         // 3. Public web API.

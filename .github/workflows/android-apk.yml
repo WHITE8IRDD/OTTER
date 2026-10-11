@@ -200,11 +200,14 @@ jobs:
           path: build-artifacts/*.apk
           if-no-files-found: error
 
-  # Publishes the APK built above. Runs on demand (workflow_dispatch) so pushes
-  # do not create a release for every commit.
+  # Publishes the APK built above. Runs on demand (workflow_dispatch), or on a push
+  # whose commit message asks for it, so pushes do not create a release for every
+  # commit and CI tokens without the actions:write scope can still publish.
   release:
     needs: build
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

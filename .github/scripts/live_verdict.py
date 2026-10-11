@@ -43,7 +43,8 @@ def main() -> str:
             verdicts.append((test_class, verdict))
             lines.append(f"- `{test_class.rsplit('.', 1)[-1]}.{name}`: **{verdict}**")
             for skip in skipped:
-                lines.append(f"  - reason: {skip.attrib.get('message', 'skipped')}")
+                reason = (skip.attrib.get("message") or (skip.text or "").strip()).strip()
+                lines.append(f"  - reason: {reason if reason else 'skipped'}")
             for failure in failures:
                 message = (failure.attrib.get("message", "") or "").splitlines()
                 lines.append(f"  - failure: {message[0] if message else 'see logs'}")
