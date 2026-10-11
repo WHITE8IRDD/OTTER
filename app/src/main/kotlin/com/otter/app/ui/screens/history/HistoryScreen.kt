@@ -144,12 +144,13 @@ fun HistoryScreen(
                     }
                 }
                 if (downloads.isNotEmpty()) {
-                    BrutalButton(
-                        text = stringResource(R.string.btn_clear_all),
-                        onClick = { showClearDialog = true },
-                        backgroundColor = MaterialTheme.colorScheme.error,
-                        textColor = MaterialTheme.colorScheme.onError
-                    )
+                    TextButton(onClick = { showClearDialog = true }) {
+                        Text(
+                            text = stringResource(R.string.btn_clear_all),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 

@@ -14,6 +14,8 @@ import com.otter.app.data.model.VideoFormat
 import com.otter.app.data.model.VideoInfo
 import com.otter.app.data.model.AudioTrack
 import com.otter.app.data.repository.DownloadRepository
+import com.otter.app.engine.ImageDownloadSummary
+import com.otter.app.engine.MediaSlide
 import com.otter.app.service.ActiveDownloadStateHolder
 import com.otter.app.service.DownloadService
 import com.otter.app.service.DownloadStateHolder
@@ -21,10 +23,9 @@ import com.otter.app.R
 import com.otter.app.util.FileHelper
 import com.otter.app.util.isValidUrl
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -248,16 +249,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Downloads the selected slides: photos through the image path, videos through
-     * the video path (one at a time, as the download service handles a single job).
+     * Downloads the selected slides of one post. Photos and video slides travel the
+     * same path — a plain GET against the CDN, which already accepted the signed URL —
+     * so a mixed post is saved in one pass instead of picture slides first and videos
+     * through a separate engine run that never managed to fetch them.
      */
     fun downloadCarouselSelected() {
         val info = _currentVideoInfo.value ?: return
-        val photoUrls = _selectedPhotoIndices.value.sorted()
+        val photos = _selectedPhotoIndices.value.sorted()
             .mapNotNull { info.carouselImages.getOrNull(it) }
-        val videoUrls = _selectedVideoIndices.value.sorted()
+        val videos = _selectedVideoIndices.value.sorted()
             .mapNotNull { info.carouselVideos.getOrNull(it) }
-        if (photoUrls.isEmpty() && videoUrls.isEmpty()) return
+        val slides = photos.map { MediaSlide(it, isVideo = false) } +
+            videos.map { MediaSlide(it, isVideo = true) }
+        if (slides.isEmpty()) return
 
         _showFormatSheet.value = false
 
@@ -265,118 +270,48 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val outputDir = repository.downloadPath.first()
             _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
 
-            var savedCount = 0
-            var failedCount = 0
-
-            if (photoUrls.isNotEmpty()) {
-                val summary = repository.downloadImages(
-                    imageUrls = photoUrls,
+            val summary = try {
+                repository.downloadMedia(
+                    slides = slides,
                     baseName = info.title,
                     outputDir = outputDir,
                     refererUrl = info.originalUrl,
                     onProgress = { state -> _downloadState.value = state }
                 )
-                savedCount += summary.savedCount
-                failedCount += summary.failedCount
-                if (summary.savedCount > 0) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("HomeViewModel", "Carousel download failed", e)
+                ImageDownloadSummary(emptyList(), slides.size)
+            }
+
+            if (summary.savedCount > 0) {
+                try {
                     saveCarouselRecord(info, summary.savedPaths)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w("HomeViewModel", "Could not store the history entry", e)
                 }
             }
 
-            if (videoUrls.isNotEmpty()) {
-                val videoFailures = downloadSlideVideos(videoUrls, info, outputDir)
-                savedCount += videoUrls.size - videoFailures
-                failedCount += videoFailures
-            }
-
-            _downloadState.value = DownloadState.Idle
+            val failedCount = slides.size - summary.savedCount
             val toastMsg = when {
-                savedCount == 0 -> getApplication<Application>()
+                summary.savedCount == 0 -> getApplication<Application>()
                     .getString(R.string.media_saved_none)
                 failedCount > 0 -> getApplication<Application>()
-                    .getString(R.string.media_saved_partial, savedCount, failedCount)
-                savedCount == 1 -> getApplication<Application>()
+                    .getString(R.string.media_saved_partial, summary.savedCount, failedCount)
+                summary.savedCount == 1 -> getApplication<Application>()
                     .getString(R.string.image_saved)
                 else -> getApplication<Application>()
-                    .getString(R.string.media_saved, savedCount)
+                    .getString(R.string.media_saved, summary.savedCount)
             }
+            _downloadState.value = DownloadState.Idle
             Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
         }
     }
 
-    /** Runs each video slide through the video path and returns how many failed. */
-    private suspend fun downloadSlideVideos(
-        videoUrls: List<String>,
-        info: VideoInfo,
-        outputDir: String
-    ): Int {
-        var failures = 0
-        videoUrls.forEachIndexed { index, slideUrl ->
-            _downloadState.value = DownloadState.Downloading(
-                index.toFloat() / videoUrls.size.coerceAtLeast(1),
-                phase = DownloadPhase.PREPARING
-            )
-            // Clear any terminal state left by the previous slide *before* observing,
-            // otherwise the stale Success/Error would be picked up as this slide's result.
-            DownloadStateHolder.update(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
-            val terminal = CompletableDeferred<DownloadState>()
-            val observer = viewModelScope.launch {
-                DownloadStateHolder.state.collect { state ->
-                    if (state is DownloadState.Success || state is DownloadState.Error) {
-                        terminal.complete(state)
-                    }
-                }
-            }
-            val started = runCatching {
-                startSlideVideoService(slideUrl, info, outputDir, index + 1, videoUrls.size)
-            }.isSuccess
-            val result = if (started) {
-                withTimeoutOrNull(SLIDE_VIDEO_TIMEOUT_MS) { terminal.await() }
-            } else null
-            observer.cancel()
-            when (result) {
-                is DownloadState.Success -> Unit
-                is DownloadState.Error -> {
-                    Log.w("HomeViewModel", "Slide video failed: ${result.message}")
-                    failures++
-                }
-                else -> failures++
-            }
-        }
-        return failures
-    }
-
-    private fun startSlideVideoService(
-        slideUrl: String,
-        info: VideoInfo,
-        outputDir: String,
-        index: Int,
-        total: Int
-    ) {
-        val slideTitle = if (total > 1) "${info.title} ($index/$total)" else info.title
-        val intent = Intent(getApplication(), DownloadService::class.java).apply {
-            action = DownloadService.ACTION_START_DOWNLOAD
-            putExtra(DownloadService.EXTRA_URL, slideUrl)
-            putExtra(DownloadService.EXTRA_FORMAT_ID, "best")
-            putExtra(DownloadService.EXTRA_OUTPUT_DIR, outputDir)
-            putExtra(DownloadService.EXTRA_TITLE, slideTitle)
-            putExtra(DownloadService.EXTRA_THUMBNAIL_URL, info.thumbnailUrl)
-            putExtra(DownloadService.EXTRA_SAVE_THUMBNAIL, false)
-            putExtra(DownloadService.EXTRA_SUBTITLE_LANGS, "")
-            putExtra(DownloadService.EXTRA_AUTO_CAPTION_LANGS, "")
-            putExtra(DownloadService.EXTRA_EMBED_SUBTITLES, false)
-            putExtra(DownloadService.EXTRA_SUBTITLE_FORMAT, "srt")
-            putExtra(DownloadService.EXTRA_UPLOADER, info.uploader)
-            putExtra(DownloadService.EXTRA_DESCRIPTION, info.description.orEmpty())
-            putExtra(DownloadService.EXTRA_HASHTAGS, info.hashtags.joinToString(","))
-            putExtra(DownloadService.EXTRA_DURATION, info.duration)
-            putExtra(DownloadService.EXTRA_IS_AUDIO_ONLY, false)
-            putExtra(DownloadService.EXTRA_HAS_SUBTITLES, false)
-        }
-        getApplication<Application>().startForegroundService(intent)
-    }
-
-    /** One History row for the photo slides of a post, description and hashtags included. */
+    /** One History row for the saved slides of a post, description and hashtags included. */
     private suspend fun saveCarouselRecord(info: VideoInfo, savedPaths: List<String>) {
         val firstPath = savedPaths.firstOrNull() ?: return
         val totalSize = withContext(Dispatchers.IO) {
@@ -387,7 +322,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             url = info.originalUrl,
             title = info.title,
             uploader = info.uploader,
-            thumbnailUrl = info.thumbnailUrl ?: info.carouselImages.firstOrNull(),
+            thumbnailUrl = info.thumbnailUrl
+                ?: info.carouselImages.firstOrNull()
+                ?: info.carouselVideoPosters.firstOrNull { it.isNotBlank() },
             filePath = firstPath,
             fileSize = totalSize,
             duration = info.duration,
@@ -776,9 +713,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        /** Generous ceiling for one carousel video slide before it counts as failed. */
-        private const val SLIDE_VIDEO_TIMEOUT_MS = 30 * 60 * 1000L
-
         private const val PLATFORM_YOUTUBE = 0
         private const val PLATFORM_FACEBOOK = 1
         private const val PLATFORM_INSTAGRAM = 2

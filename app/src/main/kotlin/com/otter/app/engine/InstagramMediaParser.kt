@@ -497,9 +497,23 @@ object InstagramMediaParser {
         var expected = 0
         var caption = ""
 
+        // A post page carries a payload for the post itself plus smaller ones for
+        // suggested posts, so the declared slide count is only trusted from the
+        // payload that actually produced the most slides. Taking the maximum over
+        // every blob instead made unrelated posts inflate the count, which left
+        // complete posts reported as partial reads.
+        var richestPayload = 0
         for (blob in jsonBlobs(html)) {
             val partial = runCatching { parseJson(blob, Source.HTML_PAYLOAD) }.getOrNull() ?: continue
-            if (partial.expectedCount > expected) expected = partial.expectedCount
+            val found = partial.imageUrls.size + partial.videoUrls.size
+            if (found == 0) {
+                if (caption.isBlank()) caption = partial.caption
+                continue
+            }
+            if (found > richestPayload) {
+                richestPayload = found
+                expected = maxOf(partial.expectedCount, found)
+            }
             if (caption.isBlank()) caption = partial.caption
             partial.imageUrls.forEach { photos.add(it) }
             partial.videoUrls.forEachIndexed { index, url ->

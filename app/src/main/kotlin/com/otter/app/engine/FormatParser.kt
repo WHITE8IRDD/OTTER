@@ -327,8 +327,12 @@ class FormatParser(private val context: Context? = null) {
                     }
                 }
 
-                val isCarousel = carouselImages.isNotEmpty() || carouselVideos.isNotEmpty() ||
-                        (responseType == "playlist" && isInstaPost)
+                // An Instagram playlist we could not break into slides but that yt-dlp
+                // did give formats for is better served by the format sheet than by an
+                // empty picker nobody can download from.
+                val hasSlides = carouselImages.isNotEmpty() || carouselVideos.isNotEmpty()
+                val isCarousel = hasSlides ||
+                        (responseType == "playlist" && isInstaPost && formats.isEmpty())
                 val isPlaylist = responseType == "playlist" || isCarousel ||
                         (videoInfo.extractor?.lowercase()?.contains("playlist") == true) ||
                         (videoInfo.extractorKey?.lowercase()?.contains("playlist") == true) ||

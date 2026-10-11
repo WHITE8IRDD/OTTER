@@ -19,6 +19,8 @@ import android.widget.FrameLayout
 import com.otter.app.data.cookies.CookieManager as AppCookieManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -54,9 +56,9 @@ class InstagramImageScraper(private val context: Context) {
 
     companion object {
         private const val TAG = "InstaScraper"
-        private const val HTTP_TIMEOUT_MS = 15_000
+        private const val HTTP_TIMEOUT_MS = 10_000
         private const val WEBVIEW_TIMEOUT_MS = 30_000L
-        private const val OVERALL_HTTP_BUDGET_MS = 50_000L
+        private const val OVERALL_HTTP_BUDGET_MS = 30_000L
 
         const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -246,9 +248,38 @@ class InstagramImageScraper(private val context: Context) {
 
         fun budgetLeft(): Boolean = System.currentTimeMillis() - startedAt < OVERALL_HTTP_BUDGET_MS
 
-        // 1. Post page: all recent payload variants are embedded in the HTML.
+        // The endpoints below all describe the same post, so they are fetched
+        // together: waiting for one before starting the next only added latency
+        // (five round trips, each with its own timeout, before anything appeared).
+        // Whatever answers is merged, and the first payload that declares the full
+        // slide count ends the search.
+        val apiHeaders = linkedMapOf(
+            "X-IG-App-ID" to IG_APP_ID,
+            "Accept" to "*/*",
+            "Referer" to "https://www.instagram.com/",
+            "X-Requested-With" to "XMLHttpRequest"
+        )
+        if (csrf.isNotEmpty()) apiHeaders["X-CSRFToken"] = csrf
+        val apiUrl = if (mediaId > 0) "https://www.instagram.com/api/v1/media/$mediaId/info/" else null
+        val embedUrl = if (shortcode.isNotEmpty()) {
+            "https://www.instagram.com/p/$shortcode/embed/captioned/"
+        } else null
+
+        // 1-3. Post page (desktop + mobile) and the public web API.
         if (!complete()) {
-            val page = fetchText(canonical, cookies, DESKTOP_UA)
+            var page: String? = null
+            var mobile: String? = null
+            var api: String? = null
+            coroutineScope {
+                val pageJob = async(Dispatchers.IO) { fetchText(canonical, cookies, DESKTOP_UA) }
+                val mobileJob = async(Dispatchers.IO) { fetchText(canonical, cookies, MOBILE_UA) }
+                val apiJob = apiUrl?.let { url ->
+                    async(Dispatchers.IO) { fetchText(url, cookies, MOBILE_UA, apiHeaders) }
+                }
+                page = pageJob.await()
+                mobile = mobileJob.await()
+                api = apiJob?.await()
+            }
             if (page != null) {
                 val parsed = InstagramMediaParser.parseHtml(page, canonical)
                 absorb(parsed, "page")
@@ -260,47 +291,29 @@ class InstagramImageScraper(private val context: Context) {
             } else {
                 sources += "page(http-error)"
             }
+            if (mobile != null) absorb(InstagramMediaParser.parseHtml(mobile, canonical), "page-mobile")
+            if (api != null) absorb(InstagramMediaParser.parseJson(api), "web-api")
         }
 
-        // 2. Mobile page: some payloads are only served to mobile user agents.
+        // 4-5. Embed page and the legacy `?__a=1` JSON, only if the post is still
+        // not fully read.
         if (!complete() && budgetLeft()) {
-            val page = fetchText(canonical, cookies, MOBILE_UA)
-            if (page != null) absorb(InstagramMediaParser.parseHtml(page, canonical), "page-mobile")
-        }
-
-        // 3. Web API with the public app id.
-        if (!complete() && mediaId > 0 && budgetLeft()) {
-            val headers = linkedMapOf(
-                "X-IG-App-ID" to IG_APP_ID,
-                "Accept" to "*/*",
-                "Referer" to "https://www.instagram.com/",
-                "X-Requested-With" to "XMLHttpRequest"
-            )
-            if (csrf.isNotEmpty()) headers["X-CSRFToken"] = csrf
-            val body = fetchText(
-                "https://www.instagram.com/api/v1/media/$mediaId/info/",
-                cookies,
-                MOBILE_UA,
-                headers
-            )
-            if (body != null) absorb(InstagramMediaParser.parseJson(body), "web-api")
-        }
-
-        // 4. Embed page (lighter, often served without a session).
-        if (!complete() && shortcode.isNotEmpty() && budgetLeft()) {
-            val embed = fetchText(
-                "https://www.instagram.com/p/$shortcode/embed/captioned/",
-                cookies,
-                DESKTOP_UA
-            )
+            var embed: String? = null
+            var legacy: String? = null
+            coroutineScope {
+                val embedJob = embedUrl?.let { url ->
+                    async(Dispatchers.IO) { fetchText(url, cookies, DESKTOP_UA) }
+                }
+                val legacyJob = async(Dispatchers.IO) {
+                    fetchText("$canonical?__a=1&__d=dis", cookies, MOBILE_UA)
+                }
+                embed = embedJob?.await()
+                legacy = legacyJob.await()
+            }
             if (embed != null) absorb(InstagramMediaParser.parseHtml(embed, canonical), "embed")
+            if (legacy != null) absorb(InstagramMediaParser.parseJson(legacy), "a1")
         }
 
-        // 5. Legacy `?__a=1` JSON.
-        if (!complete() && budgetLeft()) {
-            val body = fetchText("$canonical?__a=1&__d=dis", cookies, MOBILE_UA)
-            if (body != null) absorb(InstagramMediaParser.parseJson(body), "a1")
-        }
 
         // 6. WebView rendering — only when the static payloads could not be read fully.
         if (!complete() && context is Activity) {
