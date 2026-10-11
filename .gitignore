@@ -8,3 +8,6 @@ local.properties
 keystore.properties
 *.keystore
 release.keystore
+# The Android debug key is public and intentionally committed so CI test APKs
+# share one stable signature.
+!.github/debug.keystore

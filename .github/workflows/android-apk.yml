@@ -83,8 +83,11 @@ jobs:
       # previous one. This is the public Android debug key, not a release secret.
       - name: Use the repository debug key for test builds
         run: |
+          set -euo pipefail
+          test -f .github/debug.keystore || { echo "::error::.github/debug.keystore is missing"; exit 1; }
           mkdir -p "$HOME/.android"
           cp .github/debug.keystore "$HOME/.android/debug.keystore"
+          ls -l "$HOME/.android/debug.keystore"
 
       # Optional: only runs when the repository defines these secrets.
       - name: Configure release signing (optional)
