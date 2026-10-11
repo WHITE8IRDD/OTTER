@@ -56,9 +56,9 @@ class InstagramImageScraper(private val context: Context) {
 
     companion object {
         private const val TAG = "InstaScraper"
-        private const val HTTP_TIMEOUT_MS = 10_000
-        private const val WEBVIEW_TIMEOUT_MS = 30_000L
-        private const val OVERALL_HTTP_BUDGET_MS = 30_000L
+        private const val HTTP_TIMEOUT_MS = 15_000
+        private const val WEBVIEW_TIMEOUT_MS = 20_000L
+        private const val OVERALL_HTTP_BUDGET_MS = 40_000L
 
         const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -136,12 +136,16 @@ class InstagramImageScraper(private val context: Context) {
         });
         return total()-before;
     }
+    // A detached WebView reports nothing as visible, so accept any matching node as a
+    // last resort instead of giving up on paging entirely.
+    function shown(el){ return !!el && (el.offsetParent!==null || el.getClientRects().length>0); }
     function nextBtn(){
         var a=document.querySelector('button[aria-label="Next"],button[aria-label*="Next" i],button[aria-label*="next" i]');
-        if(a && a.offsetParent!==null) return a;
+        if(shown(a)) return a;
         var s=document.querySelector('svg[aria-label*="Next" i]');
-        if(s){ var p=s.closest('button')||s.parentElement; if(p && p.offsetParent!==null) return p; }
-        return null;
+        var p=s?(s.closest('button')||s.parentElement):null;
+        if(shown(p)) return p;
+        return a||p||null;
     }
     function click(b){
         ['pointerdown','pointerup','mousedown','mouseup','click'].forEach(function(t){
@@ -317,8 +321,10 @@ class InstagramImageScraper(private val context: Context) {
         }
 
 
-        // 6. WebView rendering — only when the static payloads could not be read fully.
-        if (!complete() && context is Activity) {
+        // 6. WebView rendering — only when plain HTTP read nothing at all. A real browser
+        // render is the one thing that still reaches a logged-out page when every plain
+        // request comes back empty. It is slow, so a partial read is never retried here.
+        if (total() == 0) {
             val rendered = scrapeWithWebView(canonical)
             val renderedCount = rendered.first.size + rendered.second.size
             if (renderedCount > 0) {
@@ -329,8 +335,9 @@ class InstagramImageScraper(private val context: Context) {
             } else {
                 sources += "webview(0)"
             }
-        } else if (!complete()) {
-            sources += "webview(skipped-no-activity)"
+        } else {
+            // Something was read; topping it up is not worth another 20 seconds.
+            sources += "webview(skipped-partial-read)"
         }
 
         val urls = merged.values.toList()
@@ -418,6 +425,7 @@ class InstagramImageScraper(private val context: Context) {
                                 (act.window.decorView as? ViewGroup)?.addView(this)
                             }
                         }
+                        val detached = container == null
 
                         webView = WebView(context).apply {
                             layoutParams = FrameLayout.LayoutParams(
@@ -473,6 +481,11 @@ class InstagramImageScraper(private val context: Context) {
                             }
                         }
 
+                        if (detached) {
+                            // Nothing to attach to (application context). Size the view by
+                            // hand, otherwise the page renders at 0x0 and never loads images.
+                            runCatching { webView?.layout(0, 0, 1080, 4000) }
+                        }
                         container?.addView(webView)
                         webView?.loadUrl(url)
                     }

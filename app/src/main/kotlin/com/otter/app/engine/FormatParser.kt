@@ -17,6 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -29,6 +30,8 @@ class FormatParser(private val context: Context? = null) {
         private const val OUTPUT_BASENAME = "%(title).200B"
         /** Instagram never renders more than 20 slides in one post. */
         private const val MAX_CAROUSEL_SLIDES = 20
+        /** Hard ceiling on reading one Instagram post before yt-dlp gets its turn. */
+        private const val INSTAGRAM_SCRAPE_BUDGET_MS = 60_000L
         private const val UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36"
         private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -188,10 +191,26 @@ class FormatParser(private val context: Context? = null) {
             }
         }
 
+        // Nothing Instagram related is allowed to throw out of here: an escaping
+        // exception kills the coroutine that owns the fetch, which is what leaves
+        // the screen sitting on "parsing" with no result and no error at all.
+        var instagramDiagnostic = "not tried"
+        var instagramScrape: InstagramImageScraper.ScrapeResult? = null
         if (isInstaCarousel && context != null) {
-            val scraper = InstagramImageScraper(context)
-            val scraped = scraper.scrapeDetailed(url)
-            if (scraped.mediaCount > 0) {
+            instagramScrape = runCatching {
+                withTimeoutOrNull(INSTAGRAM_SCRAPE_BUDGET_MS) {
+                    InstagramImageScraper(context).scrapeDetailed(url)
+                }
+            }.onFailure {
+                Log.w(TAG, "Instagram scrape failed", it)
+            }.getOrNull()
+            val scraped = instagramScrape
+            if (scraped != null) {
+                instagramDiagnostic = scraped.sources.joinToString(" ").ifBlank { "no endpoints answered" }
+            } else {
+                instagramDiagnostic = "scraper gave up (timeout or error)"
+            }
+            if (scraped != null && scraped.mediaCount > 0) {
                 Log.i(TAG, "Scraper found ${scraped.imageUrls.size} photo(s) and " +
                     "${scraped.videoUrls.size} video(s) for Instagram carousel")
                 val info = createImageGalleryInfo(
@@ -207,7 +226,7 @@ class FormatParser(private val context: Context? = null) {
                 videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
                 return@withContext Result.success(info)
             }
-            Log.i(TAG, "Scraper returned empty, falling back to yt-dlp")
+            Log.i(TAG, "Scraper returned empty ($instagramDiagnostic), falling back to yt-dlp")
         }
 
         // Pre-flight: ensure yt-dlp binary is responsive before first attempt
@@ -308,9 +327,20 @@ class FormatParser(private val context: Context? = null) {
                     responseType == "playlist" && isInstaPost && context != null
                 ) {
                     try {
-                        val scraper = InstagramImageScraper(context)
-                        val scraped = scraper.scrapeDetailed(url)
-                        if (scraped.mediaCount > 0) {
+                        val scraped = instagramScrape
+                            ?: runCatching {
+                                withTimeoutOrNull(INSTAGRAM_SCRAPE_BUDGET_MS) {
+                                    InstagramImageScraper(context).scrapeDetailed(url)
+                                }
+                            }.getOrNull().also { instagramScrape = it }
+                        if (instagramDiagnostic == "not tried") {
+                            instagramDiagnostic = if (scraped == null) {
+                                "scraper gave up (timeout or error)"
+                            } else {
+                                scraped.sources.joinToString(" ").ifBlank { "no endpoints answered" }
+                            }
+                        }
+                        if (scraped != null && scraped.mediaCount > 0) {
                             carouselImages = scraped.imageUrls
                             carouselVideos = scraped.videoUrls
                             carouselExpected = scraped.expectedCount
@@ -337,11 +367,16 @@ class FormatParser(private val context: Context? = null) {
 
                 if (isCarousel && !hasSlides) {
                     // Nothing to choose from: the picker would open empty and the
-                    // download button would never appear. Say so instead, so the
-                    // post can be retried rather than looking like a dead end.
-                    Log.w(TAG, "Instagram post exposed no readable slides: $url")
-                    val message = context?.getString(R.string.error_instagram_no_slides)
-                        ?: "Instagram returned no readable slides for this post"
+                    // download button would never appear. Say so, and carry the
+                    // per-endpoint counts with it so a report can be acted on.
+                    val ytSummary = "yt-dlp: $responseType/" +
+                        "${rawJson.optJSONArray("entries")?.length() ?: 0} entries/" +
+                        "${formats.size} formats"
+                    Log.w(TAG, "Instagram post exposed no readable slides: $url | " +
+                        "$instagramDiagnostic | $ytSummary")
+                    val detail = "$instagramDiagnostic · $ytSummary"
+                    val message = context?.getString(R.string.error_instagram_no_slides, detail)
+                        ?: "Instagram returned no readable slides for this post ($detail)"
                     return@withContext Result.failure(IllegalStateException(message))
                 }
                 val isPlaylist = responseType == "playlist" || isCarousel ||
@@ -382,9 +417,13 @@ class FormatParser(private val context: Context? = null) {
                         e.message?.contains("No video formats found") == true
                 if (isInstaNoVideo && context != null) {
                     try {
-                        val scraper = InstagramImageScraper(context)
-                        val scraped = scraper.scrapeDetailed(url)
-                        if (scraped.mediaCount > 0) {
+                        val scraped = instagramScrape
+                            ?: runCatching {
+                                withTimeoutOrNull(INSTAGRAM_SCRAPE_BUDGET_MS) {
+                                    InstagramImageScraper(context).scrapeDetailed(url)
+                                }
+                            }.getOrNull().also { instagramScrape = it }
+                        if (scraped != null && scraped.mediaCount > 0) {
                             Log.i(TAG, "Scraper found ${scraped.imageUrls.size} photo(s) and " +
                                 "${scraped.videoUrls.size} video(s) for Instagram carousel (engine fallback)")
                             val info = createImageGalleryInfo(

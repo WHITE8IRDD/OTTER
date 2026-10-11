@@ -29,6 +29,8 @@ object InstagramMediaParser {
     /** Instagram refuses to render more than 20 slides in one post. */
     private const val MAX_SLIDES = 20
     private const val MAX_URLS = 40
+    /** A post page carries payloads for suggested posts too; only the first few matter. */
+    private const val MAX_JSON_BLOBS = 12
 
     private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "avif", "gif")
     private val videoExtensions = setOf("mp4", "m4v", "mov", "webm")
@@ -568,14 +570,24 @@ object InstagramMediaParser {
         )
     }
 
+    /**
+     * The JSON payloads of a post page. A page carries payloads for suggested posts
+     * too, so this stops after a few: parsing the rest costs memory and time and
+     * only ever contributed other posts' media.
+     */
     private fun jsonBlobs(html: String): List<String> {
         val blobs = mutableListOf<String>()
-        for (match in scriptJson.findAll(html)) {
-            val body = match.groupValues[1].trim()
-            if (body.length > 20) blobs.add(body)
+        var budget = 1_200_000
+        fun take(body: String) {
+            val trimmed = body.trim()
+            if (trimmed.length > 40 && trimmed.length <= budget && blobs.size < MAX_JSON_BLOBS) {
+                blobs.add(trimmed)
+                budget -= trimmed.length
+            }
         }
-        for (match in sharedDataJs.findAll(html)) blobs.add(match.groupValues[1])
-        for (match in additionalDataJs.findAll(html)) blobs.add(match.groupValues[1])
+        for (match in scriptJson.findAll(html)) take(match.groupValues[1])
+        for (match in sharedDataJs.findAll(html)) take(match.groupValues[1])
+        for (match in additionalDataJs.findAll(html)) take(match.groupValues[1])
         return blobs
     }
 
