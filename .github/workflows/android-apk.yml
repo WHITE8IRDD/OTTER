@@ -40,16 +40,29 @@ jobs:
         run: |
           python3 - <<'PY'
           import re
+          import xml.etree.ElementTree as ET
           from pathlib import Path
 
           log = Path("build.log")
           if log.exists():
               lines = log.read_text(errors="replace").splitlines()
               marker = re.compile(r"(?i)(FAILURE:|what went wrong:|execution failed for task|could not (find|resolve)|no matching variant|^e:|error:|failed to)")
-              selected = []
+              log_details = []
               for index, line in enumerate(lines):
                   if marker.search(line):
-                      selected.extend(lines[max(0, index - 1):min(len(lines), index + 5)])
+                      log_details.extend(lines[max(0, index - 1):min(len(lines), index + 5)])
+              test_details = []
+              for report in Path("app/build/test-results/testDebugUnitTest").glob("TEST-*.xml"):
+                  try:
+                      root = ET.parse(report).getroot()
+                      for testcase in root.iter("testcase"):
+                          for failure in list(testcase.findall("failure")) + list(testcase.findall("error")):
+                              test_details.append(f"FAILED {testcase.attrib.get('classname', '')}.{testcase.attrib.get('name', '')}: {failure.attrib.get('message', '')}")
+                              if failure.text:
+                                  test_details.extend(failure.text.splitlines()[:12])
+                  except ET.ParseError:
+                      pass
+              selected = test_details + log_details
               if not selected:
                   selected = lines[-20:]
               details = "\n".join(dict.fromkeys(selected))[:3000]
