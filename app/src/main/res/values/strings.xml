@@ -350,4 +350,5 @@
     <!-- Mascot System -->
     <string name="fetching_message">Finding your media…</string>
     <string name="media_saved_none">Nothing could be saved from those slides.</string>
+    <string name="error_instagram_no_slides">Instagram didn't return any readable slides for this post. Public posts work without signing in — try again, or check that the post is public.</string>
 </resources>

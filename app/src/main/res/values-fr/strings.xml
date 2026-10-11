@@ -349,4 +349,5 @@
     <string name="btn_copy_all">TOUT COPIER</string>
     <string name="history_copied_all">Titre, description et hashtags copiés</string>
     <string name="media_saved_none">Rien n\'a pu être enregistré depuis ces diapositives.</string>
+    <string name="error_instagram_no_slides">Instagram n\'a renvoyé aucune diapositive lisible pour cette publication. Les publications publiques fonctionnent sans connexion : réessayez ou vérifiez que la publication est publique.</string>
 </resources>

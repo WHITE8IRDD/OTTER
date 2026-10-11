@@ -1,6 +1,7 @@
 package com.otter.app.engine
 
 import android.content.Context
+import com.otter.app.R
 import android.util.Log
 import com.otter.app.data.model.AudioTrack
 import com.otter.app.data.model.SubtitleTrack
@@ -333,6 +334,16 @@ class FormatParser(private val context: Context? = null) {
                 val hasSlides = carouselImages.isNotEmpty() || carouselVideos.isNotEmpty()
                 val isCarousel = hasSlides ||
                         (responseType == "playlist" && isInstaPost && formats.isEmpty())
+
+                if (isCarousel && !hasSlides) {
+                    // Nothing to choose from: the picker would open empty and the
+                    // download button would never appear. Say so instead, so the
+                    // post can be retried rather than looking like a dead end.
+                    Log.w(TAG, "Instagram post exposed no readable slides: $url")
+                    val message = context?.getString(R.string.error_instagram_no_slides)
+                        ?: "Instagram returned no readable slides for this post"
+                    return@withContext Result.failure(IllegalStateException(message))
+                }
                 val isPlaylist = responseType == "playlist" || isCarousel ||
                         (videoInfo.extractor?.lowercase()?.contains("playlist") == true) ||
                         (videoInfo.extractorKey?.lowercase()?.contains("playlist") == true) ||

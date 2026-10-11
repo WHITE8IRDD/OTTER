@@ -295,9 +295,11 @@ class InstagramImageScraper(private val context: Context) {
             if (api != null) absorb(InstagramMediaParser.parseJson(api), "web-api")
         }
 
-        // 4-5. Embed page and the legacy `?__a=1` JSON, only if the post is still
-        // not fully read.
-        if (!complete() && budgetLeft()) {
+        // 4-5. Embed page and the legacy `?__a=1` JSON. Merging costs one more
+        // parallel round and is worth it whenever the first round left the post
+        // unfinished or found a single slide: Instagram regularly splits a post
+        // across several payloads.
+        if ((!complete() || total() < 2) && budgetLeft()) {
             var embed: String? = null
             var legacy: String? = null
             coroutineScope {
