@@ -22,8 +22,8 @@ android {
         applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "2.2.4"
+        versionCode = 13
+        versionName = "26.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -32,7 +32,7 @@ android {
             isEnable = true
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = false
+            isUniversalApk = true
         }
     }
 
@@ -80,10 +80,10 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    // yt-dlp engine
-    implementation("io.github.junkfood02.youtubedl-android:library:0.17.3")
-    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.17.3")
-    implementation("io.github.junkfood02.youtubedl-android:aria2c:0.17.3")
+    // Updated Android wrapper: newer yt-dlp bundle + QuickJS runtime for current YouTube extraction.
+    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
+    implementation("io.github.junkfood02.youtubedl-android:aria2c:0.18.1")
 
     // Core / lifecycle
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")

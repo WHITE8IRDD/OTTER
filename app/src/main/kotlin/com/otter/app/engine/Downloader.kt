@@ -79,30 +79,33 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         private val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
         private fun detectPlatform(url: String): Platform {
-            val lower = url.lowercase()
+            fun matches(vararg domains: String) = domains.any { MediaUrlNormalizer.hostMatches(url, it) }
             return when {
-                lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("m.youtube.com") -> Platform.YOUTUBE
-                lower.contains("tiktok.com") || lower.contains("vm.tiktok.com") || lower.contains("vt.tiktok.com") -> Platform.TIKTOK
-                lower.contains("facebook.com") || lower.contains("fb.watch") || lower.contains("m.facebook.com") || lower.contains("fb.com") -> Platform.FACEBOOK
-                lower.contains("instagram.com") || lower.contains("instagr.am") -> Platform.INSTAGRAM
-                lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("t.co") -> Platform.TWITTER
-                lower.contains("reddit.com") || lower.contains("redd.it") || lower.contains("v.redd.it") -> Platform.REDDIT
-                lower.contains("twitch.tv") -> Platform.TWITCH
-                lower.contains("vimeo.com") -> Platform.VIMEO
-                lower.contains("bilibili.com") -> Platform.BILIBILI
-                lower.contains("dailymotion.com") || lower.contains("dai.ly") -> Platform.DAILYMOTION
-                lower.contains("pinterest.com") || lower.contains("pin.it") -> Platform.PINTEREST
-                lower.contains("streamable.com") -> Platform.STREAMABLE
-                lower.contains("bandcamp.com") -> Platform.BANDCAMP
-                lower.contains("soundcloud.com") -> Platform.SOUNDCLOUD
-                lower.contains("snapchat.com") -> Platform.SNAPCHAT
+                matches("youtube.com", "youtu.be", "youtube-nocookie.com") -> Platform.YOUTUBE
+                matches("tiktok.com") -> Platform.TIKTOK
+                matches("facebook.com", "fb.watch", "fb.com") -> Platform.FACEBOOK
+                matches("instagram.com", "instagr.am") -> Platform.INSTAGRAM
+                matches("twitter.com", "x.com", "t.co") -> Platform.TWITTER
+                matches("reddit.com", "redd.it") -> Platform.REDDIT
+                matches("twitch.tv") -> Platform.TWITCH
+                matches("vimeo.com") -> Platform.VIMEO
+                matches("bilibili.com") -> Platform.BILIBILI
+                matches("dailymotion.com", "dai.ly") -> Platform.DAILYMOTION
+                matches("pinterest.com", "pin.it") -> Platform.PINTEREST
+                matches("streamable.com") -> Platform.STREAMABLE
+                matches("bandcamp.com") -> Platform.BANDCAMP
+                matches("soundcloud.com") -> Platform.SOUNDCLOUD
+                matches("snapchat.com") -> Platform.SNAPCHAT
                 else -> Platform.UNKNOWN
             }
         }
 
         private fun isLiveStream(url: String): Boolean {
-            val lower = url.lowercase()
-            return lower.contains("/live/") || lower.contains("youtube.com/live") || lower.contains("youtu.be/live")
+            val parsed = runCatching { URL(url) }.getOrNull() ?: return false
+            val isYouTube = MediaUrlNormalizer.hostMatches(url, "youtube.com") ||
+                MediaUrlNormalizer.hostMatches(url, "youtu.be")
+            val path = parsed.path.lowercase()
+            return isYouTube && (path == "/live" || path.startsWith("/live/"))
         }
 
         private fun concurrentFragments(platform: Platform, isLive: Boolean): Int {
@@ -167,10 +170,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     request.addOption("--add-header", "Referer:https://www.snapchat.com")
                 }
                 Platform.YOUTUBE -> {
-                    if (!isLive) {
-                        request.addOption("--user-agent", DL_UA)
-                    }
-                    request.addOption("--extractor-retries", "3")
+                    // Let yt-dlp use its current client headers (important for Shorts and EJS challenges).
+                    request.addOption("--extractor-retries", "5")
                 }
                 else -> {}
             }
@@ -472,7 +473,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
 
-                val request = YoutubeDLRequest(url).apply {
+                val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this)
                     addOption("-f", localFormatId)
                     addOption("-P", workingDir.absolutePath)
@@ -604,7 +605,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 throw IOException("Failed to create output directory: $outputDir")
             }
 
-            val request = YoutubeDLRequest(url).apply {
+            val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                 addCookies(this)
                 addOption("--skip-download")
                 addOption("--write-thumbnail")
@@ -680,7 +681,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
 
-                val request = YoutubeDLRequest(url).apply {
+                val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this)
                     addOption("--no-mtime")
                     addOption("-f", localFormatId)
@@ -820,7 +821,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             val outputFile = File(outputDir)
             if (!outputFile.exists()) outputFile.mkdirs()
 
-            val request = YoutubeDLRequest(url).apply {
+            val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                 addCookies(this)
                 addOption("-f", formatId)
                 addOption("--merge-output-format", "mp4")
@@ -891,103 +892,228 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         imageUrls: List<String>,
         baseName: String,
         outputDir: String,
-        onProgress: (DownloadState) -> Unit
-    ) = withContext(Dispatchers.IO) {
-        val outputFile = File(outputDir)
-        if (!outputFile.exists() && !outputFile.mkdirs()) {
+        onProgress: (DownloadState) -> Unit,
+        refererUrl: String? = null
+    ): ImageDownloadSummary = withContext(Dispatchers.IO) {
+        val urls = imageUrls.filter { it.isNotBlank() }.distinct()
+        if (urls.isEmpty()) {
+            onProgress(DownloadState.Error(context.getString(R.string.failed_all_images)))
+            return@withContext ImageDownloadSummary(emptyList(), 0)
+        }
+
+        val directory = File(outputDir)
+        if (!directory.exists() && !directory.mkdirs()) {
             onProgress(DownloadState.Error(context.getString(R.string.creating_output_dir_failed)))
-            return@withContext
+            return@withContext ImageDownloadSummary(emptyList(), urls.size)
         }
 
-        val safeBase = baseName.replace(Regex("""[<>:"/\\|?*]"""), "_").take(100)
-        val total = imageUrls.size
-        val savedPaths = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-        val savedCount = java.util.concurrent.atomic.AtomicInteger(0)
-        val errors = java.util.concurrent.atomic.AtomicInteger(0)
+        val safeBase = baseName
+            .replace(Regex("""[<>:"/\\|?*]"""), "_")
+            .trim('.', ' ')
+            .take(80)
+            .ifBlank { "Otter media" }
+        val savedByIndex = ConcurrentHashMap<Int, String>()
+        val failedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val semaphore = Semaphore(minOf(4, urls.size))
 
-        // Pre-resolve all hostnames in parallel (one-shot DNS prewarm) before opening sockets
-        runCatching {
-            val hosts = imageUrls.mapNotNull { runCatching { URL(it).host }.getOrNull() }.distinct()
-            hosts.map { host ->
-                async(Dispatchers.IO) {
-                    runCatching { java.net.InetAddress.getAllByName(host) }
-                }
-            }.awaitAll()
-        }
-
-        // Pre-open N connections in parallel for max throughput
-        val concurrency = minOf(6, total)
-        val semaphore = Semaphore(concurrency)
-
-        val jobs = imageUrls.mapIndexed { index, imageUrl ->
+        urls.mapIndexed { index, imageUrl ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                try {
-                    val fileName = "${safeBase}_${index + 1}.jpg"
-                    val destFile = File(outputDir, fileName)
-
-                    val url = URL(imageUrl)
-                    val connection = (url.openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 8_000
-                        readTimeout = 20_000
-                        instanceFollowRedirects = true
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
-                        setRequestProperty("Accept", "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8")
-                        setRequestProperty("Accept-Encoding", "identity")
-                        setRequestProperty("Connection", "keep-alive")
-                        setRequestProperty("Cache-Control", "no-cache")
-                        useCaches = false
-                        try {
-                            setFixedLengthStreamingMode(-1)
-                        } catch (e: Exception) {
-                            Log.d(TAG, "setFixedLengthStreamingMode not supported: ${e.message}")
-                        }
-                        connect()
-
-                        if (responseCode !in 200..299) {
-                            throw IOException("HTTP $responseCode")
-                        }
-
-                        val contentLength = contentLengthLong.takeIf { it > 0 } ?: 0L
-                        inputStream.use { input ->
-                            FileOutputStream(destFile).use { output ->
-                                val buf = ByteArray(262_144)
-                                var copied = 0L
-                                var lastReport = 0L
-                                while (true) {
-                                    val n = input.read(buf)
-                                    if (n <= 0) break
-                                    output.write(buf, 0, n)
-                                    copied += n
-                                }
-                            }
-                        }
+                    try {
+                        val path = downloadSingleImage(
+                            imageUrl = imageUrl,
+                            index = index,
+                            baseName = safeBase,
+                            outputDir = directory,
+                            refererUrl = refererUrl
+                        )
+                        savedByIndex[index] = path
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Image ${index + 1}/${urls.size} failed: ${e.message}")
+                        failedCount.incrementAndGet()
+                    } finally {
+                        val completed = completedCount.incrementAndGet()
+                        onProgress(
+                            DownloadState.Downloading(
+                                progress = completed.toFloat() / urls.size.toFloat(),
+                                phase = DownloadPhase.DOWNLOADING
+                            )
+                        )
                     }
-                    connection.disconnect()
-
-                    com.otter.app.util.FileHelper.scanFile(context, destFile.absolutePath)
-                    savedPaths.add(destFile.absolutePath)
-                    val done = savedCount.incrementAndGet()
-
-                    val progress = done.toFloat() / total.toFloat()
-                    onProgress(DownloadState.Downloading(progress, phase = DownloadPhase.DOWNLOADING))
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to download image $index: $imageUrl", e)
-                    errors.incrementAndGet()
-                }
                 }
             }
-        }
-        awaitAll(*jobs.toTypedArray())
+        }.awaitAll()
 
+        val savedPaths = savedByIndex.toSortedMap().values.toList()
+        val summary = ImageDownloadSummary(savedPaths = savedPaths, failedCount = failedCount.get())
         if (savedPaths.isEmpty()) {
             onProgress(DownloadState.Error(context.getString(R.string.failed_all_images)))
-        } else if (savedPaths.size == 1) {
-            onProgress(DownloadState.Success(savedPaths.first()))
         } else {
-            onProgress(DownloadState.Success(savedPaths.sorted().joinToString("\n")))
+            onProgress(DownloadState.Success(savedPaths.joinToString("\n")))
         }
+        summary
     }
+
+    private suspend fun downloadSingleImage(
+        imageUrl: String,
+        index: Int,
+        baseName: String,
+        outputDir: File,
+        refererUrl: String?
+    ): String {
+        val sourceUrl = URL(imageUrl)
+        if (sourceUrl.protocol != "http" && sourceUrl.protocol != "https") {
+            throw IOException("Unsupported image URL scheme")
+        }
+        val referer = refererUrl?.let { runCatching { URL(it) }.getOrNull() }
+            ?.takeIf { it.protocol == "http" || it.protocol == "https" }
+            ?.toExternalForm()
+
+        for (attempt in 1..3) {
+            val partialFile = File(outputDir, ".otter_${java.util.UUID.randomUUID()}.part")
+            var connection: HttpURLConnection? = null
+            try {
+                val httpConnection = sourceUrl.openConnection() as? HttpURLConnection
+                    ?: throw IOException("Unsupported image connection")
+                connection = httpConnection
+                httpConnection.connectTimeout = 10_000
+                httpConnection.readTimeout = 25_000
+                httpConnection.instanceFollowRedirects = true
+                httpConnection.requestMethod = "GET"
+                httpConnection.setRequestProperty("User-Agent", DL_UA)
+                httpConnection.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/jpeg,image/gif,image/*;q=0.9,*/*;q=0.5")
+                httpConnection.setRequestProperty("Accept-Encoding", "identity")
+                httpConnection.setRequestProperty("Connection", "keep-alive")
+                referer?.let { httpConnection.setRequestProperty("Referer", it) }
+
+                val status = httpConnection.responseCode
+                if (status !in 200..299) throw ImageHttpException(status)
+                val contentType = httpConnection.contentType?.substringBefore(';')
+                    ?.trim()?.lowercase(java.util.Locale.ROOT).orEmpty()
+
+                httpConnection.inputStream.use { input ->
+                    FileOutputStream(partialFile).use { output ->
+                        val buffer = ByteArray(65_536)
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            if (count == 0) continue
+                            output.write(buffer, 0, count)
+                        }
+                        output.flush()
+                    }
+                }
+
+                if (partialFile.length() == 0L || !isLikelyImageFile(partialFile, contentType, imageUrl)) {
+                    throw IOException("The server response was not an image")
+                }
+
+                val extension = imageExtension(contentType, imageUrl, partialFile)
+                val destination = saveImageWithUniqueName(partialFile, outputDir, baseName, index, extension)
+                com.otter.app.util.FileHelper.scanFile(context, destination.absolutePath)
+                return destination.absolutePath
+            } catch (e: CancellationException) {
+                partialFile.delete()
+                throw e
+            } catch (e: Exception) {
+                partialFile.delete()
+                if (attempt >= 3 || !isRetryableImageError(e)) throw e
+                delay(500L * attempt)
+            } finally {
+                connection?.disconnect()
+            }
+        }
+        throw IOException("Image download failed")
+    }
+
+    private fun isRetryableImageError(error: Exception): Boolean {
+        if (error is ImageHttpException) return error.statusCode == 429 || error.statusCode >= 500
+        val message = error.message.orEmpty()
+        return listOf("timeout", "timed out", "connection reset", "connection refused", "network", "unexpected end", "eof")
+            .any { message.contains(it, ignoreCase = true) } ||
+            error is java.net.SocketTimeoutException ||
+            error is java.net.UnknownHostException ||
+            error is java.io.EOFException
+    }
+
+    private fun isLikelyImageFile(file: File, contentType: String, sourceUrl: String): Boolean {
+        if (sniffImageExtension(file) != null) return true
+        if (contentType.startsWith("image/")) return true
+        if (contentType.contains("html") || contentType.contains("json") || contentType.startsWith("text/")) return false
+        return MediaUrlNormalizer.isDirectImageUrl(sourceUrl) &&
+            (contentType.isBlank() || contentType == "application/octet-stream" || contentType == "binary/octet-stream")
+    }
+
+    private fun imageExtension(contentType: String, sourceUrl: String, file: File): String {
+        val mimeExtension = when (contentType.substringBefore(';').lowercase(java.util.Locale.ROOT)) {
+            "image/jpeg", "image/jpg", "image/pjpeg" -> "jpg"
+            "image/png", "image/x-png" -> "png"
+            "image/webp" -> "webp"
+            "image/gif" -> "gif"
+            "image/avif" -> "avif"
+            "image/bmp", "image/x-ms-bmp" -> "bmp"
+            "image/tiff" -> "tif"
+            "image/svg+xml" -> "svg"
+            else -> null
+        }
+        return mimeExtension
+            ?: sniffImageExtension(file)
+            ?: MediaUrlNormalizer.imageExtensionFromUrl(sourceUrl)?.let {
+                if (it == "jpeg") "jpg" else it
+            }
+            ?: "jpg"
+    }
+
+    private fun sniffImageExtension(file: File): String? {
+        return runCatching {
+            val header = ByteArray(16)
+            val count = file.inputStream().use { it.read(header) }
+            if (count >= 3 && header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() && header[2] == 0xFF.toByte()) return@runCatching "jpg"
+            if (count >= 8 && header.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))) return@runCatching "png"
+            if (count >= 6 && String(header, 0, 6, Charsets.US_ASCII).startsWith("GIF8")) return@runCatching "gif"
+            if (count >= 12 && String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "WEBP") return@runCatching "webp"
+            if (count >= 2 && String(header, 0, 2, Charsets.US_ASCII) == "BM") return@runCatching "bmp"
+            if (count >= 4 && (
+                    (header[0] == 'I'.code.toByte() && header[1] == 'I'.code.toByte() && header[2] == '*'.code.toByte() && header[3] == 0.toByte()) ||
+                    (header[0] == 'M'.code.toByte() && header[1] == 'M'.code.toByte() && header[2] == 0.toByte() && header[3] == '*'.code.toByte())
+                )) return@runCatching "tif"
+            val prefix = String(header, 0, count.coerceAtLeast(0), Charsets.UTF_8).trimStart()
+            if (prefix.startsWith("<svg", ignoreCase = true) || prefix.startsWith("<?xml", ignoreCase = true)) return@runCatching "svg"
+            null
+        }.getOrNull()
+    }
+
+    private fun saveImageWithUniqueName(
+        partialFile: File,
+        outputDir: File,
+        baseName: String,
+        index: Int,
+        extension: String
+    ): File {
+        var suffix = 0
+        while (suffix < 10_000) {
+            val disambiguator = if (suffix == 0) "" else " ($suffix)"
+            val destination = File(outputDir, "${baseName}_${index + 1}$disambiguator.$extension")
+            if (!destination.createNewFile()) {
+                suffix++
+                continue
+            }
+            try {
+                partialFile.copyTo(destination, overwrite = true)
+                partialFile.delete()
+                return destination
+            } catch (e: Exception) {
+                destination.delete()
+                throw e
+            }
+        }
+        throw IOException("Could not create a unique image filename")
+    }
+
+    private class ImageHttpException(val statusCode: Int) : IOException("HTTP $statusCode")
 
     fun pauseDownload(url: String): ActiveDownload? {
         Log.i(TAG, "pauseDownload: called for url=$url")

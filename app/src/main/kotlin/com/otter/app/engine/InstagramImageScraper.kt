@@ -189,7 +189,7 @@ class InstagramImageScraper(private val context: Context) {
                     ?.optJSONObject("graphql")?.optJSONObject("shortcode_media")
                 if (postPage != null) {
                     val mainUrl = postPage.optString("display_url", "")
-                    if (mainUrl.contains("scontent")) images.add(cleanUrl(mainUrl))
+                    if (isValidImageUrl(mainUrl)) images.add(cleanUrl(mainUrl))
                     val children = postPage.optJSONObject("edge_sidecar_to_children")
                         ?.optJSONArray("edges")
                     if (children != null) {
@@ -197,7 +197,7 @@ class InstagramImageScraper(private val context: Context) {
                             val url = children.optJSONObject(i)
                                 ?.optJSONObject("node")
                                 ?.optString("display_url", "")
-                            if (!url.isNullOrEmpty() && url.contains("scontent")) images.add(cleanUrl(url))
+                            if (!url.isNullOrEmpty() && isValidImageUrl(url)) images.add(cleanUrl(url))
                         }
                     }
                 }
@@ -206,10 +206,10 @@ class InstagramImageScraper(private val context: Context) {
             }
         }
         if (images.size < 2) {
-            val scontentPattern = """https?://scontent[^"'\s<>]+\.(?:jpg|jpeg|png|webp)""".toRegex(RegexOption.IGNORE_CASE)
-            scontentPattern.findAll(html).forEach { match ->
+            val mediaUrlPattern = Regex("https?://(?:scontent|cdninstagram)[^\"'\\s<>]+", RegexOption.IGNORE_CASE)
+            mediaUrlPattern.findAll(html).forEach { match ->
                 val url = cleanUrl(match.value)
-                if (url.contains("scontent") && !url.contains("/rsrc.php") && !url.contains("/v/t51.2885-19/") && !url.contains("profile_pic")) {
+                if (isValidImageUrl(url)) {
                     images.add(url)
                 }
             }
@@ -218,7 +218,7 @@ class InstagramImageScraper(private val context: Context) {
             val metaPattern = """<meta\s+property="og:image"\s+content="([^"]+)"""".toRegex()
             metaPattern.find(html)?.let {
                 val url = cleanUrl(it.groupValues[1])
-                if (url.contains("scontent")) images.add(url)
+                if (isValidImageUrl(url)) images.add(url)
             }
         }
         return images.toList().distinct()
@@ -374,12 +374,12 @@ class InstagramImageScraper(private val context: Context) {
                             val node = children.optJSONObject(i)?.optJSONObject("node")
                             if (node != null) {
                                 val u = node.optString("display_url", "")
-                                if (u.isNotEmpty() && u.contains("scontent")) urls.add(cleanUrl(u))
+                                if (isValidImageUrl(u)) urls.add(cleanUrl(u))
                             }
                         }
                     } else {
                         val u = media.optString("display_url", "")
-                        if (u.isNotEmpty() && u.contains("scontent")) urls.add(cleanUrl(u))
+                        if (isValidImageUrl(u)) urls.add(cleanUrl(u))
                     }
                 }
             }
@@ -387,7 +387,7 @@ class InstagramImageScraper(private val context: Context) {
             Log.w(TAG, "?__a=1 parse failed: ${e.message}")
         }
         Log.i(TAG, "?__a=1 parsed ${urls.size} URLs: ${urls.take(5)}")
-        return urls.filter { it.contains("scontent") && !it.contains("/rsrc.php") }
+        return urls.filter { isValidImageUrl(it) && !it.contains("/rsrc.php") }.distinct()
     }
 
     private fun parseApiResponse(json: String): List<String> {
@@ -403,15 +403,20 @@ class InstagramImageScraper(private val context: Context) {
             Log.w(TAG, "API parse failed: ${e.message}")
         }
         Log.i(TAG, "API parsed ${urls.size} URLs: ${urls.take(5)}")
-        return urls.filter { isValidImageUrl(it) }
+        return urls.filter { isValidImageUrl(it) }.distinct()
     }
 
+    private fun isInstagramCdnUrl(url: String): Boolean =
+        MediaUrlNormalizer.hostMatches(url, "cdninstagram.com") ||
+            MediaUrlNormalizer.hostMatches(url, "fbcdn.net")
     private fun isValidImageUrl(url: String): Boolean {
         if (url.isEmpty()) return false
         val u = url.lowercase()
         if (u.contains("/rsrc.php") || u.contains("/v/t51.2885-19/") || u.contains("profile_pic")) return false
-        if (!(u.contains("scontent") || u.contains("fbcdn.net") || u.contains("cdninstagram"))) return false
-        if (!(u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") || u.endsWith(".webp") || u.contains(".jpg?") || u.contains(".webp?"))) return false
+        if (!isInstagramCdnUrl(url)) return false
+        val path = runCatching { URL(url).path.lowercase() }.getOrDefault("")
+        val extension = path.substringAfterLast(".", "")
+        if (extension !in setOf("jpg", "jpeg", "png", "webp", "avif", "gif")) return false
         return true
     }
 
@@ -624,7 +629,8 @@ class InstagramImageScraper(private val context: Context) {
     }
 
     private fun cleanUrl(url: String): String {
-        return url.replace("\\u0026", "&").replace("\\/", "/").replace("\\\\", "").trim().split("?")[0]
+        val normalized = url.replace("\\u0026", "&").replace("\\/", "/").replace("\\\\", "").trim()
+        return runCatching { URL(normalized).toExternalForm().substringBefore('#') }.getOrDefault(normalized)
     }
 
     fun canExtract(url: String): Boolean {

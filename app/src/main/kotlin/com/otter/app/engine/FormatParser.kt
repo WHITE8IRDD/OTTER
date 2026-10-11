@@ -32,77 +32,46 @@ class FormatParser(private val context: Context? = null) {
         val engineReady = MutableStateFlow(false)
 
         private fun applyPlatformArgs(request: YoutubeDLRequest, url: String) {
-            val lower = url.lowercase()
+            fun hostMatches(vararg domains: String) = domains.any { MediaUrlNormalizer.hostMatches(url, it) }
 
-            // Common: add user-agent for all platforms except YouTube (handled natively)
-            val needsUA = listOf(
+            val needsUA = hostMatches(
                 "twitter.com", "x.com", "t.co",
-                "reddit.com", "redd.it", "v.redd.it",
-                "twitch.tv",
-                "vimeo.com",
-                "soundcloud.com",
-                "bilibili.com",
-                "dailymotion.com", "dai.ly",
-                "pinterest.com", "pin.it",
-                "streamable.com",
-                "bandcamp.com",
-                "snapchat.com"
+                "reddit.com", "redd.it", "twitch.tv", "vimeo.com",
+                "soundcloud.com", "bilibili.com", "dailymotion.com", "dai.ly",
+                "pinterest.com", "pin.it", "streamable.com", "bandcamp.com", "snapchat.com"
             )
-            if (needsUA.any { lower.contains(it) }) {
-                request.addOption("--user-agent", UA)
-            }
+            if (needsUA) request.addOption("--user-agent", UA)
 
             when {
-                // Twitter/X
-                lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("t.co") -> {
+                hostMatches("twitter.com", "x.com", "t.co") -> {
                     request.addOption("--add-header", "Accept-Language:en-US,en;q=0.9")
                     request.addOption("--extractor-retries", "5")
                     Log.i(TAG, "[PLATFORM-FLAGS] Twitter/X detected, applying user-agent + en-US header + retry=5")
                 }
-                // Reddit
-                lower.contains("reddit.com") || lower.contains("redd.it") || lower.contains("v.redd.it") -> {
+                hostMatches("reddit.com", "redd.it") -> {
                     request.addOption("--user-agent", DESKTOP_UA)
                     Log.i(TAG, "[PLATFORM-FLAGS] Reddit detected, applying desktop user-agent")
                 }
-                // Twitch
-                lower.contains("twitch.tv") -> {
+                hostMatches("twitch.tv") -> {
                     request.addOption("--socket-timeout", "20")
                     Log.i(TAG, "[PLATFORM-FLAGS] Twitch detected, applying user-agent + socket-timeout=20")
                 }
-                // Vimeo
-                lower.contains("vimeo.com") -> {
+                hostMatches("vimeo.com") -> {
                     request.addOption("--add-header", "Referer:https://vimeo.com")
                     Log.i(TAG, "[PLATFORM-FLAGS] Vimeo detected, applying user-agent + referer")
                 }
-                // SoundCloud
-                lower.contains("soundcloud.com") -> {
-                    Log.i(TAG, "[PLATFORM-FLAGS] SoundCloud detected, applying user-agent")
-                }
-                // Bilibili
-                lower.contains("bilibili.com") -> {
+                hostMatches("soundcloud.com") -> Log.i(TAG, "[PLATFORM-FLAGS] SoundCloud detected, applying user-agent")
+                hostMatches("bilibili.com") -> {
                     request.addOption("--add-header", "Referer:https://www.bilibili.com")
                     request.addOption("--add-header", "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8")
                     request.addOption("--geo-bypass")
                     Log.i(TAG, "[PLATFORM-FLAGS] Bilibili detected, applying user-agent + referer + zh-CN + geo-bypass")
                 }
-                // Dailymotion
-                lower.contains("dailymotion.com") || lower.contains("dai.ly") -> {
-                    Log.i(TAG, "[PLATFORM-FLAGS] Dailymotion detected, applying user-agent")
-                }
-                // Pinterest
-                lower.contains("pinterest.com") || lower.contains("pin.it") -> {
-                    Log.i(TAG, "[PLATFORM-FLAGS] Pinterest detected, applying user-agent")
-                }
-                // Streamable
-                lower.contains("streamable.com") -> {
-                    Log.i(TAG, "[PLATFORM-FLAGS] Streamable detected, applying user-agent")
-                }
-                // Bandcamp
-                lower.contains("bandcamp.com") -> {
-                    Log.i(TAG, "[PLATFORM-FLAGS] Bandcamp detected, applying user-agent")
-                }
-                // Snapchat
-                lower.contains("snapchat.com") -> {
+                hostMatches("dailymotion.com", "dai.ly") -> Log.i(TAG, "[PLATFORM-FLAGS] Dailymotion detected, applying user-agent")
+                hostMatches("pinterest.com", "pin.it") -> Log.i(TAG, "[PLATFORM-FLAGS] Pinterest detected, applying user-agent")
+                hostMatches("streamable.com") -> Log.i(TAG, "[PLATFORM-FLAGS] Streamable detected, applying user-agent")
+                hostMatches("bandcamp.com") -> Log.i(TAG, "[PLATFORM-FLAGS] Bandcamp detected, applying user-agent")
+                hostMatches("snapchat.com") -> {
                     request.addOption("--add-header", "Referer:https://www.snapchat.com")
                     Log.i(TAG, "[PLATFORM-FLAGS] Snapchat detected, applying user-agent + referer")
                 }
@@ -125,7 +94,7 @@ class FormatParser(private val context: Context? = null) {
         }
 
         fun resolveTikTokShortUrl(url: String): String {
-            if (!url.contains("tiktok.com") && !url.contains("vm.tiktok.com") && !url.contains("vt.tiktok.com")) return url
+            if (!MediaUrlNormalizer.hostMatches(url, "tiktok.com")) return url
             val shortPattern = Regex("""https?://(vm|vt)\.tiktok\.com/\S+""", RegexOption.IGNORE_CASE)
             if (!shortPattern.matches(url.trim())) return url
             return try {
@@ -137,7 +106,7 @@ class FormatParser(private val context: Context? = null) {
                 conn.connect()
                 val location = conn.getHeaderField("Location")
                 conn.disconnect()
-                if (!location.isNullOrEmpty() && location.contains("tiktok.com")) location else url
+                if (!location.isNullOrEmpty() && MediaUrlNormalizer.hostMatches(location, "tiktok.com")) location else url
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to resolve TikTok short URL: ${e.message}")
                 url
@@ -194,8 +163,19 @@ class FormatParser(private val context: Context? = null) {
         onRetryStatus: ((Int, Int) -> Unit)? = null
     ): Result<VideoInfo> = withContext(Dispatchers.IO) {
         Log.i(TAG, "fetchVideoInfo START url=$url")
-        val resolvedUrl = resolveTikTokShortUrl(url)
-        val isInstaCarousel = resolvedUrl.contains("instagram.com/p/", ignoreCase = true)
+        val resolvedUrl = MediaUrlNormalizer.normalizeYouTubeShortsUrl(resolveTikTokShortUrl(url))
+        val isInstaCarousel = isInstagramPostUrl(resolvedUrl)
+
+        if (MediaUrlNormalizer.isDirectImageUrl(resolvedUrl)) {
+            val info = createImageGalleryInfo(
+                sourceUrl = url,
+                title = imageTitleFromUrl(resolvedUrl),
+                extractor = "Website images",
+                images = listOf(resolvedUrl)
+            )
+            videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
+            return@withContext Result.success(info)
+        }
 
         if (!isInstaCarousel) {
             videoInfoCache[url]?.let { cached ->
@@ -210,24 +190,11 @@ class FormatParser(private val context: Context? = null) {
             val scraped = scraper.scrape(url)
             if (scraped.isNotEmpty()) {
                 Log.i(TAG, "Scraper found ${scraped.size} images for Instagram carousel")
-                val info = VideoInfo(
-                    id = url.hashCode().toString(),
+                val info = createImageGalleryInfo(
+                    sourceUrl = url,
                     title = "Instagram Post",
-                    uploader = "",
-                    duration = 0L,
-                    thumbnailUrl = scraped.first(),
-                    originalUrl = url,
-                    formats = emptyList(),
-                    description = "",
                     extractor = "Instagram",
-                    isPlaylist = false,
-                    uploadDate = "",
-                    viewCount = 0L,
-                    likeCount = 0L,
-                    tags = emptyList(),
-                    hashtags = emptyList(),
-                    carouselImages = scraped,
-                    isCarousel = true
+                    images = scraped
                 )
                 videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
                 return@withContext Result.success(info)
@@ -254,11 +221,11 @@ class FormatParser(private val context: Context? = null) {
             onRetryStatus?.invoke(attempt, maxAttempts)
 
             try {
-                val targetUrl = if (url.contains("tiktok.com") || url.contains("vm.tiktok.com") || url.contains("vt.tiktok.com")) resolvedUrl else url
+                val targetUrl = resolvedUrl
                 val request = YoutubeDLRequest(targetUrl).apply {
                     addOption("--dump-json")
                     addOption("-o", OUTPUT_BASENAME)
-                    if (!url.contains("instagram.com")) {
+                    if (!isInstagramUrl(url)) {
                         addOption("--no-playlist")
                     }
                     addOption("--skip-download")
@@ -273,8 +240,9 @@ class FormatParser(private val context: Context? = null) {
 
                     // Progressive socket timeout per attempt
                     val baseTimeout = when {
-                        url.contains("instagram.com") -> 15
-                        url.contains("facebook.com") || url.contains("fb.watch") -> 15
+                        isInstagramUrl(url) -> 15
+                        MediaUrlNormalizer.hostMatches(url, "facebook.com") ||
+                            MediaUrlNormalizer.hostMatches(url, "fb.watch") -> 15
                         else -> 10
                     }
                     val socketTimeout = (baseTimeout + (attempt - 1) * 10).coerceAtMost(30)
@@ -305,6 +273,15 @@ class FormatParser(private val context: Context? = null) {
                 val playlistCount = rawJson.optInt("playlist_count", 0)
                 Log.i(TAG, "[FETCH] JSON parse took ${System.currentTimeMillis() - parseStart}ms")
 
+                val rawFormatCount = rawJson.optJSONArray("formats")?.length() ?: 0
+                if (rawFormatCount == 0 && !isKnownExtractorHost(url)) {
+                    val pageImages = discoverGenericPageImageInfo(url)
+                    if (pageImages != null) {
+                        videoInfoCache[url] = CachedInfo(pageImages, System.currentTimeMillis())
+                        return@withContext Result.success(pageImages)
+                    }
+                }
+
                 val formats = parseFormats(videoInfo)
                 val subtitleTracks = parseSubtitleTracks(ytResponse.out)
                 val audioTracks = parseAudioTracks(ytResponse.out)
@@ -313,8 +290,8 @@ class FormatParser(private val context: Context? = null) {
                 var carouselImages = extractCarouselImages(videoInfo, ytResponse.out, rawJson, url)
 
                 val responseType = rawJson.optString("_type", "")
-                val isInstaPost = url.contains("instagram.com", ignoreCase = true) &&
-                        !url.contains("/reel/", ignoreCase = true)
+                val isInstaPost = isInstagramUrl(url) &&
+                        !runCatching { URL(url).path.lowercase().contains("/reel/") }.getOrDefault(false)
 
                 if (carouselImages.isEmpty() && responseType == "playlist" && isInstaPost && context != null) {
                     try {
@@ -361,7 +338,7 @@ class FormatParser(private val context: Context? = null) {
                 Log.i(TAG, "fetchVideoInfo COMPLETE title=${info.title} formats=${info.formats.size} extractor=${info.extractor}")
                 return@withContext Result.success(info)
             } catch (e: Exception) {
-                val isInstaNoVideo = url.contains("instagram.com/p/", ignoreCase = true) &&
+                val isInstaNoVideo = isInstagramPostUrl(url) &&
                         e.message?.contains("No video formats found") == true
                 if (isInstaNoVideo && context != null) {
                     try {
@@ -369,30 +346,28 @@ class FormatParser(private val context: Context? = null) {
                         val scraped = scraper.scrape(url)
                         if (scraped.isNotEmpty()) {
                             Log.i(TAG, "Scraper found ${scraped.size} images for Instagram carousel (engine fallback)")
-                            val info = VideoInfo(
-                                id = url.hashCode().toString(),
+                            val info = createImageGalleryInfo(
+                                sourceUrl = url,
                                 title = "Instagram Post",
-                                uploader = "",
-                                duration = 0L,
-                                thumbnailUrl = scraped.first(),
-                                originalUrl = url,
-                                formats = emptyList(),
-                                description = "",
                                 extractor = "Instagram",
-                                isPlaylist = false,
-                                uploadDate = "",
-                                viewCount = 0L,
-                                likeCount = 0L,
-                                tags = emptyList(),
-                                hashtags = emptyList(),
-                                carouselImages = scraped,
-                                isCarousel = true
+                                images = scraped
                             )
                             videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
                             return@withContext Result.success(info)
                         }
                     } catch (scrapeErr: Exception) {
                         Log.w(TAG, "Instagram scraper also failed", scrapeErr)
+                    }
+                }
+                if (attempt == 1 && !isKnownExtractorHost(url)) {
+                    try {
+                        val pageImages = discoverGenericPageImageInfo(url)
+                        if (pageImages != null) {
+                            videoInfoCache[url] = CachedInfo(pageImages, System.currentTimeMillis())
+                            return@withContext Result.success(pageImages)
+                        }
+                    } catch (scrapeErr: Exception) {
+                        Log.w(TAG, "Generic page image fallback failed", scrapeErr)
                     }
                 }
                 lastError = e
@@ -404,6 +379,76 @@ class FormatParser(private val context: Context? = null) {
         Log.e(TAG, "All $maxAttempts attempts failed for $url", lastError)
         videoInfoCache.remove(url)
         Result.failure(lastError ?: Exception("Failed to fetch video info after $maxAttempts attempts"))
+    }
+
+    private fun isInstagramUrl(url: String): Boolean =
+        MediaUrlNormalizer.hostMatches(url, "instagram.com")
+
+    private fun isInstagramPostUrl(url: String): Boolean {
+        if (!isInstagramUrl(url)) return false
+        val path = runCatching { URL(url).path.lowercase() }.getOrNull() ?: return false
+        return path.contains("/p/") && !path.contains("/reel/")
+    }
+
+    private suspend fun discoverGenericPageImageInfo(url: String): VideoInfo? {
+        val appContext = context ?: return null
+        if (isKnownExtractorHost(url)) return null
+        val discovery = GenericPageMediaScraper(appContext).discoverImages(url) ?: return null
+        if (discovery.imageUrls.isEmpty()) return null
+        return createImageGalleryInfo(
+            sourceUrl = url,
+            title = discovery.title.ifBlank { "Website images" },
+            extractor = "Website images",
+            images = discovery.imageUrls
+        )
+    }
+
+    private fun createImageGalleryInfo(
+        sourceUrl: String,
+        title: String,
+        extractor: String,
+        images: List<String>
+    ): VideoInfo {
+        val imageUrls = images.filter { it.isNotBlank() }.distinct().take(40)
+        return VideoInfo(
+            id = sourceUrl.hashCode().toString(),
+            title = title.ifBlank { imageTitleFromUrl(sourceUrl) },
+            uploader = "",
+            duration = 0L,
+            thumbnailUrl = imageUrls.firstOrNull(),
+            originalUrl = sourceUrl,
+            formats = emptyList(),
+            description = "",
+            extractor = extractor,
+            isPlaylist = false,
+            carouselImages = imageUrls,
+            isCarousel = imageUrls.isNotEmpty()
+        )
+    }
+
+    private fun imageTitleFromUrl(url: String): String {
+        return runCatching {
+            val parsed = URL(url)
+            parsed.path.substringAfterLast('/').substringBeforeLast('.')
+                .replace(Regex("[-_]+"), " ")
+                .trim()
+                .take(80)
+                .ifBlank { parsed.host.removePrefix("www.") }
+        }.getOrDefault("Image")
+    }
+
+    private fun isKnownExtractorHost(url: String): Boolean {
+        val host = runCatching { URL(url).host.lowercase() }.getOrNull() ?: return false
+        val domains = setOf(
+            "youtube.com", "youtu.be", "youtube-nocookie.com",
+            "instagram.com", "instagr.am",
+            "tiktok.com", "facebook.com", "fb.com", "fb.watch",
+            "twitter.com", "x.com", "t.co", "reddit.com", "redd.it",
+            "twitch.tv", "vimeo.com", "bilibili.com", "dailymotion.com", "dai.ly",
+            "pinterest.com", "pin.it", "streamable.com", "bandcamp.com",
+            "soundcloud.com", "snapchat.com"
+        )
+        return domains.any { host == it || host.endsWith(".$it") }
     }
 
     fun clearCache() {
