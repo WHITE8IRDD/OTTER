@@ -111,7 +111,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         private fun concurrentFragments(platform: Platform, isLive: Boolean): Int {
             if (isLive) return 1
             return when (platform) {
-                Platform.YOUTUBE, Platform.FACEBOOK, Platform.INSTAGRAM, Platform.TIKTOK, Platform.VIMEO -> 8
+                Platform.YOUTUBE -> 16
+                Platform.FACEBOOK, Platform.INSTAGRAM, Platform.TIKTOK, Platform.VIMEO -> 8
                 Platform.TWITTER, Platform.REDDIT, Platform.DAILYMOTION, Platform.SOUNDCLOUD, Platform.BANDCAMP -> 5
                 Platform.BILIBILI, Platform.TWITCH, Platform.SNAPCHAT, Platform.PINTEREST -> 3
                 Platform.STREAMABLE, Platform.UNKNOWN -> 3
@@ -401,8 +402,16 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         return destFile.absolutePath
     }
 
-    private fun cleanup() {
-        getWorkingDir().deleteRecursively()
+    /**
+     * Clears the staging directory. Only the app's own cache is ever deleted: when a
+     * download wrote straight into the download folder, that folder is not ours to
+     * clear however the download ended.
+     */
+    private fun cleanup(dir: File = getWorkingDir()) {
+        val cacheRoot = context.cacheDir.absolutePath
+        if (dir.absolutePath == cacheRoot || dir.absolutePath.startsWith("$cacheRoot/")) {
+            dir.deleteRecursively()
+        }
     }
 
     private fun addCookies(request: YoutubeDLRequest) {
@@ -450,6 +459,13 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
         val settings = readSettings()
+        // A long YouTube video does not belong in the app cache: staging it there
+        // needs room for the video twice over and costs a second full write when the
+        // finished file is copied out. YouTube writes straight into the download
+        // folder instead. Everything else keeps the staging directory, which is
+        // tidier for the small files the other platforms produce.
+        val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(url)
+        val writesDirectly = youtubeVideoId.isNotEmpty() && !isLive
         val maxAttempts = retryWaitMs.size
         var attempt = 0
         var formatAlreadyRefreshed = false
@@ -467,12 +483,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             formatAlreadyRefreshed = false
 
             try {
-                val workingDir = getWorkingDir()
-
                 val outputFile = File(outputDir)
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
+                val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this)
@@ -485,6 +500,19 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     applySettings(this, settings)
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
+
+                    // The formats were already extracted to show the picker. Handing
+                    // that back skips a second Python start, page fetch and throttling
+                    // challenge, which on a short video is most of the wait. Only the
+                    // first attempt does this: if the saved URLs have since expired,
+                    // the retry re-extracts as before.
+                    if (writesDirectly && attempt == 1) {
+                        val saved = YoutubeInfoCache.file(context, youtubeVideoId)
+                        if (YoutubeInfoCache.isFresh(saved)) {
+                            addOption("--load-info-json", saved.absolutePath)
+                            Log.i(TAG, "[DL] reusing the extraction from the format list")
+                        }
+                    }
 
                     val platform = detectPlatform(url)
                     val cf = concurrentFragments(platform, isLive)
@@ -532,14 +560,20 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 activeDownloadInfo.remove(url)
 
                 val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
-                if (subtitleLangs.isNotBlank()) {
+                if (subtitleLangs.isNotBlank() && !writesDirectly) {
                     copySubtitleFiles(workingDir.absolutePath, outputDir, subtitleLangs)
                 }
                 if (downloadedFile != null) {
                     val fileSize = File(downloadedFile).length()
                     Log.i(TAG, "download VERIFIED file=$downloadedFile size=${fileSize} bytes")
-                    val externalPath = copyToExternal(downloadedFile, outputDir)
-                    cleanup()
+                    val externalPath = if (writesDirectly) {
+                        // Already in the download folder: nothing to move.
+                        com.otter.app.util.FileHelper.scanFile(context, downloadedFile)
+                        downloadedFile
+                    } else {
+                        copyToExternal(downloadedFile, outputDir)
+                    }
+                    cleanup(workingDir)
                     Log.i(TAG, "download COMPLETE externalPath=$externalPath")
                     onProgress(DownloadState.Success(externalPath))
                 } else {
@@ -659,6 +693,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
         val settings = readSettings()
+        val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(url)
+        val writesDirectly = youtubeVideoId.isNotEmpty() && !isLive
         val maxAttempts = retryWaitMs.size
         var attempt = 0
         var formatAlreadyRefreshed = false
@@ -676,12 +712,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             formatAlreadyRefreshed = false
 
             try {
-                val workingDir = getWorkingDir()
-
                 val outputFile = File(outputDir)
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
+                val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this)
@@ -698,6 +733,14 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     applySettings(this, settings)
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
+
+                    if (writesDirectly && attempt == 1) {
+                        val saved = YoutubeInfoCache.file(context, youtubeVideoId)
+                        if (YoutubeInfoCache.isFresh(saved)) {
+                            addOption("--load-info-json", saved.absolutePath)
+                            Log.i(TAG, "[DL] reusing the extraction from the format list")
+                        }
+                    }
 
                     val cf = concurrentFragments(platform, isLive)
                     addOption("--concurrent-fragments", cf.toString())
@@ -750,12 +793,19 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 if (downloadedFile != null) {
                     val fileSize = File(downloadedFile).length()
                     Log.i(TAG, "downloadWithThumbnail VERIFIED file=$downloadedFile size=${fileSize} bytes")
-                    val externalPath = copyToExternal(downloadedFile, outputDir)
-                    val thumbFile = findThumbnailFile(workingDir.absolutePath, url)
-                    if (thumbFile != null) {
-                        copyToExternal(thumbFile, outputDir)
+                    val externalPath = if (writesDirectly) {
+                        com.otter.app.util.FileHelper.scanFile(context, downloadedFile)
+                        downloadedFile
+                    } else {
+                        copyToExternal(downloadedFile, outputDir)
                     }
-                    cleanup()
+                    if (!writesDirectly) {
+                        val thumbFile = findThumbnailFile(workingDir.absolutePath, url)
+                        if (thumbFile != null) {
+                            copyToExternal(thumbFile, outputDir)
+                        }
+                    }
+                    cleanup(workingDir)
                     Log.i(TAG, "downloadWithThumbnail COMPLETE externalPath=$externalPath")
                     onProgress(DownloadState.Success(externalPath))
                 } else {
@@ -1330,15 +1380,13 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
     private fun findDownloadedFile(outputDir: String, url: String): String? {
         return try {
-            val dir = File(outputDir)
-            val files = dir.listFiles()?.filter { it.isFile && (it.extension in listOf("mp4", "m4a", "webm", "mp3", "opus", "mkv")) }
-            if (files.isNullOrEmpty()) {
-                Log.w(TAG, "findDownloadedFile: no media files in $outputDir")
-                return null
-            }
-            val best = files.maxByOrNull { it.lastModified() }
-            Log.i(TAG, "findDownloadedFile: found ${files.size} files, best=${best?.name}")
-            best?.absolutePath
+            val found = MediaFileLocator.findDownloaded(
+                File(outputDir),
+                MediaUrlNormalizer.youtubeVideoId(url)
+            )
+            if (found == null) Log.w(TAG, "findDownloadedFile: no media files in $outputDir")
+            else Log.i(TAG, "findDownloadedFile: ${found.name}")
+            found?.absolutePath
         } catch (e: Exception) {
             Log.w(TAG, "findDownloadedFile error: ${e.message}")
             null
