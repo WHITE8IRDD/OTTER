@@ -20,6 +20,9 @@ jobs:
     timeout-minutes: 20
     continue-on-error: true
     steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
       - name: Probe Instagram endpoints from the CI runner
         run: bash .github/scripts/instagram_probe.sh
 

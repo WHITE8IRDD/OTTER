@@ -344,9 +344,9 @@
     <string name="content_desc_copy_hashtags">Copier les hashtags</string>
     <string name="history_details_title">Détails du téléchargement</string>
     <string name="history_details_hint">Touchez un téléchargement pour voir son titre, sa description et ses hashtags</string>
-    <string name="history_no_description">Aucune description n'a été enregistrée avec ce téléchargement.</string>
-    <string name="history_no_hashtags">Aucun hashtag n'a été enregistré avec ce téléchargement.</string>
+    <string name="history_no_description">Aucune description n\'a été enregistrée avec ce téléchargement.</string>
+    <string name="history_no_hashtags">Aucun hashtag n\'a été enregistré avec ce téléchargement.</string>
     <string name="btn_copy_all">TOUT COPIER</string>
     <string name="history_copied_all">Titre, description et hashtags copiés</string>
-    <string name="media_saved_none">Rien n'a pu être enregistré depuis ces diapositives.</string>
+    <string name="media_saved_none">Rien n\'a pu être enregistré depuis ces diapositives.</string>
 </resources>
