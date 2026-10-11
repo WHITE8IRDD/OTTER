@@ -31,7 +31,22 @@ jobs:
         run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Run unit tests and build universal debug APK
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug 2>&1 | tee build.log
+
+      - name: Report Gradle failure details
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          log = Path("build.log")
+          if log.exists():
+              tail = "\n".join(log.read_text(errors="replace").splitlines()[-60:])[:12000]
+              encoded = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=Gradle failure::{encoded}")
+          PY
 
       - name: Rename universal APK
         run: |
