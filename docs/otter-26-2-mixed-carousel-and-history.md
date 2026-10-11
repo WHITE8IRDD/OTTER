@@ -68,3 +68,57 @@ intent to leave a download out of History entirely.
 The `Android APK` workflow now also runs on `arena/3dd8a9d3-otter`, derives the artifact
 name from `versionName`, summarises the unit-test results and publishes the
 `arm64-v8a` debug APK to the `otter-<version>-arm64-v8a` release with `gh release create`.
+
+---
+
+## Follow-up: saving the slides (post-release fixes)
+
+Three reports came back after the first 26.2 build: posts with more than two videos
+saved nothing at all, posts with only pictures saved nothing at all, and mixed posts
+still saved only their pictures. All three had the same root cause.
+
+### Video slides never reached the CDN
+
+`HomeViewModel.downloadSlideVideos()` sent each video slide — a raw
+`scontent…fbcdn.net/….mp4?oh=…&oe=…` link — to `DownloadService`, which runs it through
+yt-dlp with `-f best`. yt-dlp has no extractor for a bare CDN link, so nothing was
+ever fetched, and each slide then sat on a 30 minute timeout before being counted as
+failed. Two videos merely took an hour to do nothing; three or more looked like the
+app had stopped responding.
+
+Slides now travel the same path the photo slides always used. `Downloader` grew
+`downloadMedia(slides: List<MediaSlide>, …)`: a plain `HttpURLConnection` GET that
+keeps the signed query string and sends the post URL as `Referer`, four slides at a
+time, with `Accept: video/…` and an mp4/webm/mov container check for video slides
+(`isLikelyMediaFile`, `sniffVideoExtension`, `videoExtensionFromUrl`). One call saves
+the photos and the videos of a post together, in one progress run, and the post gets
+a single History entry instead of one per slide.
+
+| File | Change |
+| --- | --- |
+| `engine/MediaSlide.kt` | New: a slide URL plus whether it is a video. |
+| `engine/Downloader.kt` | `downloadMedia()`; `downloadSingleImage` generalised into `downloadSingleMedia(url, …, isVideo)`; `downloadImages` is now a thin wrapper; `sanitizeBaseName` also strips control characters. |
+| `data/repository/DownloadRepository` | `downloadMedia()` passthrough. |
+| `ui/screens/home/HomeViewModel` | `downloadCarouselSelected()` builds one slide list (photos then videos) and saves it in a single pass. `downloadSlideVideos` / `startSlideVideoService` and the 30 minute timeout are gone. The history write is wrapped so it can no longer abort the download. |
+
+### Fetching a post was five round trips in a row
+
+`InstagramImageScraper` tried the post page, the mobile page, the web API, the embed
+page and the legacy `?__a=1` JSON one after another, each with its own 15 s timeout —
+up to 75 s before the picker appeared. The post page, mobile page and web API are now
+requested together in a `coroutineScope`, and the embed page and legacy JSON only run
+when the post is still not fully read; per-request timeouts dropped to 10 s and the
+overall budget to 30 s.
+
+The declared slide count also came from *every* JSON blob on the page, including the
+ones for suggested posts, so a complete post was routinely reported as a partial read.
+`InstagramMediaParser.parseHtml` now trusts only the payload that produced the most
+slides.
+
+### UI
+
+* The partial-read note in the picker is a quiet `surfaceVariant` row with an info
+  icon instead of a red `errorContainer` block.
+* History's *Clear all* is a plain text button instead of a red brutalist one.
+* An Instagram playlist that could not be broken into slides but did come back with
+  formats now opens the format sheet instead of an empty picker.
