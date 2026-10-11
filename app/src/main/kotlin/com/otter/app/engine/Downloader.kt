@@ -111,8 +111,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         private fun concurrentFragments(platform: Platform, isLive: Boolean): Int {
             if (isLive) return 1
             return when (platform) {
-                Platform.YOUTUBE -> 16
-                Platform.FACEBOOK, Platform.INSTAGRAM, Platform.TIKTOK, Platform.VIMEO -> 8
+                Platform.YOUTUBE, Platform.FACEBOOK, Platform.INSTAGRAM, Platform.TIKTOK, Platform.VIMEO -> 8
                 Platform.TWITTER, Platform.REDDIT, Platform.DAILYMOTION, Platform.SOUNDCLOUD, Platform.BANDCAMP -> 5
                 Platform.BILIBILI, Platform.TWITCH, Platform.SNAPCHAT, Platform.PINTEREST -> 3
                 Platform.STREAMABLE, Platform.UNKNOWN -> 3
@@ -464,6 +463,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         // finished file is copied out. YouTube writes straight into the download
         // folder instead. Everything else keeps the staging directory, which is
         // tidier for the small files the other platforms produce.
+        // Live streams are excluded and stage in the cache as before.
         val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(url)
         val writesDirectly = youtubeVideoId.isNotEmpty() && !isLive
         val maxAttempts = retryWaitMs.size
@@ -500,19 +500,6 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     applySettings(this, settings)
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
-
-                    // The formats were already extracted to show the picker. Handing
-                    // that back skips a second Python start, page fetch and throttling
-                    // challenge, which on a short video is most of the wait. Only the
-                    // first attempt does this: if the saved URLs have since expired,
-                    // the retry re-extracts as before.
-                    if (writesDirectly && attempt == 1) {
-                        val saved = YoutubeInfoCache.file(context, youtubeVideoId)
-                        if (YoutubeInfoCache.isFresh(saved)) {
-                            addOption("--load-info-json", saved.absolutePath)
-                            Log.i(TAG, "[DL] reusing the extraction from the format list")
-                        }
-                    }
 
                     val platform = detectPlatform(url)
                     val cf = concurrentFragments(platform, isLive)
@@ -733,14 +720,6 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     applySettings(this, settings)
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
-
-                    if (writesDirectly && attempt == 1) {
-                        val saved = YoutubeInfoCache.file(context, youtubeVideoId)
-                        if (YoutubeInfoCache.isFresh(saved)) {
-                            addOption("--load-info-json", saved.absolutePath)
-                            Log.i(TAG, "[DL] reusing the extraction from the format list")
-                        }
-                    }
 
                     val cf = concurrentFragments(platform, isLive)
                     addOption("--concurrent-fragments", cf.toString())

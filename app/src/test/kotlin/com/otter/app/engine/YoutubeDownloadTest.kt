@@ -1,7 +1,6 @@
 package com.otter.app.engine
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -10,8 +9,8 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
- * The two pieces of the YouTube path that can be checked without a device: which file
- * a download produced, and when a saved extraction may still be reused.
+ * Reading a YouTube video id out of a link, and picking the file a download produced
+ * out of a folder that already holds other videos. Both are pure, so both run here.
  */
 class YoutubeDownloadTest {
 
@@ -107,30 +106,5 @@ class YoutubeDownloadTest {
     @Test
     fun nothingFoundInAnEmptyFolder() {
         assertNull(MediaFileLocator.findDownloaded(folder.root, "dQw4w9WgXcQ"))
-    }
-
-    // ------------------------------------------------------ reusing an extraction
-
-    @Test
-    fun aFreshExtractionMayBeReused() {
-        val file = folder.newFile("dQw4w9WgXcQ.info.json")
-
-        assertTrue(YoutubeInfoCache.isFresh(file, file.lastModified()))
-        assertTrue(YoutubeInfoCache.isFresh(file, file.lastModified() + 60_000L))
-    }
-
-    @Test
-    fun aStaleExtractionIsNotReused() {
-        val file = folder.newFile("dQw4w9WgXcQ.info.json")
-
-        // Older than the window: the format URLs inside will have expired.
-        assertFalse(
-            YoutubeInfoCache.isFresh(file, file.lastModified() + YoutubeInfoCache.FRESHNESS_MS + 1L)
-        )
-    }
-
-    @Test
-    fun aMissingExtractionIsNotReused() {
-        assertFalse(YoutubeInfoCache.isFresh(File(folder.root, "nope.info.json")))
     }
 }

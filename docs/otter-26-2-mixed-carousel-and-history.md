@@ -221,7 +221,7 @@ stream (`FormatSpec`). That halved the data and dropped the merge on muxed picks
 
 `FormatSpec` is a pure object so the format-selection rules can run on the JVM, and
 `FormatSpecTest` pins them. `InstagramPagePayloadTest` covers the real page shapes.
-CI runs the suite before the APK is published; 46 tests, all passing.
+CI runs the suite before the APK is published; 43 tests, all passing.
 
 What CI cannot do is run the app. Instagram serves the runner a login wall on every
 endpoint, so the probe job reports shapes and nothing more — behaviour on a real device
@@ -235,20 +235,6 @@ were left alone.
 
 Two things were costing time, and they were the only two touched.
 
-### The video was extracted twice
-
-Showing the format list extracts the video. Starting the download then extracted it
-again from scratch. For YouTube that means starting Python, fetching the watch page and
-solving the throttling challenge a second time; on a Short, that is most of the
-waiting.
-
-The extraction is now kept when the formats are listed (`YoutubeInfoCache`, in the app
-cache, kept for 30 minutes and capped at 8 files) and handed to the download with
-`--load-info-json`. The saved format URLs already carry their solved signatures, so they
-are valid for hours — but only the **first attempt** uses them. If they have expired,
-the retry re-extracts exactly as before, so this can only make the first attempt faster,
-never wrong.
-
 ### The finished file was written twice
 
 Every download staged its output in the app cache and copied it out at the end. For a
@@ -261,14 +247,36 @@ write and no cache space used. Three things keep that from being reckless:
 
 - `cleanup(dir)` only deletes a directory inside `context.cacheDir`. A download folder
   is never cleared, however the download ended.
-- The finished file is identified by the video id that yt-dlp puts in the file name
+- The finished file is identified by the video id yt-dlp puts in the file name
   (`MediaFileLocator`), not by "newest media file in the folder" — in a shared download
   folder the newest file is often somebody else's.
 - Live streams are excluded and still stage in the cache.
 
-Alongside those, YouTube gets 16 concurrent fragments instead of 8. It is the one
-platform whose downloads are long enough for the parallelism to be worth it, and the
-change is isolated to that platform.
+### Two other changes were tried and taken back out
+
+Both shipped in `2e54218` and were removed again after testing on a device.
+
+**16 concurrent fragments instead of 8.** This broke normal, non-Short YouTube videos
+outright: they would neither fetch nor download. Shorts were unaffected, which is what
+made it easy to misread at first — a Short is served as a single muxed stream, so
+`--concurrent-fragments` does not apply to it, while a normal video is DASH with many
+fragments and gets the flag on every attempt. Back to 8.
+
+Worth remembering: the reason Shorts surviving proved the direct-write path sound is
+that Shorts and normal videos run the *same* `download()` function
+(`normalizeYouTubeShortsUrl` rewrites a Shorts link to a watch URL before the request is
+built). So "Shorts work, normal videos do not" rules out anything that treats them
+alike, and points straight at the one input that differs between them — the number of
+fragments.
+
+**Reusing the extraction (`--load-info-json`).** The video was extracted a second time
+for the download after already being extracted to show the format list, which for YouTube
+means starting Python, fetching the watch page and solving the throttling challenge
+again. The extraction was saved (`YoutubeInfoCache`) and handed back. It was taken out
+with the fragment change rather than left in on its own: it cannot be verified here, and
+a flag that makes the first attempt fail is a poor trade when the retry ladder has to
+re-extract anyway. If it is ever worth another attempt, it should be on its own, with
+nothing else changed at the same time.
 
 ### Not touched
 

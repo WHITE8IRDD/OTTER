@@ -172,7 +172,6 @@ class FormatParser(private val context: Context? = null) {
         Log.i(TAG, "fetchVideoInfo START url=$url")
         val resolvedUrl = MediaUrlNormalizer.normalizeYouTubeShortsUrl(resolveTikTokShortUrl(url))
         val isInstaCarousel = isInstagramPostUrl(resolvedUrl)
-        val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(resolvedUrl)
 
         if (MediaUrlNormalizer.isDirectImageUrl(resolvedUrl)) {
             val info = createImageGalleryInfo(
@@ -293,9 +292,6 @@ class FormatParser(private val context: Context? = null) {
                 val ytResponse = YoutubeDL.getInstance().execute(request, null, null)
                 val ytExecTime = System.currentTimeMillis() - ytExecStart
                 Log.i(TAG, "[FETCH] yt-dlp execute returned in ${ytExecTime}ms attempt=$attempt")
-                if (youtubeVideoId.isNotEmpty() && context != null) {
-                    YoutubeInfoCache.keep(context, youtubeVideoId, ytResponse.out)
-                }
                 val videoInfo = YoutubeDL.objectMapper.readValue(
                     ytResponse.out,
                     com.yausername.youtubedl_android.mapper.VideoInfo::class.java
