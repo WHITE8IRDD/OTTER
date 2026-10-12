@@ -5,6 +5,7 @@ on:
     branches:
       - arena/23a7b6e2-otter
       - arena/b09a8450-otter
+      - arena/3dd8a9d3-otter
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,9 @@ jobs:
     timeout-minutes: 20
     continue-on-error: true
     steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
       - name: Probe Instagram endpoints from the CI runner
         run: bash .github/scripts/instagram_probe.sh
 
@@ -122,15 +126,111 @@ jobs:
                           "--input", "-"], input=json.dumps({"body": body}), text=True, check=True)
           PY
 
+      - name: Resolve app version
+        id: version
+        run: |
+          VERSION=$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')
+          test -n "$VERSION" || { echo "could not read versionName"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building OTTER $VERSION"
+
+      - name: Summarise unit tests
+        id: tests
+        run: |
+          python3 - <<'PY' | tee test-summary.md
+          import glob, xml.etree.ElementTree as ET
+          total = failures = errors = skipped = 0
+          for report in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
+              root = ET.parse(report).getroot()
+              total += int(root.attrib.get("tests", 0))
+              failures += int(root.attrib.get("failures", 0))
+              errors += int(root.attrib.get("errors", 0))
+              skipped += int(root.attrib.get("skipped", 0))
+          print(f"JVM unit tests: {total} run, {failures + errors} failed, {skipped} skipped")
+          PY
+
       - name: Collect APK artifacts
         run: |
           mkdir -p build-artifacts
-          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk "build-artifacts/OTTER-26.1-arm64-v8a-debug.apk"
+          APK="build-artifacts/OTTER-${{ steps.version.outputs.version }}-arm64-v8a-debug.apk"
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk "$APK"
           ls -l build-artifacts
 
       - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v7
         with:
-          name: OTTER-26.1-arm64-v8a
-          path: build-artifacts/OTTER-26.1-arm64-v8a-debug.apk
+          name: OTTER-${{ steps.version.outputs.version }}-arm64-v8a
+          path: build-artifacts/OTTER-${{ steps.version.outputs.version }}-arm64-v8a-debug.apk
           if-no-files-found: error
+
+      - name: Publish arm64-v8a debug APK release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="otter-${VERSION}-arm64-v8a"
+          APK="build-artifacts/OTTER-${VERSION}-arm64-v8a-debug.apk"
+          SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
+          {
+            echo "Debug-signed test build of OTTER ${VERSION} (arm64-v8a only), built by \`${GITHUB_WORKFLOW}\` from \`${GITHUB_SHA}\`."
+            echo
+            cat test-summary.md
+            echo
+            echo "## This build"
+            echo
+            echo "- **Mixed carousels** - photo and video slides are listed separately in the picker and"
+            echo "  both are downloadable: photos through the image path, videos through the video path."
+            echo "  The slide counter and the partial-read warning cover both kinds of slide."
+            echo "- **History** - a finished download keeps its title, description and hashtags. Tap a"
+            echo "  history entry to see them, each with its own copy button. Quick downloads may have"
+            echo "  no description or hashtags saved with them."
+            echo
+            echo "## Instagram"
+            echo
+            echo "- **Every post type** - single picture, multi-picture, video carousel and mixed,"
+            echo "  all without signing in: no cookies are needed and none are sent."
+            echo "- **Failure says why** - a post that cannot be read reports what each endpoint"
+            echo "  returned instead of leaving the screen sitting on an empty picker."
+            echo
+            echo "## YouTube and Shorts"
+            echo
+            echo "- **Long videos no longer need the space twice** - a download used to stage"
+            echo "  its file in the app cache and then copy it out, which for a one-hour video"
+            echo "  is a second full write and needs room for the video in internal storage as"
+            echo "  well as on the card. YouTube writes straight into the download folder now,"
+            echo "  so there is one write and no cache space used."
+            echo "- Live streams, and every platform other than YouTube, are untouched: they"
+            echo "  still stage in the app cache exactly as before."
+            echo "- **Not in this build** - the previous build also reused the extraction from"
+            echo "  the format list and asked for 16 fragments at once. Both are gone again:"
+            echo "  16 fragments stopped normal, non-Short videos from downloading at all"
+            echo
+            echo "## Downloads"
+            echo
+            echo "- **No duplicated soundtrack** - a format that already carries audio is no longer"
+            echo "  paired with a second audio stream, which halved the data and dropped the merge."
+            echo "- **The nightly yt-dlp update stands aside** - it no longer shares the connection"
+            echo "  with a download you are already waiting on."
+            echo "- **43 unit tests** covering mixed carousels, the page payload, the format"
+            echo "  selection rules, the history metadata and the YouTube download path, run"
+            echo "  before this APK is published."
+            echo
+            echo "## Install"
+            echo
+            echo "- arm64-v8a only. Debug-signed with the public Android debug key committed at"
+            echo "  \`.github/debug.keystore\`, so a newer test build installs over the previous one."
+            echo "- Uninstall an older OTTER build first if Android refuses to install over it."
+            echo
+            echo "## APK sha256"
+            echo
+            echo '```'
+            echo "${SHA256}"
+            echo '```'
+          } > release-notes.md
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" "$APK" \
+            --target "$GITHUB_SHA" \
+            --title "OTTER ${VERSION} - arm64-v8a debug" \
+            --notes-file release-notes.md
+          echo "Published $TAG"

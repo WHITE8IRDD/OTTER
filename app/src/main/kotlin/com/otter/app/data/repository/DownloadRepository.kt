@@ -10,6 +10,7 @@ import com.otter.app.data.model.VideoInfo
 import com.otter.app.engine.Downloader
 import com.otter.app.engine.FormatParser
 import com.otter.app.engine.ImageDownloadSummary
+import com.otter.app.engine.MediaSlide
 import kotlinx.coroutines.flow.Flow
 
 class DownloadRepository(private val context: Context) {
@@ -80,6 +81,16 @@ class DownloadRepository(private val context: Context) {
         refererUrl: String? = null
     ): ImageDownloadSummary {
         return downloader.downloadImages(imageUrls, baseName, outputDir, onProgress, refererUrl)
+    }
+
+    suspend fun downloadMedia(
+        slides: List<MediaSlide>,
+        baseName: String,
+        outputDir: String,
+        onProgress: (DownloadState) -> Unit,
+        refererUrl: String? = null
+    ): ImageDownloadSummary {
+        return downloader.downloadMedia(slides, baseName, outputDir, onProgress, refererUrl)
     }
 
     fun pauseDownload(url: String): Downloader.ActiveDownload? {

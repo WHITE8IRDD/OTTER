@@ -1,12 +1,22 @@
 package com.otter.app.util
 
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import com.otter.app.R
 
 fun Context.getClipboardText(): String? {
     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     return clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
+}
+
+/** Copies [text] to the clipboard and confirms it with a short toast. */
+fun Context.copyToClipboard(text: String, label: String) {
+    if (text.isBlank()) return
+    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+    Toast.makeText(this, getString(R.string.copied_toast, label), Toast.LENGTH_SHORT).show()
 }
 
 fun Context.showToast(message: String) {

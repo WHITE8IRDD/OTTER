@@ -401,8 +401,16 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         return destFile.absolutePath
     }
 
-    private fun cleanup() {
-        getWorkingDir().deleteRecursively()
+    /**
+     * Clears the staging directory. Only the app's own cache is ever deleted: when a
+     * download wrote straight into the download folder, that folder is not ours to
+     * clear however the download ended.
+     */
+    private fun cleanup(dir: File = getWorkingDir()) {
+        val cacheRoot = context.cacheDir.absolutePath
+        if (dir.absolutePath == cacheRoot || dir.absolutePath.startsWith("$cacheRoot/")) {
+            dir.deleteRecursively()
+        }
     }
 
     private fun addCookies(request: YoutubeDLRequest) {
@@ -445,10 +453,19 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         autoCaptionLangs: String = "",
         title: String = ""
     ) = withContext(Dispatchers.IO) {
+        EngineLock.markUsed()
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
         val settings = readSettings()
+        // A long YouTube video does not belong in the app cache: staging it there
+        // needs room for the video twice over and costs a second full write when the
+        // finished file is copied out. YouTube writes straight into the download
+        // folder instead. Everything else keeps the staging directory, which is
+        // tidier for the small files the other platforms produce.
+        // Live streams are excluded and stage in the cache as before.
+        val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(url)
+        val writesDirectly = youtubeVideoId.isNotEmpty() && !isLive
         val maxAttempts = retryWaitMs.size
         var attempt = 0
         var formatAlreadyRefreshed = false
@@ -466,12 +483,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             formatAlreadyRefreshed = false
 
             try {
-                val workingDir = getWorkingDir()
-
                 val outputFile = File(outputDir)
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
+                val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this)
@@ -531,14 +547,20 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 activeDownloadInfo.remove(url)
 
                 val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
-                if (subtitleLangs.isNotBlank()) {
+                if (subtitleLangs.isNotBlank() && !writesDirectly) {
                     copySubtitleFiles(workingDir.absolutePath, outputDir, subtitleLangs)
                 }
                 if (downloadedFile != null) {
                     val fileSize = File(downloadedFile).length()
                     Log.i(TAG, "download VERIFIED file=$downloadedFile size=${fileSize} bytes")
-                    val externalPath = copyToExternal(downloadedFile, outputDir)
-                    cleanup()
+                    val externalPath = if (writesDirectly) {
+                        // Already in the download folder: nothing to move.
+                        com.otter.app.util.FileHelper.scanFile(context, downloadedFile)
+                        downloadedFile
+                    } else {
+                        copyToExternal(downloadedFile, outputDir)
+                    }
+                    cleanup(workingDir)
                     Log.i(TAG, "download COMPLETE externalPath=$externalPath")
                     onProgress(DownloadState.Success(externalPath))
                 } else {
@@ -653,10 +675,13 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         autoCaptionLangs: String = "",
         title: String = ""
     ) = withContext(Dispatchers.IO) {
+        EngineLock.markUsed()
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
         val settings = readSettings()
+        val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(url)
+        val writesDirectly = youtubeVideoId.isNotEmpty() && !isLive
         val maxAttempts = retryWaitMs.size
         var attempt = 0
         var formatAlreadyRefreshed = false
@@ -674,12 +699,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             formatAlreadyRefreshed = false
 
             try {
-                val workingDir = getWorkingDir()
-
                 val outputFile = File(outputDir)
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
+                val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this)
@@ -748,12 +772,19 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 if (downloadedFile != null) {
                     val fileSize = File(downloadedFile).length()
                     Log.i(TAG, "downloadWithThumbnail VERIFIED file=$downloadedFile size=${fileSize} bytes")
-                    val externalPath = copyToExternal(downloadedFile, outputDir)
-                    val thumbFile = findThumbnailFile(workingDir.absolutePath, url)
-                    if (thumbFile != null) {
-                        copyToExternal(thumbFile, outputDir)
+                    val externalPath = if (writesDirectly) {
+                        com.otter.app.util.FileHelper.scanFile(context, downloadedFile)
+                        downloadedFile
+                    } else {
+                        copyToExternal(downloadedFile, outputDir)
                     }
-                    cleanup()
+                    if (!writesDirectly) {
+                        val thumbFile = findThumbnailFile(workingDir.absolutePath, url)
+                        if (thumbFile != null) {
+                            copyToExternal(thumbFile, outputDir)
+                        }
+                    }
+                    cleanup(workingDir)
                     Log.i(TAG, "downloadWithThumbnail COMPLETE externalPath=$externalPath")
                     onProgress(DownloadState.Success(externalPath))
                 } else {
@@ -888,15 +919,43 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         }
     }
 
+    /** Photos only, for callers that already hold a plain list of image URLs. */
     suspend fun downloadImages(
         imageUrls: List<String>,
         baseName: String,
         outputDir: String,
         onProgress: (DownloadState) -> Unit,
         refererUrl: String? = null
+    ): ImageDownloadSummary = downloadMedia(
+        slides = imageUrls.map { MediaSlide(it, isVideo = false) },
+        baseName = baseName,
+        outputDir = outputDir,
+        onProgress = onProgress,
+        refererUrl = refererUrl
+    )
+
+    /**
+     * Downloads the slides of one post - photos **and** video slides - straight from
+     * the CDN. Carousel media already carries the signed query string Instagram
+     * requires, so a plain GET is all that is needed; sending those raw CDN links
+     * through yt-dlp instead cost seconds of engine start-up per slide and failed
+     * outright on the video ones.
+     *
+     * A few slides are fetched at a time and saved as `<base>_<n>.<ext>` in the order
+     * they were handed in.
+     */
+    suspend fun downloadMedia(
+        slides: List<MediaSlide>,
+        baseName: String,
+        outputDir: String,
+        onProgress: (DownloadState) -> Unit,
+        refererUrl: String? = null
     ): ImageDownloadSummary = withContext(Dispatchers.IO) {
-        val urls = imageUrls.filter { it.isNotBlank() }.distinct()
-        if (urls.isEmpty()) {
+        val items = slides
+            .map { MediaSlide(it.url.trim(), it.isVideo) }
+            .filter { it.url.isNotBlank() }
+            .distinctBy { it.url }
+        if (items.isEmpty()) {
             onProgress(DownloadState.Error(context.getString(R.string.failed_all_images)))
             return@withContext ImageDownloadSummary(emptyList(), 0)
         }
@@ -904,41 +963,38 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val directory = File(outputDir)
         if (!directory.exists() && !directory.mkdirs()) {
             onProgress(DownloadState.Error(context.getString(R.string.creating_output_dir_failed)))
-            return@withContext ImageDownloadSummary(emptyList(), urls.size)
+            return@withContext ImageDownloadSummary(emptyList(), items.size)
         }
 
-        val safeBase = baseName
-            .replace(Regex("""[<>:"/\\|?*]"""), "_")
-            .trim('.', ' ')
-            .take(80)
-            .ifBlank { "Otter media" }
+        val safeBase = sanitizeBaseName(baseName)
         val savedByIndex = ConcurrentHashMap<Int, String>()
         val failedCount = java.util.concurrent.atomic.AtomicInteger(0)
         val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = Semaphore(minOf(4, urls.size))
+        val semaphore = Semaphore(minOf(4, items.size))
 
-        urls.mapIndexed { index, imageUrl ->
+        items.mapIndexed { index, slide ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     try {
-                        val path = downloadSingleImage(
-                            imageUrl = imageUrl,
+                        val path = downloadSingleMedia(
+                            mediaUrl = slide.url,
                             index = index,
                             baseName = safeBase,
                             outputDir = directory,
-                            refererUrl = refererUrl
+                            refererUrl = refererUrl,
+                            isVideo = slide.isVideo
                         )
                         savedByIndex[index] = path
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.w(TAG, "Image ${index + 1}/${urls.size} failed: ${e.message}")
+                        Log.w(TAG, "Slide ${index + 1}/${items.size} failed: ${e.message}")
                         failedCount.incrementAndGet()
                     } finally {
                         val completed = completedCount.incrementAndGet()
                         onProgress(
                             DownloadState.Downloading(
-                                progress = completed.toFloat() / urls.size.toFloat(),
+                                progress = completed.toFloat() / items.size.toFloat(),
                                 phase = DownloadPhase.DOWNLOADING
                             )
                         )
@@ -948,7 +1004,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         }.awaitAll()
 
         val savedPaths = savedByIndex.toSortedMap().values.toList()
-        val summary = ImageDownloadSummary(savedPaths = savedPaths, failedCount = failedCount.get())
+        val failed = failedCount.get()
+        val summary = ImageDownloadSummary(savedPaths = savedPaths, failedCount = failed)
         if (savedPaths.isEmpty()) {
             onProgress(DownloadState.Error(context.getString(R.string.failed_all_images)))
         } else {
@@ -957,34 +1014,49 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         summary
     }
 
-    private suspend fun downloadSingleImage(
-        imageUrl: String,
+    private fun sanitizeBaseName(baseName: String): String = baseName
+        .replace(Regex("""[<>:"\\|?*]"""), "_")
+        .replace(Regex("""[\x00-\x1f]"""), " ")
+        .replace(Regex("""\s+"""), " ")
+        .trim('.', ' ')
+        .take(80)
+        .ifBlank { "Otter media" }
+
+    /** One slide of a gallery post: a photo or a video, fetched with the referer the CDN expects. */
+    private suspend fun downloadSingleMedia(
+        mediaUrl: String,
         index: Int,
         baseName: String,
         outputDir: File,
-        refererUrl: String?
+        refererUrl: String?,
+        isVideo: Boolean
     ): String {
-        val sourceUrl = URL(imageUrl)
+        val sourceUrl = URL(mediaUrl)
         if (sourceUrl.protocol != "http" && sourceUrl.protocol != "https") {
-            throw IOException("Unsupported image URL scheme")
+            throw IOException("Unsupported media URL scheme")
         }
         val referer = refererUrl?.let { runCatching { URL(it) }.getOrNull() }
             ?.takeIf { it.protocol == "http" || it.protocol == "https" }
             ?.toExternalForm()
+        val accept = if (isVideo) {
+            "video/webm,video/mp4,video/quicktime,video/x-m4v,video/*;q=0.9,*/*;q=0.5"
+        } else {
+            "image/avif,image/webp,image/png,image/jpeg,image/gif,image/*;q=0.9,*/*;q=0.5"
+        }
 
         for (attempt in 1..3) {
             val partialFile = File(outputDir, ".otter_${java.util.UUID.randomUUID()}.part")
             var connection: HttpURLConnection? = null
             try {
                 val httpConnection = sourceUrl.openConnection() as? HttpURLConnection
-                    ?: throw IOException("Unsupported image connection")
+                    ?: throw IOException("Unsupported media connection")
                 connection = httpConnection
                 httpConnection.connectTimeout = 10_000
-                httpConnection.readTimeout = 25_000
+                httpConnection.readTimeout = 30_000
                 httpConnection.instanceFollowRedirects = true
                 httpConnection.requestMethod = "GET"
                 httpConnection.setRequestProperty("User-Agent", DL_UA)
-                httpConnection.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/jpeg,image/gif,image/*;q=0.9,*/*;q=0.5")
+                httpConnection.setRequestProperty("Accept", accept)
                 httpConnection.setRequestProperty("Accept-Encoding", "identity")
                 httpConnection.setRequestProperty("Connection", "keep-alive")
                 referer?.let { httpConnection.setRequestProperty("Referer", it) }
@@ -1007,12 +1079,14 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     }
                 }
 
-                if (partialFile.length() == 0L || !isLikelyImageFile(partialFile, contentType, imageUrl)) {
-                    throw IOException("The server response was not an image")
+                if (partialFile.length() == 0L ||
+                    !isLikelyMediaFile(partialFile, contentType, mediaUrl, isVideo)
+                ) {
+                    throw IOException("The server response was not a ${if (isVideo) "video" else "picture"}")
                 }
 
-                val extension = imageExtension(contentType, imageUrl, partialFile)
-                val destination = saveImageWithUniqueName(partialFile, outputDir, baseName, index, extension)
+                val extension = mediaExtension(contentType, mediaUrl, partialFile, isVideo)
+                val destination = saveMediaWithUniqueName(partialFile, outputDir, baseName, index, extension)
                 com.otter.app.util.FileHelper.scanFile(context, destination.absolutePath)
                 return destination.absolutePath
             } catch (e: CancellationException) {
@@ -1026,7 +1100,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 connection?.disconnect()
             }
         }
-        throw IOException("Image download failed")
+        throw IOException(if (isVideo) "Video download failed" else "Image download failed")
     }
 
     private fun isRetryableImageError(error: Exception): Boolean {
@@ -1039,12 +1113,75 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             error is java.io.EOFException
     }
 
+    /** Accepts an image or, for a video slide, an actual video payload. */
+    private fun isLikelyMediaFile(
+        file: File,
+        contentType: String,
+        sourceUrl: String,
+        isVideo: Boolean
+    ): Boolean {
+        if (!isVideo) return isLikelyImageFile(file, contentType, sourceUrl)
+        if (contentType.startsWith("video/")) return true
+        if (sniffVideoExtension(file) != null) return true
+        if (contentType.contains("html") || contentType.contains("json") ||
+            contentType.startsWith("text/")
+        ) return false
+        return looksLikeVideoUrl(sourceUrl) && (
+            contentType.isBlank() ||
+                contentType == "application/octet-stream" ||
+                contentType == "binary/octet-stream"
+            )
+    }
+
+    /** mp4/m4v/webm/mov in the path, ignoring the signed query string. */
+    private fun videoExtensionFromUrl(url: String): String? {
+        val path = runCatching { URL(url).path }.getOrNull() ?: return null
+        val extension = path.substringAfterLast('/', "").substringAfterLast('.', "")
+            .lowercase(java.util.Locale.ROOT)
+        return extension.takeIf { it in setOf("mp4", "m4v", "mov", "webm") }
+    }
+
+    private fun looksLikeVideoUrl(url: String): Boolean = videoExtensionFromUrl(url) != null
+
+    /** Reads the container magic: an ISO base media file ("....ftyp") or a Matroska stream. */
+    private fun sniffVideoExtension(file: File): String? {
+        return runCatching {
+            val header = ByteArray(16)
+            val count = file.inputStream().use { it.read(header) }
+            if (count >= 8 && String(header, 4, 4, Charsets.US_ASCII) == "ftyp") return@runCatching "mp4"
+            if (count >= 4 && header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() &&
+                header[2] == 0xDF.toByte() && header[3] == 0xA3.toByte()
+            ) return@runCatching "webm"
+            null
+        }.getOrNull()
+    }
+
     private fun isLikelyImageFile(file: File, contentType: String, sourceUrl: String): Boolean {
         if (sniffImageExtension(file) != null) return true
         if (contentType.startsWith("image/")) return true
         if (contentType.contains("html") || contentType.contains("json") || contentType.startsWith("text/")) return false
         return MediaUrlNormalizer.isDirectImageUrl(sourceUrl) &&
             (contentType.isBlank() || contentType == "application/octet-stream" || contentType == "binary/octet-stream")
+    }
+
+    private fun mediaExtension(
+        contentType: String,
+        sourceUrl: String,
+        file: File,
+        isVideo: Boolean
+    ): String {
+        if (!isVideo) return imageExtension(contentType, sourceUrl, file)
+        val mimeExtension = when (contentType.substringBefore(';').lowercase(java.util.Locale.ROOT)) {
+            "video/mp4" -> "mp4"
+            "video/quicktime" -> "mov"
+            "video/webm" -> "webm"
+            "video/x-m4v", "video/m4v" -> "m4v"
+            else -> null
+        }
+        return mimeExtension
+            ?: sniffVideoExtension(file)
+            ?: videoExtensionFromUrl(sourceUrl)
+            ?: "mp4"
     }
 
     private fun imageExtension(contentType: String, sourceUrl: String, file: File): String {
@@ -1086,7 +1223,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         }.getOrNull()
     }
 
-    private fun saveImageWithUniqueName(
+    private fun saveMediaWithUniqueName(
         partialFile: File,
         outputDir: File,
         baseName: String,
@@ -1110,7 +1247,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 throw e
             }
         }
-        throw IOException("Could not create a unique image filename")
+        throw IOException("Could not create a unique filename")
     }
 
     private class ImageHttpException(val statusCode: Int) : IOException("HTTP $statusCode")
@@ -1222,15 +1359,13 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
     private fun findDownloadedFile(outputDir: String, url: String): String? {
         return try {
-            val dir = File(outputDir)
-            val files = dir.listFiles()?.filter { it.isFile && (it.extension in listOf("mp4", "m4a", "webm", "mp3", "opus", "mkv")) }
-            if (files.isNullOrEmpty()) {
-                Log.w(TAG, "findDownloadedFile: no media files in $outputDir")
-                return null
-            }
-            val best = files.maxByOrNull { it.lastModified() }
-            Log.i(TAG, "findDownloadedFile: found ${files.size} files, best=${best?.name}")
-            best?.absolutePath
+            val found = MediaFileLocator.findDownloaded(
+                File(outputDir),
+                MediaUrlNormalizer.youtubeVideoId(url)
+            )
+            if (found == null) Log.w(TAG, "findDownloadedFile: no media files in $outputDir")
+            else Log.i(TAG, "findDownloadedFile: ${found.name}")
+            found?.absolutePath
         } catch (e: Exception) {
             Log.w(TAG, "findDownloadedFile error: ${e.message}")
             null

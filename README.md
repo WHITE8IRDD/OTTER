@@ -6,10 +6,11 @@ OTTER is an Android media downloader built with Kotlin and Jetpack Compose. It u
 
 - YouTube videos, Shorts, playlists, and live streams (subject to the source's access rules).
 - Video and audio from sites with a yt-dlp extractor.
-- Instagram image posts/carousels, with a preview grid to select individual slides or all slides.
+- Instagram posts and carousels: a picker that lists photo slides and video slides separately, and downloads both (photos through the image path, videos through the video path).
 - Direct image links and images exposed by common page metadata (`og:image`, Twitter cards, JSON-LD, `img`, and `srcset`).
 - Quality/format and audio-track selection, subtitles, cookies for sites that require sign-in, background downloads, pause/resume, and download history.
-- Share-sheet quick downloads for video links; image and Instagram post links open the selectable media flow.
+- History entries keep the title, description and hashtags of what was downloaded; tap an entry to read them and copy each one.
+- Share-sheet quick downloads for video links; image and Instagram post links open the selectable media flow. Quick downloads skip the metadata step, so their history entries may have no description or hashtags.
 - Custom download location, accent-color/dark-theme options, and English, Arabic, and French UI.
 
 Site extractors change over time. Support depends on the current site, network access, login requirements, and available media. JavaScript-only pages, private content without valid cookies, DRM-protected streams, and sources that block automated access may not be downloadable. Only save media you have permission to keep, and follow each site's terms.

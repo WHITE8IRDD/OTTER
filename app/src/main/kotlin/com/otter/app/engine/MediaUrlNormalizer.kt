@@ -28,6 +28,27 @@ object MediaUrlNormalizer {
         return "https://www.youtube.com/watch?v=$videoId"
     }
 
+    /**
+     * The 11-character video id of a watch, Shorts or youtu.be URL, blank for anything
+     * else. Used to name the media yt-dlp produces, so the file a download wrote can be
+     * told apart from the other files already sitting in the download folder.
+     */
+    fun youtubeVideoId(url: String): String {
+        val parsed = runCatching { URL(url.trim()) }.getOrNull() ?: return ""
+        val host = parsed.host.lowercase(Locale.ROOT).trimEnd('.')
+        if (host == "youtu.be" || host.endsWith(".youtu.be")) {
+            return parsed.path.trim('/').substringBefore('/').takeIf { youtubeVideoId.matches(it) }.orEmpty()
+        }
+        if (host != "youtube.com" && !host.endsWith(".youtube.com")) return ""
+        Regex("^/shorts/([^/]+)", RegexOption.IGNORE_CASE).find(parsed.path)?.let { match ->
+            return match.groupValues[1].takeIf { youtubeVideoId.matches(it) }.orEmpty()
+        }
+        val value = parsed.query?.split('&')
+            ?.firstOrNull { it.startsWith("v=") }
+            ?.removePrefix("v=")
+        return value?.takeIf { youtubeVideoId.matches(it) }.orEmpty()
+    }
+
     /** True for a direct image URL, including URLs with signed/query parameters. */
     fun isDirectImageUrl(url: String): Boolean {
         val parsed = runCatching { URL(url) }.getOrNull() ?: return false

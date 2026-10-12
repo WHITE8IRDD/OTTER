@@ -22,8 +22,8 @@ android {
         applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "26.1"
+        versionCode = 14
+        versionName = "26.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -123,6 +123,8 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+    // Real org.json for JVM unit tests: the Android platform classes are only stubs there.
+    testImplementation("org.json:json:20231013")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

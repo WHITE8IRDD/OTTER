@@ -6,6 +6,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.otter.app.engine.FormatSpec
 import com.otter.app.data.datastore.UserPreferences
 import com.otter.app.data.model.DownloadItem
 import com.otter.app.data.model.DownloadPhase
@@ -14,6 +15,8 @@ import com.otter.app.data.model.VideoFormat
 import com.otter.app.data.model.VideoInfo
 import com.otter.app.data.model.AudioTrack
 import com.otter.app.data.repository.DownloadRepository
+import com.otter.app.engine.ImageDownloadSummary
+import com.otter.app.engine.MediaSlide
 import com.otter.app.service.ActiveDownloadStateHolder
 import com.otter.app.service.DownloadService
 import com.otter.app.service.DownloadStateHolder
@@ -21,6 +24,7 @@ import com.otter.app.R
 import com.otter.app.util.FileHelper
 import com.otter.app.util.isValidUrl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,8 +69,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _retryStatus = MutableStateFlow(RetryStatus())
     val retryStatus: StateFlow<RetryStatus> = _retryStatus.asStateFlow()
 
-    private val _selectedCarouselIndices = MutableStateFlow<Set<Int>>(emptySet())
-    val selectedCarouselIndices: StateFlow<Set<Int>> = _selectedCarouselIndices.asStateFlow()
+    // A carousel lists photos and videos separately, so the selection is kept per group.
+    private val _selectedPhotoIndices = MutableStateFlow<Set<Int>>(emptySet())
+    val selectedPhotoIndices: StateFlow<Set<Int>> = _selectedPhotoIndices.asStateFlow()
+
+    private val _selectedVideoIndices = MutableStateFlow<Set<Int>>(emptySet())
+    val selectedVideoIndices: StateFlow<Set<Int>> = _selectedVideoIndices.asStateFlow()
 
     private val _showThumbnailOnly = MutableStateFlow(false)
     val showThumbnailOnly: StateFlow<Boolean> = _showThumbnailOnly.asStateFlow()
@@ -218,54 +226,116 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleCarouselIndex(index: Int) {
-        val current = _selectedCarouselIndices.value.toMutableSet()
+    fun togglePhotoIndex(index: Int) {
+        val current = _selectedPhotoIndices.value.toMutableSet()
         if (current.contains(index)) current.remove(index) else current.add(index)
-        _selectedCarouselIndices.value = current
+        _selectedPhotoIndices.value = current
+    }
+
+    fun toggleVideoIndex(index: Int) {
+        val current = _selectedVideoIndices.value.toMutableSet()
+        if (current.contains(index)) current.remove(index) else current.add(index)
+        _selectedVideoIndices.value = current
     }
 
     fun selectAllCarousel() {
-        val count = _currentVideoInfo.value?.carouselImages?.size ?: 0
-        _selectedCarouselIndices.value = (0 until count).toSet()
+        val info = _currentVideoInfo.value
+        _selectedPhotoIndices.value = (0 until (info?.carouselImages?.size ?: 0)).toSet()
+        _selectedVideoIndices.value = (0 until (info?.carouselVideos?.size ?: 0)).toSet()
     }
 
     fun deselectAllCarousel() {
-        _selectedCarouselIndices.value = emptySet()
+        _selectedPhotoIndices.value = emptySet()
+        _selectedVideoIndices.value = emptySet()
     }
 
+    /**
+     * Downloads the selected slides of one post. Photos and video slides travel the
+     * same path — a plain GET against the CDN, which already accepted the signed URL —
+     * so a mixed post is saved in one pass instead of picture slides first and videos
+     * through a separate engine run that never managed to fetch them.
+     */
     fun downloadCarouselSelected() {
         val info = _currentVideoInfo.value ?: return
-        val indices = _selectedCarouselIndices.value
-        if (indices.isEmpty()) return
+        val photos = _selectedPhotoIndices.value.sorted()
+            .mapNotNull { info.carouselImages.getOrNull(it) }
+        val videos = _selectedVideoIndices.value.sorted()
+            .mapNotNull { info.carouselVideos.getOrNull(it) }
+        val slides = photos.map { MediaSlide(it, isVideo = false) } +
+            videos.map { MediaSlide(it, isVideo = true) }
+        if (slides.isEmpty()) return
 
-        val selectedUrls = indices.sorted().map { info.carouselImages[it] }
         _showFormatSheet.value = false
 
         viewModelScope.launch {
             val outputDir = repository.downloadPath.first()
             _downloadState.value = DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING)
-            val summary = repository.downloadImages(
-                imageUrls = selectedUrls,
-                baseName = info.title,
-                outputDir = outputDir,
-                refererUrl = info.originalUrl,
-                onProgress = { state -> _downloadState.value = state }
-            )
-            if (summary.savedCount > 0) {
-                val toastMsg = if (summary.failedCount > 0) {
-                    getApplication<Application>().getString(
-                        R.string.images_saved_partial,
-                        summary.savedCount,
-                        summary.failedCount
-                    )
-                } else if (summary.savedCount == 1) {
-                    getApplication<Application>().getString(R.string.image_saved)
-                } else {
-                    getApplication<Application>().getString(R.string.images_saved, summary.savedCount)
-                }
-                Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
+
+            val summary = try {
+                repository.downloadMedia(
+                    slides = slides,
+                    baseName = info.title,
+                    outputDir = outputDir,
+                    refererUrl = info.originalUrl,
+                    onProgress = { state -> _downloadState.value = state }
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("HomeViewModel", "Carousel download failed", e)
+                ImageDownloadSummary(emptyList(), slides.size)
             }
+
+            if (summary.savedCount > 0) {
+                try {
+                    saveCarouselRecord(info, summary.savedPaths)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w("HomeViewModel", "Could not store the history entry", e)
+                }
+            }
+
+            val failedCount = slides.size - summary.savedCount
+            val toastMsg = when {
+                summary.savedCount == 0 -> getApplication<Application>()
+                    .getString(R.string.media_saved_none)
+                failedCount > 0 -> getApplication<Application>()
+                    .getString(R.string.media_saved_partial, summary.savedCount, failedCount)
+                summary.savedCount == 1 -> getApplication<Application>()
+                    .getString(R.string.image_saved)
+                else -> getApplication<Application>()
+                    .getString(R.string.media_saved, summary.savedCount)
+            }
+            _downloadState.value = DownloadState.Idle
+            Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /** One History row for the saved slides of a post, description and hashtags included. */
+    private suspend fun saveCarouselRecord(info: VideoInfo, savedPaths: List<String>) {
+        val firstPath = savedPaths.firstOrNull() ?: return
+        val totalSize = withContext(Dispatchers.IO) {
+            savedPaths.sumOf { path -> FileHelper.getFileSizeBytes(path) }
+        }
+        val extension = firstPath.substringAfterLast('/').substringAfterLast('.', "").lowercase()
+        val item = DownloadItem(
+            url = info.originalUrl,
+            title = info.title,
+            uploader = info.uploader,
+            thumbnailUrl = info.thumbnailUrl
+                ?: info.carouselImages.firstOrNull()
+                ?: info.carouselVideoPosters.firstOrNull { it.isNotBlank() },
+            filePath = firstPath,
+            fileSize = totalSize,
+            duration = info.duration,
+            formatId = "",
+            ext = extension,
+            isAudioOnly = false,
+            description = info.description.orEmpty(),
+            hashtags = info.hashtags
+        )
+        repository.saveDownloadItem(item)
     }
 
     fun fetchVideoInfo(onConsumed: () -> Unit = {}) {
@@ -306,7 +376,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     addRecentUrl(url)
                     suggestDefaultAudioTrack(info.audioTracks)
                     if (info.isCarousel) {
-                        _selectedCarouselIndices.value = (0 until info.carouselImages.size).toSet()
+                        selectAllCarousel()
                         _showThumbnailOnly.value = false
                         _downloadState.value = DownloadState.InfoReady(info)
                         _showFormatSheet.value = true
@@ -375,7 +445,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     addRecentUrl(url)
                     suggestDefaultAudioTrack(info.audioTracks)
                     if (info.isCarousel) {
-                        _selectedCarouselIndices.value = (0 until info.carouselImages.size).toSet()
+                        selectAllCarousel()
                         _showFormatSheet.value = true
                     } else {
                         downloadBestFormat(info, url)
@@ -395,13 +465,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (bestFormat != null) {
             viewModelScope.launch {
                 val outputDir = repository.downloadPath.first()
-                val audioTrack = _selectedAudioTrack.value
-                val safeFormatId = if (bestFormat.isAudioOnly) {
-                    audioTrack?.formatId ?: "bestaudio[ext=m4a]/bestaudio"
-                } else {
-                    val audioId = audioTrack?.formatId ?: "bestaudio"
-                    "${bestFormat.formatId}+$audioId/best"
-                }
+                val safeFormatId = FormatSpec.forVideo(
+                    formatId = bestFormat.formatId,
+                    isAudioOnly = bestFormat.isAudioOnly,
+                    isMuxed = bestFormat.isMuxed,
+                    audioTrackId = _selectedAudioTrack.value?.formatId
+                )
                 startDownloadService(url, safeFormatId, outputDir, info, bestFormat.formatId, bestFormat.ext, bestFormat.isAudioOnly)
             }
         } else {
@@ -435,13 +504,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val outputDir = repository.downloadPath.first()
-            val audioTrack = _selectedAudioTrack.value
-            val safeFormatId = if (format.isAudioOnly) {
-                audioTrack?.formatId ?: "bestaudio[ext=m4a]/bestaudio"
-            } else {
-                val audioId = audioTrack?.formatId ?: "bestaudio"
-                "${format.formatId}+$audioId/best"
-            }
+            val safeFormatId = FormatSpec.forVideo(
+                formatId = format.formatId,
+                isAudioOnly = format.isAudioOnly,
+                isMuxed = format.isMuxed,
+                audioTrackId = _selectedAudioTrack.value?.formatId
+            )
             startDownloadService(url, safeFormatId, outputDir, info, format.formatId, format.ext, format.isAudioOnly)
         }
     }
@@ -472,6 +540,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             putExtra(DownloadService.EXTRA_AUTO_CAPTION_LANGS, _selectedAutoCaptionLangs.value.joinToString(","))
             putExtra(DownloadService.EXTRA_EMBED_SUBTITLES, _embedSubtitles.value)
             putExtra(DownloadService.EXTRA_SUBTITLE_FORMAT, _subtitleFormat.value)
+            // Metadata stored with the finished History entry.
+            putExtra(DownloadService.EXTRA_UPLOADER, info.uploader)
+            putExtra(DownloadService.EXTRA_DESCRIPTION, info.description.orEmpty())
+            putExtra(DownloadService.EXTRA_HASHTAGS, info.hashtags.joinToString(","))
+            putExtra(DownloadService.EXTRA_DURATION, info.duration)
+            putExtra(DownloadService.EXTRA_IS_AUDIO_ONLY, isAudioOnly)
+            putExtra(
+                DownloadService.EXTRA_HAS_SUBTITLES,
+                _selectedSubtitleLangs.value.isNotEmpty() || _selectedAutoCaptionLangs.value.isNotEmpty()
+            )
         }
         getApplication<Application>().startForegroundService(intent)
 
@@ -500,23 +578,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             Toast.LENGTH_SHORT
                         ).show()
                     }
-                    val fileSize = withContext(Dispatchers.IO) {
-                        FileHelper.getFileSizeBytes(state.filePath)
-                    }
-                    val item = DownloadItem(
-                        url = url,
-                        title = info.title,
-                        uploader = info.uploader,
-                        thumbnailUrl = info.thumbnailUrl,
-                        filePath = state.filePath,
-                        fileSize = fileSize,
-                        duration = info.duration,
-                        formatId = fmtId,
-                        ext = ext,
-                        isAudioOnly = isAudioOnly,
-                        hasSubtitles = _selectedSubtitleLangs.value.isNotEmpty() || _selectedAutoCaptionLangs.value.isNotEmpty()
-                    )
-                    repository.saveDownloadItem(item)
+                    // The History row itself is written by DownloadService, which has
+                    // the description/hashtags that were sent with the download.
                 }
             }
         }

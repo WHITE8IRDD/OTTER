@@ -123,8 +123,6 @@
     <string name="setting_download_subtitles">Download subtitles</string>
     <string name="setting_download_subtitles_sub">Include subtitles with Quick Download</string>
     <string name="settings_performance">Performance</string>
-    <string name="setting_use_aria2c">Use Aria2c</string>
-    <string name="setting_use_aria2c_sub">Faster downloads with Aria2</string>
     <string name="setting_rate_limit">Rate limit</string>
     <string name="setting_rate_limit_sub">Limit download speed</string>
     <string name="settings_notifications">Notifications</string>
@@ -177,6 +175,14 @@
     <string name="btn_clear">Clear</string>
     <string name="badge_subtitle">CC</string>
 
+    <!-- History details -->
+    <string name="history_details_title">Download details</string>
+    <string name="history_details_hint">Tap a download to see its title, description and hashtags</string>
+    <string name="history_no_description">No description was saved with this download.</string>
+    <string name="history_no_hashtags">No hashtags were saved with this download.</string>
+    <string name="btn_copy_all">COPY ALL</string>
+    <string name="history_copied_all">Title, description and hashtags copied</string>
+
     <!-- Content descriptions -->
     <string name="content_desc_dismiss">Dismiss</string>
     <string name="content_desc_clear">Clear</string>
@@ -193,6 +199,9 @@
     <string name="content_desc_copy">Copy</string>
     <string name="content_desc_copy_description">Copy description</string>
     <string name="content_desc_image">Image %d</string>
+    <string name="content_desc_video">Video %d</string>
+    <string name="content_desc_video_slide">Video slide</string>
+    <string name="content_desc_copy_hashtags">Copy hashtags</string>
 
     <!-- CookiesScreen -->
     <string name="cookies_title">Site Cookies</string>
@@ -235,6 +244,11 @@
     <string name="btn_select_all">SELECT ALL</string>
     <string name="btn_clear_format">CLEAR</string>
     <string name="btn_download_selected">Download Selected (%d)</string>
+    <string name="carousel_photos">Photos</string>
+    <string name="carousel_videos">Videos</string>
+    <string name="carousel_partial">Only %1$d of %2$d slides could be read. The rest may need site cookies or may not be public.</string>
+    <string name="media_saved">%d files saved</string>
+    <string name="media_saved_partial">%1$d saved, %2$d failed.</string>
     <string name="audio_language">AUDIO LANGUAGE</string>
     <string name="audio_available">(%d available)</string>
     <string name="toggle_download_subtitles">Download subtitles with video</string>
@@ -333,4 +347,6 @@
 
     <!-- Mascot System -->
     <string name="fetching_message">Finding your media…</string>
+    <string name="media_saved_none">Nothing could be saved from those slides.</string>
+    <string name="error_instagram_no_slides">Instagram didn\'t return any readable slides for this post. Details: %1$s</string>
 </resources>

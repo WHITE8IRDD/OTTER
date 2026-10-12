@@ -123,8 +123,6 @@
     <string name="setting_download_subtitles">Télécharger les sous-titres</string>
     <string name="setting_download_subtitles_sub">Inclure les sous-titres avec le téléchargement rapide</string>
     <string name="settings_performance">Performances</string>
-    <string name="setting_use_aria2c">Utiliser Aria2c</string>
-    <string name="setting_use_aria2c_sub">Téléchargements plus rapides avec Aria2</string>
     <string name="setting_rate_limit">Limite de débit</string>
     <string name="setting_rate_limit_sub">Limiter la vitesse de téléchargement</string>
     <string name="settings_notifications">Notifications</string>
@@ -333,4 +331,21 @@
 
     <!-- Mascot System -->
     <string name="fetching_message">Recherche de vos médias…</string>
+
+    <string name="carousel_photos">Photos</string>
+    <string name="carousel_videos">Vidéos</string>
+    <string name="carousel_partial">Seules %1$d diapositives sur %2$d ont pu être lues. Les autres nécessitent peut-être des cookies ou ne sont pas publiques.</string>
+    <string name="media_saved">%d fichiers enregistrés</string>
+    <string name="media_saved_partial">%1$d enregistré(s), %2$d échec(s).</string>
+    <string name="content_desc_video">Vidéo %d</string>
+    <string name="content_desc_video_slide">Diapositive vidéo</string>
+    <string name="content_desc_copy_hashtags">Copier les hashtags</string>
+    <string name="history_details_title">Détails du téléchargement</string>
+    <string name="history_details_hint">Touchez un téléchargement pour voir son titre, sa description et ses hashtags</string>
+    <string name="history_no_description">Aucune description n\'a été enregistrée avec ce téléchargement.</string>
+    <string name="history_no_hashtags">Aucun hashtag n\'a été enregistré avec ce téléchargement.</string>
+    <string name="btn_copy_all">TOUT COPIER</string>
+    <string name="history_copied_all">Titre, description et hashtags copiés</string>
+    <string name="media_saved_none">Rien n\'a pu être enregistré depuis ces diapositives.</string>
+    <string name="error_instagram_no_slides">Instagram n\'a renvoyé aucune diapositive lisible pour cette publication. Détails : %1$s</string>
 </resources>

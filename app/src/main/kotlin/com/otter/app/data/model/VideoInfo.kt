@@ -20,7 +20,17 @@ data class VideoInfo(
     val availability: String = "",
     val tags: List<String> = emptyList(),
     val hashtags: List<String> = emptyList(),
+    /** Photo slides of a carousel / gallery post, in payload order. */
     val carouselImages: List<String> = emptyList(),
+    /**
+     * Video slides of the same post, in payload order. They travel through the
+     * video download path; the photos above through the image path.
+     */
+    val carouselVideos: List<String> = emptyList(),
+    /** Poster frame per entry of [carouselVideos] (blank when unknown). */
+    val carouselVideoPosters: List<String> = emptyList(),
+    /** Slides the source declared; larger than photos+videos means a partial read. */
+    val carouselExpectedCount: Int = 0,
     val isCarousel: Boolean = false,
     val subtitleTracks: List<SubtitleTrack> = emptyList(),
     val audioTracks: List<AudioTrack> = emptyList()
@@ -50,6 +60,13 @@ data class VideoInfo(
             isBandcamp -> "Bandcamp"
             else -> extractor.ifEmpty { "Generic" }
         }
+
+    /** Photos + videos the picker can offer. */
+    val carouselMediaCount: Int get() = carouselImages.size + carouselVideos.size
+
+    /** True when the source declared more slides than could be read. */
+    val isCarouselPartial: Boolean
+        get() = carouselMediaCount > 0 && carouselExpectedCount > carouselMediaCount
 
     companion object {
         val SUPPORTED_PLATFORMS = listOf(

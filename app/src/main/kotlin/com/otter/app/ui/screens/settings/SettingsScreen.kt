@@ -99,7 +99,6 @@ fun SettingsScreen(
     val rateLimit by viewModel.rateLimit.collectAsStateWithLifecycle()
     val maxRate by viewModel.maxRate.collectAsStateWithLifecycle()
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
-    val useAria2c by viewModel.useAria2c.collectAsStateWithLifecycle()
     val concurrentFragments by viewModel.concurrentFragments.collectAsStateWithLifecycle()
     val retries by viewModel.retries.collectAsStateWithLifecycle()
     val isDarkMode by themeViewModel.isDarkMode.collectAsStateWithLifecycle()
@@ -288,16 +287,6 @@ fun SettingsScreen(
             }
 
             SettingsGroup(title = stringResource(R.string.settings_performance)) {
-                SettingsRow(
-                    title = stringResource(R.string.setting_use_aria2c),
-                    subtitle = stringResource(R.string.setting_use_aria2c_sub),
-                    trailing = {
-                        OtterSwitch(
-                            checked = useAria2c,
-                            onCheckedChange = viewModel::setUseAria2c
-                        )
-                    }
-                )
                 SettingsRow(
                     title = stringResource(R.string.setting_rate_limit),
                     subtitle = stringResource(R.string.setting_rate_limit_sub),
