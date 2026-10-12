@@ -6,6 +6,9 @@ name: Android Release (official)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - release/v26.2
 
 permissions:
   contents: write
