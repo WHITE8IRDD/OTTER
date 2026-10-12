@@ -22,7 +22,7 @@ android {
         applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
+        versionCode = 15
         versionName = "26.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
