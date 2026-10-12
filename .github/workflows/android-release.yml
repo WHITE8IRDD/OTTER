@@ -125,7 +125,7 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           CODE="${{ steps.version.outputs.code }}"
           TAG="v${VERSION}"
-          CERT_SHA256=$(keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass otter123 -alias otter | grep -i SHA256)
+          CERT_SHA256=$(keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass otter123 -alias otter | grep -iE "SHA-?256")
           {
             echo "Official OTTER ${VERSION} release build (versionCode ${CODE}), built by \`${GITHUB_WORKFLOW}\` from \`${GITHUB_SHA}\`."
             echo
