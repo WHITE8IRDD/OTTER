@@ -63,7 +63,6 @@ Production users will face edge cases (6th retry, null pointer in format parsing
 | `FormatParser` has `warmUpEngine` as companion method + instance class with duplicate platform-specific flags vs `Downloader` | Medium | 2h refactor to extract shared flag logic |
 | `HomeScreen` (1136 lines) + `FormatSheet` (856 lines) — both above 800-line threshold | Medium | 3h to split into smaller composables |
 | `InstagramImageScraper` has 3 parallel HTTP fetch methods with very similar boilerplate | Low | 1h to extract HTTP client helper |
-| Hardcoded UA strings duplicated across `FormatParser` and `Downloader` | Low | 30m to move to constants |
 | `Downloader` uses `url.hashCode().toUInt().toString()` as process ID (collision risk) | Low | 30m to use UUID instead |
 
 ## Production Risks
@@ -96,3 +95,15 @@ Production users will face edge cases (6th retry, null pointer in format parsing
 - **Remove `ReusableComponents.kt`** — check if any of its exports are imported elsewhere (appears vestigial)
 - **Remove unused drawables** — PNGs that are no longer referenced in code
 - **Consolidate `toReadableFileSize`** — exists in `Extensions.kt`; verify no duplicate in companion objects
+
+## Part 5: Public-link reliability pass (Otter 26-better 1 candidate)
+
+- TikTok photo-mode links now parse the page's `imagePost.images` payload into a selectable image gallery, with signed CDN query strings retained and posters excluded.
+- TikTok video metadata and downloads use the same public-web extractor path; the previous hard-coded mobile install ID was removed to avoid a format-list mismatch. Short links now support GET-based redirect resolution with a bounded timeout.
+- Instagram endpoint requests are consumed as they complete and cancelled once the declared slides are available. The scraper no longer loads OTTER's saved cookie file for its HTTP requests; its WebView fallback disables cookie acceptance while scraping.
+- Major public social extractors do not receive the optional saved-cookie file. The optional cookie feature remains for other sites.
+- Clipboard links auto-fill and trigger the existing metadata fetch when the Home screen resumes. Explicit share intents retain priority.
+- The foreground download service persists the active request and uses sticky restart behavior so Android can restart ordinary process-reclaimed downloads; yt-dlp's existing `--continue` resumes partial files.
+- Added JVM fixtures for TikTok photo-mode parsing and cookie-policy behavior, plus a branch-specific GitHub Actions workflow that runs unit tests, builds a debug candidate, and uploads it as an artifact.
+
+**Verification boundary:** the sandbox has no JDK or Android SDK, and no target-device/emulator or user-provided links were available. The build, unit tests, and live TikTok/Instagram/Facebook/YouTube download matrix still need to pass in CI and on a real device before publishing a release. No claim of universal, zero-second, or login-free success is made for links the app has not tested.

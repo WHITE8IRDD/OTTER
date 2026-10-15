@@ -32,7 +32,9 @@ class FormatParser(private val context: Context? = null) {
         private const val MAX_CAROUSEL_SLIDES = 20
         /** Hard ceiling on reading one Instagram post before yt-dlp gets its turn. */
         private const val INSTAGRAM_SCRAPE_BUDGET_MS = 60_000L
-        private const val UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36"
+        /** Photo-mode links have no video formats, so read their public hydration payload directly. */
+        private const val TIKTOK_PHOTO_SCRAPE_BUDGET_MS = 8_000L
+        private const val UA = MediaUrlNormalizer.TIKTOK_USER_AGENT
         private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
         val engineReady = MutableStateFlow(false)
@@ -41,6 +43,7 @@ class FormatParser(private val context: Context? = null) {
             fun hostMatches(vararg domains: String) = domains.any { MediaUrlNormalizer.hostMatches(url, it) }
 
             val needsUA = hostMatches(
+                "tiktok.com", "tiktokv.com",
                 "twitter.com", "x.com", "t.co",
                 "reddit.com", "redd.it", "twitch.tv", "vimeo.com",
                 "soundcloud.com", "bilibili.com", "dailymotion.com", "dai.ly",
@@ -49,6 +52,11 @@ class FormatParser(private val context: Context? = null) {
             if (needsUA) request.addOption("--user-agent", UA)
 
             when {
+                hostMatches("tiktok.com", "tiktokv.com") -> {
+                    request.addOption("--add-header", "Referer:https://www.tiktok.com/")
+                    request.addOption("--extractor-retries", "5")
+                    Log.i(TAG, "[PLATFORM-FLAGS] TikTok detected, using public web extraction with browser headers + retry=5")
+                }
                 hostMatches("twitter.com", "x.com", "t.co") -> {
                     request.addOption("--add-header", "Accept-Language:en-US,en;q=0.9")
                     request.addOption("--extractor-retries", "5")
@@ -100,23 +108,50 @@ class FormatParser(private val context: Context? = null) {
         }
 
         fun resolveTikTokShortUrl(url: String): String {
-            if (!MediaUrlNormalizer.hostMatches(url, "tiktok.com")) return url
-            val shortPattern = Regex("""https?://(vm|vt)\.tiktok\.com/\S+""", RegexOption.IGNORE_CASE)
-            if (!shortPattern.matches(url.trim())) return url
-            return try {
-                val conn = URL(url).openConnection() as HttpURLConnection
-                conn.instanceFollowRedirects = false
-                conn.connectTimeout = 5000
-                conn.readTimeout = 5000
-                conn.requestMethod = "HEAD"
-                conn.connect()
-                val location = conn.getHeaderField("Location")
-                conn.disconnect()
-                if (!location.isNullOrEmpty() && MediaUrlNormalizer.hostMatches(location, "tiktok.com")) location else url
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to resolve TikTok short URL: ${e.message}")
-                url
+            val original = url.trim()
+            val parsed = runCatching { URL(original) }.getOrNull() ?: return url
+            if (!MediaUrlNormalizer.hostMatches(original, "tiktok.com") &&
+                !MediaUrlNormalizer.hostMatches(original, "tiktokv.com")
+            ) return url
+            val host = parsed.host.lowercase()
+            val isShortHost = host == "vm.tiktok.com" || host == "vt.tiktok.com"
+            val isShortPath = parsed.path.startsWith("/t/", ignoreCase = true)
+            if (!isShortHost && !isShortPath) return url
+
+            var current = original
+            repeat(5) {
+                val connection = runCatching { URL(current).openConnection() as HttpURLConnection }
+                    .getOrNull() ?: return current
+                try {
+                    connection.instanceFollowRedirects = false
+                    connection.connectTimeout = 3_500
+                    connection.readTimeout = 3_500
+                    connection.requestMethod = "GET"
+                    connection.setRequestProperty(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                            "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                    )
+                    connection.setRequestProperty("Range", "bytes=0-0")
+                    val status = connection.responseCode
+                    val location = connection.getHeaderField("Location")
+                    if (status !in 300..399 || location.isNullOrBlank()) return current
+                    val next = runCatching { URL(URL(current), location).toExternalForm() }.getOrNull()
+                        ?: return current
+                    val isTiktokRedirect = MediaUrlNormalizer.hostMatches(next, "tiktok.com") ||
+                        MediaUrlNormalizer.hostMatches(next, "tiktokv.com")
+                    if (!isTiktokRedirect) return current
+                    current = next
+                    val path = runCatching { URL(current).path }.getOrDefault("")
+                    if (path.contains("/video/") || path.contains("/photo/")) return current
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to resolve TikTok short URL: ${e.message}")
+                    return current
+                } finally {
+                    connection.disconnect()
+                }
             }
+            return current
         }
 
         suspend fun warmUpEngine(context: Context) {
@@ -189,6 +224,30 @@ class FormatParser(private val context: Context? = null) {
                 if (System.currentTimeMillis() - cached.timestamp < 300_000L) {
                     return@withContext Result.success(cached.info)
                 }
+            }
+        }
+
+        // TikTok photo-mode links expose an imagePost payload, not video formats.
+        // Handle those through the selectable gallery path before yt-dlp reports an
+        // empty-format error. The page fetch is bounded and sends no cookies.
+        if (TikTokPhotoParser.isPhotoModeUrl(resolvedUrl) && context != null) {
+            val photoPost = runCatching {
+                withTimeoutOrNull(TIKTOK_PHOTO_SCRAPE_BUDGET_MS) {
+                    TikTokPhotoScraper().scrape(resolvedUrl)
+                }
+            }.onFailure { Log.w(TAG, "TikTok photo-mode page scrape failed", it) }.getOrNull()
+            if (photoPost != null && photoPost.imageUrls.isNotEmpty()) {
+                val info = createImageGalleryInfo(
+                    sourceUrl = url,
+                    title = photoPost.title.ifBlank { "TikTok photo post" },
+                    extractor = "TikTok",
+                    images = photoPost.imageUrls,
+                    expectedCount = photoPost.expectedCount,
+                    description = photoPost.description
+                )
+                videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
+                Log.i(TAG, "TikTok photo-mode page exposed ${photoPost.imageUrls.size}/${photoPost.expectedCount} stills")
+                return@withContext Result.success(info)
             }
         }
 
@@ -280,7 +339,7 @@ class FormatParser(private val context: Context? = null) {
                     // Platform-specific flags (user-agent, headers, geo-bypass, etc.)
                     applyPlatformArgs(this, url)
 
-                    if (context != null) {
+                    if (context != null && MediaUrlNormalizer.shouldUseOptionalCookies(url)) {
                         val cookieFile = File(context.filesDir, "cookies.txt")
                         if (cookieFile.exists() && cookieFile.length() > 0) {
                             addOption("--cookies", cookieFile.absolutePath)
@@ -555,7 +614,7 @@ class FormatParser(private val context: Context? = null) {
         val domains = setOf(
             "youtube.com", "youtu.be", "youtube-nocookie.com",
             "instagram.com", "instagr.am",
-            "tiktok.com", "facebook.com", "fb.com", "fb.watch",
+            "tiktok.com", "tiktokv.com", "facebook.com", "fb.com", "fb.watch",
             "twitter.com", "x.com", "t.co", "reddit.com", "redd.it",
             "twitch.tv", "vimeo.com", "bilibili.com", "dailymotion.com", "dai.ly",
             "pinterest.com", "pin.it", "streamable.com", "bandcamp.com",

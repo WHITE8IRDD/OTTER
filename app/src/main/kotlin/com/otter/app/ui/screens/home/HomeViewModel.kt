@@ -175,6 +175,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPasteClicked(text: String?) {
         if (text != null) {
+            debounceJob?.cancel()
             _urlInput.value = text
             fetchVideoInfo()
         }
