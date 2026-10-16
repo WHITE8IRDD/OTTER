@@ -213,3 +213,97 @@ which now publishes the failure excerpt as check annotations). No change in this
 exercised on a physical device, so "works" here means "the rules are correct and the app builds", not
 "downloaded a reel on a phone". The engine-dependent paths (Instagram, YouTube) need a device pass
 before the release notes can claim more than that.
+
+## Part 8: Otter v2 Tik-You Fix (versionCode 19) — TikTok and YouTube downloads, Instagram Quick Download
+
+Scope: fix TikTok (completely broken) and YouTube (broken by the previous release's own automatic
+update) downloads, and fix the one reported Instagram regression (Quick Download on a carousel
+navigating out of Instagram). Facebook, Instagram carousel extraction, and the generic/browser page
+reader were not touched.
+
+### Root cause — YouTube
+
+The extraction engine this app ships is not plain `yt-dlp`: it is `yt_dlp` merged with `yt_dlp_ejs`
+(the JavaScript challenge solver) at build time by the Android wrapper (`youtubedl-android`), bundled
+together as one zipapp resource (`yt_dlp/`, `yt_dlp_ejs/` and `__main__.py` at the archive root —
+confirmed by unzipping the pinned wrapper's own asset). Plain upstream `yt-dlp` has no such step:
+`yt_dlp_ejs` is an optional dependency detected at runtime (`try { import yt_dlp_ejs } except
+ImportError { yt_dlp_ejs = None }`), not vendored into the release asset, and the vendored *fallback*
+script upstream carries for exactly this situation only includes the `core` script, not the `lib`
+script a quickjs/node runtime also needs. `OtterApplication.keepEngineCurrent()`, added in the
+previous release, calls the wrapper's own `updateYoutubeDL()`, which replaces the engine file with
+that plain upstream asset — silently removing the solver. The result: YouTube's signature/n-parameter
+resolution breaks (the engine reports "No usable challenge solver … script available" or an empty
+format list) on every install whose automatic update ran, while every other extractor — Facebook,
+Instagram, TikTok's own web extractor, generic pages — keeps working, because none of them call a JS
+solver. This matches the reported symptom exactly: YouTube specifically broken, everything else fine.
+
+**Fix**: `EngineBundle` (new, pure, unit-tested) reads an engine zipapp's yt-dlp version and the
+solver version its vendored manifest expects, and can merge a solver wheel into an engine archive
+without ever unzipping to disk. `YtDlpUpdater` (rewritten) now fetches the solver release matching
+the engine's own vendored version before installing anything, enforces yt-dlp's own version-pairing
+rule (`solverVersionsCompatible`), smoke-tests the merged result by actually running it, and rolls
+back to the previous engine (or re-extracts the APK's bundled, complete build) if the new file does
+not start. `OtterApplication` runs an integrity check at startup (`YtDlpUpdater.ensureSolver()`) that
+repairs or replaces an already-broken installed engine before the app's first extraction, so an
+install already affected by the previous release's bug heals itself without user action.
+`FetchErrorClassifier` recognises a missing-solver failure as an engine problem ("update it in
+Settings") instead of a generic or misleading message.
+
+### Root cause — TikTok
+
+The pinned engine's TikTok URL matcher only recognises `tiktok.com/@user/video/<id>` and
+`tiktok.com/embed/<id>`. What the app actually receives from a user pasting or sharing a TikTok link
+is a short link (`vm.tiktok.com/…`, `vt.tiktok.com/…` — no post id in the URL at all) or the forwarded
+share form (`tiktok.com/share/video/<id>/` — an id but no author handle), neither of which that
+matcher accepts; the link fell through to the generic page reader, which found a script-heavy share
+page and no media. On top of that, both the fetch and the download forced a pinned, increasingly
+outdated mobile Chrome user-agent onto every TikTok request, and TikTok answers that specific pairing
+with its "open in the app" interstitial instead of the post — a second, independent way for the same
+link to fail even when the URL shape happened to be right.
+
+**Fix**: `TikTokUrl` (new, pure, unit-tested) recognises every link shape above and rewrites a link to
+the canonical form the extractor matches. `TikTokLinkResolver` (new) does the network half: follows a
+short link's redirect chain (bounded, timed out) and, when an id has no author, looks up the author
+through TikTok's public oEmbed endpoint (no login, no cookies) — then caches the mapping so a download
+issued later by the foreground service with the original pasted link still resolves correctly without
+a second network round trip. Both `FormatParser` (fetch) and `Downloader` (download) now resolve
+through this one shared path. The forced mobile user-agent override was removed from both; only the
+`Referer` header remains, so the engine uses its own per-endpoint headers, which is what current
+yt-dlp TikTok code (web page, oEmbed, API client) is actually written against.
+`TikTokPhotoParser.isPhotoModeUrl` was extended to also match the forwarded `/share/photo/<id>/` form,
+the same root cause as the video case.
+
+### Instagram Quick Download
+
+Quick Download on a gallery post used to forward the link to the app's main window
+(`openNormalFlow` → a `MainActivity` intent), which is the one reported regression: it took the user
+out of Instagram into OTTER's own screen to choose slides for a post they were already looking at.
+`QuickDownloadActivity` now draws a translucent selection window (`QuickSelectionOverlay`, new) in
+place, over the app the link was shared from — reusing the existing fetch, the existing
+`CarouselGalleryContent` picker (now `internal` so this second host can use it, previously `private`),
+and the existing `downloadMedia` slide-saving path. Closing the window (or a successful save) finishes
+the activity and returns to the app the link came from; nothing about the main app's own carousel flow
+changed. A plain video link is unaffected: it still starts `DownloadService` immediately, with no
+window, exactly as Quick Download always did — the only change there is that the service reads its
+own settings (subtitles) instead of the share-sheet activity awaiting them before starting the
+foreground service, which the activity's lifetime does not reliably allow.
+
+### Regression protection
+
+Nothing in `InstagramMediaParser`, `InstagramImageScraper`, `InstagramUrl`, `GenericPageMediaScraper`,
+`MediaClassifier`, `DownloadRetryPolicy`, `MediaFileValidator`, `EngineArgs`, `FormatSpec`,
+`HomeViewModel`, `HomeScreen`, or `DownloadRepository` was changed in this pass — Facebook downloads,
+Instagram carousel extraction, and the generic/browser page reader go through exactly the code they
+did before. New JVM unit tests (`EngineBundleTest`, `TikTokUrlTest`) cover the new rules; no existing
+test file was modified, and the full existing suite plus `:app:assembleDebug` passed in CI
+(`android-validation.yml`, run `38936908663`) before this release was built.
+
+### What is not verified
+
+No physical device or emulator run was available in this pass (same sandbox constraint as previous
+passes: no Android SDK/emulator, no direct network access to tiktok.com/youtube.com/instagram.com
+from the development sandbox). Confirmation is: the rules are unit-tested against real link shapes
+and real archive layouts, and the project builds and its full test suite passes in CI. A device pass
+is still the way to confirm an actual video downloads end-to-end; this is flagged here rather than
+assumed.
