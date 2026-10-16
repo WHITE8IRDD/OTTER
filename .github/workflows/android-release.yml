@@ -193,7 +193,7 @@ jobs:
             echo
             echo "### Which file to install"
             echo
-            echo "The universal build is attached as **\`OTTER new perspective 0.1.apk\`** and runs on every supported ABI. The smaller per-ABI APKs are attached alongside it if you would rather download less (arm64-v8a covers most current phones)."
+            echo "The universal build is attached as **\`OTTER.new.perspective.0.1.apk\`** (GitHub writes asset names with dots) and runs on every supported ABI. The smaller per-ABI APKs are attached alongside it if you would rather download less (arm64-v8a covers most current phones)."
             echo
             echo "## Files"
             echo
