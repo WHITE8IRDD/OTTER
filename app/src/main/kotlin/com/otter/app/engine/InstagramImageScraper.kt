@@ -232,6 +232,8 @@ class InstagramImageScraper(private val context: Context) {
         val videoUrls: List<String> = emptyList(),
         /** Poster frame per entry of [videoUrls] (same indexes, blank when unknown). */
         val videoPosters: List<String> = emptyList(),
+        /** The post's slides in payload order, typed photo or video (empty when unknown). */
+        val slides: List<InstagramMediaParser.Slide> = emptyList(),
         /** Slides the payload declared (0 = unknown). */
         val expectedCount: Int,
         val shortcode: String,
@@ -243,6 +245,25 @@ class InstagramImageScraper(private val context: Context) {
     ) {
         /** Photos + videos the scrape could read. */
         val mediaCount: Int get() = imageUrls.size + videoUrls.size
+
+        /**
+         * True when the post's own media begins with a video — a single-video post or a reel. The
+         * picker puts that first instead of leading with the page's pictures.
+         */
+        val primaryIsVideo: Boolean
+            get() = slides.firstOrNull()?.isVideo ?: (imageUrls.isEmpty() && videoUrls.isNotEmpty())
+
+        /** Ordered slides, falling back to photos-then-videos when the order was lost. */
+        fun orderedSlides(): List<InstagramMediaParser.Slide> =
+            if (slides.isNotEmpty()) slides else
+                imageUrls.map { InstagramMediaParser.Slide(it, isVideo = false) } +
+                    videoUrls.mapIndexed { index, url ->
+                        InstagramMediaParser.Slide(
+                            url,
+                            isVideo = true,
+                            posterUrl = videoPosters.getOrNull(index).orEmpty()
+                        )
+                    }
 
         val isComplete: Boolean
             get() = mediaCount > 0 && (expectedCount == 0 || mediaCount >= expectedCount)
@@ -258,12 +279,11 @@ class InstagramImageScraper(private val context: Context) {
 
     suspend fun scrapeDetailed(postUrl: String): ScrapeResult = withContext(Dispatchers.IO) {
         val startedAt = System.currentTimeMillis()
-        val shortcode = InstagramMediaParser.shortcodeFromUrl(postUrl)
-        val canonical = if (shortcode.isNotEmpty()) {
-            "https://www.instagram.com/p/$shortcode/"
-        } else {
-            postUrl
-        }
+        val parsed = InstagramUrl.parse(postUrl)
+        val shortcode = parsed?.shortcode.orEmpty()
+        // The kind is kept: a reel asked for as /p/<code>/ answers with the share redirect page,
+        // which carries no media, and that is why reels used to read as empty.
+        val canonical = parsed?.canonicalUrl ?: postUrl
         val mediaId = InstagramMediaParser.mediaIdFromShortcode(shortcode)
         val merged = LinkedHashMap<String, String>()
         val mergedVideos = LinkedHashMap<String, String>()
@@ -272,11 +292,13 @@ class InstagramImageScraper(private val context: Context) {
         var caption = ""
         var note: String? = null
         val sources = mutableListOf<String>()
+        val orderedSlides = LinkedHashMap<String, InstagramMediaParser.Slide>()
 
         fun total(): Int = merged.size + mergedVideos.size
 
         fun absorb(result: InstagramMediaParser.Result?, label: String) {
             if (result == null) return
+            result.slides.forEach { slide -> orderedSlides.putIfAbsent(InstagramMediaParser.mediaKey(slide.url), slide) }
             result.imageUrls.forEach { url ->
                 merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url)
             }
@@ -297,8 +319,10 @@ class InstagramImageScraper(private val context: Context) {
             }
         }
 
-        fun complete(): Boolean =
-            total() > 0 && (expected == 0 && total() >= 2 || expected > 0 && total() >= expected)
+        // `>= 2` used to be part of this test, which meant a one-slide post never counted as
+        // finished and always paid for the extra endpoint round. A post that declares one slide and
+        // yields one slide is complete.
+        fun complete(): Boolean = total() > 0 && (expected == 0 || total() >= expected)
 
         fun budgetLeft(): Boolean = System.currentTimeMillis() - startedAt < OVERALL_HTTP_BUDGET_MS
 
@@ -332,7 +356,7 @@ class InstagramImageScraper(private val context: Context) {
                     sources += "$label(http-error)"
                 } else {
                     val parsed = if (label == "web-api") {
-                        InstagramMediaParser.parseJson(body)
+                        InstagramMediaParser.parseJson(body, shortcode = shortcode)
                     } else {
                         InstagramMediaParser.parseHtml(body, canonical)
                     }
@@ -349,20 +373,17 @@ class InstagramImageScraper(private val context: Context) {
         // 4-5. Embed page and legacy JSON, in parallel, only if the first round did
         // not yield a complete post (or a carousel with at least two slides).
         if (!complete() && budgetLeft()) {
+            // The legacy `?__a=1&__d=dis` JSON endpoint is gone from this list on purpose: it has
+            // answered 404 to logged-out requests for years, and requesting it cost a full
+            // connect/read timeout on the one post type (a single slide) that needed the wait least.
             val secondRound = buildList {
                 embedUrl?.let { add(FetchRequest("embed", it, DESKTOP_UA)) }
-                add(FetchRequest("a1", "$canonical?__a=1&__d=dis", MOBILE_UA))
             }
             fetchInParallel(secondRound, shouldStop = { complete() }) { label, body ->
                 if (body == null) {
                     sources += "$label(http-error)"
                 } else {
-                    val parsed = if (label == "a1") {
-                        InstagramMediaParser.parseJson(body)
-                    } else {
-                        InstagramMediaParser.parseHtml(body, canonical)
-                    }
-                    absorb(parsed, label)
+                    absorb(InstagramMediaParser.parseHtml(body, canonical), label)
                 }
             }
         }
@@ -409,13 +430,21 @@ class InstagramImageScraper(private val context: Context) {
         } else {
             Log.i(TAG, "Instagram media: ${urls.size} photo(s) + ${videos.size} video(s) " +
                 "of ${if (expected > 0) expected else "?"} via ${sources.joinToString()}")
-            urls.forEachIndexed { index, url -> Log.i(TAG, "  [photo $index] ${url.take(160)}") }
-            videos.forEachIndexed { index, url -> Log.i(TAG, "  [video $index] ${url.take(160)}") }
+            // Only the CDN path is logged: the query string of these URLs is a signed token, and a
+            // logcat dump must not hand one out.
+            urls.forEachIndexed { index, url -> Log.i(TAG, "  [photo $index] ${redactUrl(url)}") }
+            videos.forEachIndexed { index, url -> Log.i(TAG, "  [video $index] ${redactUrl(url)}") }
         }
+        // Only slides that survived the filtering below are ordered; a slide that was dropped (a
+        // video's poster frame, for instance) must not reappear as an item of its own.
+        val keptKeys = (urls + videos).mapTo(LinkedHashSet()) { InstagramMediaParser.mediaKey(it) }
+        val ordered = orderedSlides.values.filter { keptKeys.contains(InstagramMediaParser.mediaKey(it.url)) }
+
         ScrapeResult(
             imageUrls = urls,
             videoUrls = videos,
             videoPosters = posters,
+            slides = ordered,
             expectedCount = if (expected > 0) expected else readCount,
             shortcode = shortcode,
             sources = sources,
@@ -487,7 +516,7 @@ class InstagramImageScraper(private val context: Context) {
                 }
                 val code = openedConnection.responseCode
                 if (code !in 200..299) {
-                    Log.i(TAG, "GET $url -> $code")
+                    Log.i(TAG, "GET ${redactUrl(url)} -> $code")
                     if (continuation.isActive) continuation.resume(null)
                 } else {
                     val body = BufferedReader(InputStreamReader(openedConnection.inputStream, Charsets.UTF_8)).use { it.readText() }
@@ -496,7 +525,7 @@ class InstagramImageScraper(private val context: Context) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "GET $url failed: ${e.message}")
+                Log.w(TAG, "GET ${redactUrl(url)} failed: ${e.message}")
                 if (continuation.isActive) continuation.resume(null)
             } finally {
                 connection?.disconnect()
@@ -519,7 +548,7 @@ class InstagramImageScraper(private val context: Context) {
     @SuppressLint("SetJavaScriptEnabled")
     private suspend fun scrapeWithWebView(url: String): WebViewResult =
         withContext(Dispatchers.Main) {
-            Log.i(TAG, "Starting WebView scrape for $url")
+            Log.i(TAG, "Starting WebView scrape for ${redactUrl(url)}")
             var webView: WebView? = null
             val result = try {
                 withTimeoutOrNull(WEBVIEW_TIMEOUT_MS) {
@@ -662,7 +691,12 @@ class InstagramImageScraper(private val context: Context) {
         return WebViewResult(photos = photos, videos = videos, posters = posters)
     }
 
-    fun canExtract(url: String): Boolean =
-        MediaUrlNormalizer.hostMatches(url, "instagram.com") &&
-            !url.contains("/reel/", ignoreCase = true)
+    /**
+     * Whether this URL names an Instagram post the scraper can read. Reels and `/tv/` links are
+     * included: excluding them is what made single-video posts skip the whole public-page path.
+     */
+    fun canExtract(url: String): Boolean = InstagramUrl.isMediaUrl(url)
+
+    /** A CDN URL without its signed query string, for logging. */
+    private fun redactUrl(url: String): String = url.substringBefore('?')
 }

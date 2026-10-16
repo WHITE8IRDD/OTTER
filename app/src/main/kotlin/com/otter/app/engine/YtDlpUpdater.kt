@@ -21,21 +21,26 @@ class YtDlpUpdater(private val context: Context) {
         data class Failed(val error: String) : UpdateResult()
     }
 
+    /**
+     * Fetches an engine release and swaps it in.
+     *
+     * [channel] is a parameter because the two callers want different things: the button in Settings
+     * asks for the newest thing that exists, while the automatic pass at startup only wants the
+     * extractor fixes of an official release, on a connection the user is not paying for by volume.
+     */
     suspend fun update(
-        onProgress: (String) -> Unit = {}
+        onProgress: (String) -> Unit = {},
+        channel: YoutubeDL.UpdateChannel = YoutubeDL.UpdateChannel.NIGHTLY
     ): UpdateResult = withContext(Dispatchers.IO) {
         try {
             onProgress(context.getString(R.string.update_checking))
-            val result = YoutubeDL.getInstance().updateYoutubeDL(
-                context,
-                YoutubeDL.UpdateChannel.NIGHTLY
-            )
+            val result = YoutubeDL.getInstance().updateYoutubeDL(context, channel)
             when (result) {
                 YoutubeDL.UpdateStatus.DONE -> {
                     val version = getVersion()
                     saveUpdateTime()
                     onProgress(context.getString(R.string.update_success, version))
-                    Log.i(TAG, "yt-dlp updated to $version (nightly)")
+                    Log.i(TAG, "yt-dlp updated to $version (${'$'}channel)")
                     UpdateResult.Updated(version)
                 }
                 YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE -> {

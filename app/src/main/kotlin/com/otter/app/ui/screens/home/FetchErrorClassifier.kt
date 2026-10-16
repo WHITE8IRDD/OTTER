@@ -43,6 +43,12 @@ object FetchErrorClassifier {
         BOT_CHALLENGE,
         /** The site's own anti-automation refused to answer at all. */
         SOURCE_RESTRICTED,
+        /** The link works, the page loaded, and there is nothing in it to download. */
+        NO_DOWNLOADABLE_MEDIA,
+        /** The engine could not read the page at all (a broken or outdated extractor). */
+        EXTRACTION_FAILED,
+        /** The device ran out of room while writing. */
+        INSUFFICIENT_STORAGE,
         GENERIC
     }
 
@@ -70,6 +76,12 @@ object FetchErrorClassifier {
         }
 
         return when {
+            // Checked first: "no space left on device" reads like a download failure, and advice
+            // about cookies or a retry is useless while the storage is full.
+            lower.contains("no space left") || lower.contains("not enough free space") ||
+                lower.contains("enospc") || lower.contains("storage space") ->
+                Kind.INSUFFICIENT_STORAGE
+
             lower.contains("timed out") || lower.contains("connection refused") ->
                 Kind.NETWORK_TIMEOUT
 
@@ -113,6 +125,19 @@ object FetchErrorClassifier {
 
             lower.contains("requested format not available") ->
                 Kind.FORMAT_UNAVAILABLE
+
+            // Nothing to take, as opposed to a page that refused to be read: the link is fine, the
+            // media is not there, is not public, or is not a file the app can save.
+            lower.contains("no video formats found") ||
+                lower.contains("no readable slides") ||
+                lower.contains("no downloadable media") ||
+                (lower.contains("page") && lower.contains("video") && lower.contains("could not")) ->
+                Kind.NO_DOWNLOADABLE_MEDIA
+
+            // The extractor itself failed, which is a stale-engine problem rather than the user's.
+            lower.contains("unable to extract") || lower.contains("extractor failed") ||
+                lower.contains("not a valid json") || lower.contains("regex json") ->
+                Kind.EXTRACTION_FAILED
 
             platform == PLATFORM_INSTAGRAM && lower.contains("login") ->
                 Kind.INSTAGRAM_LOGIN

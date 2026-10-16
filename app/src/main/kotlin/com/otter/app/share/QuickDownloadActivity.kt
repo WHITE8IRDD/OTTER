@@ -58,10 +58,16 @@ class QuickDownloadActivity : ComponentActivity() {
             Log.i(TAG, "QuickDownload received URL: $sharedUrl")
             Log.i(TAG, "URL is TikTok? ${isTikTokUrl(sharedUrl)}")
 
-            // Gallery/image post redirect: multi-item carousels need user selection
+            // Gallery/image post redirect: multi-item carousels need user selection. The check is
+            // the app's one Instagram URL rule (posts, reels, /tv/ and forwarded /share/ links) —
+            // the local copy of it used to accept "/p/" only, which is how a shared reel skipped the
+            // picker, went straight to the engine, and came back as a login wall. Everything else in
+            // this flow already reads the shared intent, so the main window IS the selection window:
+            // it opens on the fetched post with the picker ready. With auto-download on, a carousel
+            // is saved in full instead, which is what that switch promises.
             if (com.otter.app.engine.TikTokPhotoParser.isPhotoModeUrl(sharedUrl) ||
                 MediaUrlNormalizer.isDirectImageUrl(sharedUrl) ||
-                isInstagramPostUrl(sharedUrl)
+                com.otter.app.engine.InstagramUrl.isMediaUrl(sharedUrl)
             ) {
                 Log.i(TAG, "Opening image/gallery link in the selectable media flow")
                 Toast.makeText(this, getString(R.string.quick_download_picker_flow), Toast.LENGTH_SHORT).show()
@@ -136,11 +142,6 @@ class QuickDownloadActivity : ComponentActivity() {
         }
         startActivity(mainIntent)
         finish()
-    }
-
-    private fun isInstagramPostUrl(url: String): Boolean {
-        return MediaUrlNormalizer.hostMatches(url, "instagram.com") &&
-            url.contains("/p/", ignoreCase = true) && !url.contains("/reel/", ignoreCase = true)
     }
 
     private fun isTikTokUrl(url: String): Boolean =

@@ -161,9 +161,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             _isUpdating.value = true
             _updateStatus.value = getApplication<Application>().getString(R.string.checking_updates)
-            val result = updater.update { progress ->
+            // Named because the call takes a second, engine-side parameter now: a trailing lambda
+            // would bind to that one instead.
+            val result = updater.update(onProgress = { progress ->
                 _updateStatus.value = progress
-            }
+            })
             _updateStatus.value = when (result) {
                 is YtDlpUpdater.UpdateResult.Updated -> getApplication<Application>().getString(R.string.updated_to, result.version)
                 is YtDlpUpdater.UpdateResult.AlreadyUpToDate -> getApplication<Application>().getString(R.string.already_up_to_date)

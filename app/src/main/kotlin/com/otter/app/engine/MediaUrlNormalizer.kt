@@ -90,9 +90,18 @@ object MediaUrlNormalizer {
     }
 
     /**
-     * When cookies exist, they are made available to extractors that need session
-     * authentication (including YouTube bot checks, TikTok videos, and Facebook).
+     * The user's saved cookie jar, applied or not.
+     *
+     * It used to be attached to every request whatever Settings said: `shouldUseOptionalCookies`
+     * returned `true` and its KDoc described a per-host policy no code implemented. The jar is the
+     * user's session, so the only defensible default is the one the switch shows - nothing leaves
+     * the app until cookies are turned on. The app's own page parsers (Instagram, TikTok photo
+     * mode) never read the jar at all, which is what keeps a public post reading as a public post.
      */
-    fun shouldUseOptionalCookies(url: String): Boolean = true
+    fun shouldAttachSavedCookies(url: String, settingEnabled: Boolean): Boolean =
+        settingEnabled && runCatching { URL(url) }.getOrNull()
+            ?.let { it.protocol == "http" || it.protocol == "https" } == true
 
+    /** The hosts OTTER advertises support for, as data, so the docs and the code cannot drift. */
+    val supportedHosts: Set<String> get() = publicExtractorDomains
 }

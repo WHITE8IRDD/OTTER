@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -82,8 +83,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.otter.app.R
 import com.otter.app.data.model.AudioTrack
+import com.otter.app.data.model.CarouselItem
 import com.otter.app.data.model.SubtitleTrack
 import com.otter.app.data.model.VideoFormat
 import com.otter.app.data.model.VideoInfo
@@ -98,10 +101,9 @@ fun FormatSheet(
     onToggleThumbnail: () -> Unit,
     onThumbnailOnly: () -> Unit,
     onFormatSelected: (VideoFormat) -> Unit,
-    selectedPhotoIndices: Set<Int> = emptySet(),
-    selectedVideoIndices: Set<Int> = emptySet(),
-    onTogglePhotoIndex: (Int) -> Unit = {},
-    onToggleVideoIndex: (Int) -> Unit = {},
+    selectedIndices: Set<Int> = emptySet(),
+    onToggleIndex: (Int) -> Unit = {},
+    onSelectKind: (Boolean) -> Unit = {},
     onSelectAllCarousel: () -> Unit = {},
     onDeselectAllCarousel: () -> Unit = {},
     onDownloadCarousel: () -> Unit = {},
@@ -145,10 +147,9 @@ fun FormatSheet(
         } else if (videoInfo.isCarousel) {
             CarouselGalleryContent(
                 videoInfo = videoInfo,
-                selectedPhotoIndices = selectedPhotoIndices,
-                selectedVideoIndices = selectedVideoIndices,
-                onTogglePhotoIndex = onTogglePhotoIndex,
-                onToggleVideoIndex = onToggleVideoIndex,
+                selectedIndices = selectedIndices,
+                onToggleIndex = onToggleIndex,
+                onSelectKind = onSelectKind,
                 onSelectAll = onSelectAllCarousel,
                 onDeselectAll = onDeselectAllCarousel,
                 onDownload = onDownloadCarousel,
@@ -559,23 +560,29 @@ private fun ThumbnailOptionsSection(
     }
 }
 
+/**
+ * A gallery post as one list of items, in the order the post itself gave them.
+ *
+ * Pictures and clips used to be two grids with two selection sets, which meant a mixed post had no
+ * honest numbering and "take the third picture and the video" needed two gestures. One grid, one
+ * selection, and a filter that picks a whole kind in one tap.
+ */
 @Composable
 private fun CarouselGalleryContent(
     videoInfo: VideoInfo,
-    selectedPhotoIndices: Set<Int>,
-    selectedVideoIndices: Set<Int>,
-    onTogglePhotoIndex: (Int) -> Unit,
-    onToggleVideoIndex: (Int) -> Unit,
+    selectedIndices: Set<Int>,
+    onToggleIndex: (Int) -> Unit,
+    onSelectKind: (Boolean) -> Unit,
     onSelectAll: () -> Unit,
     onDeselectAll: () -> Unit,
     onDownload: () -> Unit,
     popScale: Float = 1f
 ) {
-    val photos = videoInfo.carouselImages
-    val videos = videoInfo.carouselVideos
-    val total = photos.size + videos.size
-    // The counter covers photos and videos together: this is one post.
-    val selectedCount = selectedPhotoIndices.size + selectedVideoIndices.size
+    val items = videoInfo.carouselMedia
+    val total = items.size
+    val photoCount = items.count { !it.isVideo }
+    val videoCount = total - photoCount
+    val selectedCount = selectedIndices.count { it in items.indices }
 
     Column(
         modifier = Modifier
@@ -638,6 +645,34 @@ private fun CarouselGalleryContent(
                 }
             }
 
+            Text(
+                text = stringResource(R.string.carousel_kinds, photoCount, videoCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+
+            // A post that mixes the two kinds gets one-tap "just the pictures" / "just the clips".
+            if (photoCount > 0 && videoCount > 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = false,
+                        onClick = { onSelectKind(false) },
+                        label = { Text(stringResource(R.string.carousel_photos_only)) }
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { onSelectKind(true) },
+                        label = { Text(stringResource(R.string.carousel_videos_only)) }
+                    )
+                }
+            }
+
             // Partial read: the post declares more slides than could be read.
             if (videoInfo.isCarouselPartial) {
                 Row(
@@ -676,32 +711,11 @@ private fun CarouselGalleryContent(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (photos.isNotEmpty()) {
-                    SlideSectionHeader(
-                        text = stringResource(R.string.carousel_photos),
-                        count = photos.size
-                    )
-                    SlideGrid(
-                        count = photos.size,
-                        selectedIndices = selectedPhotoIndices,
-                        isVideo = false,
-                        previewFor = { photos[it] },
-                        onToggle = onTogglePhotoIndex
-                    )
-                }
-                if (videos.isNotEmpty()) {
-                    SlideSectionHeader(
-                        text = stringResource(R.string.carousel_videos),
-                        count = videos.size
-                    )
-                    SlideGrid(
-                        count = videos.size,
-                        selectedIndices = selectedVideoIndices,
-                        isVideo = true,
-                        previewFor = { videoInfo.carouselVideoPosters.getOrNull(it).orEmpty() },
-                        onToggle = onToggleVideoIndex
-                    )
-                }
+                SlideGrid(
+                    items = items,
+                    selectedIndices = selectedIndices,
+                    onToggle = onToggleIndex
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -720,45 +734,28 @@ private fun CarouselGalleryContent(
     }
 }
 
-@Composable
-private fun SlideSectionHeader(text: String, count: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = "($count)",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-/** Two slides per row; videos show their poster frame and a play badge. */
+/** Two items per row, in the order the post listed them. */
 @Composable
 private fun SlideGrid(
-    count: Int,
+    items: List<CarouselItem>,
     selectedIndices: Set<Int>,
-    isVideo: Boolean,
-    previewFor: (Int) -> String,
     onToggle: (Int) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (rowIndices in (0 until count).toList().chunked(2)) {
+        for (rowIndices in items.indices.toList().chunked(2)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 rowIndices.forEach { index ->
+                    val item = items[index]
                     SlideCard(
                         index = index,
-                        previewUrl = previewFor(index),
+                        // A clip is previewed by its poster frame; without one, by the icon below.
+                        previewUrl = if (item.isVideo) item.posterUrl else item.url,
+                        detail = item.detail,
                         isSelected = selectedIndices.contains(index),
-                        isVideo = isVideo,
+                        isVideo = item.isVideo,
                         onToggle = onToggle,
                         modifier = Modifier.weight(1f)
                     )
@@ -775,6 +772,7 @@ private fun SlideGrid(
 private fun SlideCard(
     index: Int,
     previewUrl: String,
+    detail: String = "",
     isSelected: Boolean,
     isVideo: Boolean,
     onToggle: (Int) -> Unit,
@@ -800,8 +798,15 @@ private fun SlideCard(
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 if (previewUrl.isNotBlank()) {
+                    // Decoded at the size of the card. A 32-slide post used to ask the CDN for 32
+                    // full-resolution pictures and hand them to the decoder whole, which is what
+                    // made a big album scroll badly on a mid-range phone.
                     AsyncImage(
-                        model = previewUrl,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(previewUrl)
+                            .size(360)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = stringResource(
                             if (isVideo) R.string.content_desc_video else R.string.content_desc_image,
                             index + 1
@@ -864,6 +869,8 @@ private fun SlideCard(
                     }
                 }
 
+                // The post's own numbering, which is the only order that means anything for a
+                // mixed album: "12" is the twelfth slide, not the twelfth picture.
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -875,7 +882,9 @@ private fun SlideCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "${index + 1}",
+                        text = if (detail.isBlank()) "${'$'}{index + 1}" else "${'$'}{index + 1} · ${'$'}detail",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface
@@ -1406,9 +1415,11 @@ private fun FormatItem(
                 style = MaterialTheme.typography.labelLarge,
                 color = onBackgroundColor
             )
-            if (!format.isAudioOnly && format.fps != null) {
+            // Frame size, codec and bitrate — the only way to choose between two rows that both
+            // read "1080p • MP4".
+            if (format.detailText.isNotBlank()) {
                 Text(
-                    text = "${format.fps.toInt()} fps",
+                    text = format.detailText,
                     style = MaterialTheme.typography.bodySmall,
                     color = onBackgroundColor.copy(alpha = 0.7f)
                 )

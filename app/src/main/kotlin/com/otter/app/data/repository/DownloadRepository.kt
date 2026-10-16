@@ -29,6 +29,9 @@ class DownloadRepository(private val context: Context) {
     val defaultQuality: Flow<String> = preferences.defaultQuality
     val autoDownload: Flow<Boolean> = preferences.autoDownload
 
+    /** Stops an extraction that is still running in the engine (the user pressed Cancel). */
+    fun cancelFetch(url: String) = formatParser.cancelFetch(url)
+
     suspend fun fetchVideoInfo(
         url: String,
         onRetryMessage: ((String) -> Unit)? = null,

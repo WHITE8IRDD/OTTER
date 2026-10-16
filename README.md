@@ -6,10 +6,10 @@ OTTER is an Android media downloader built with Kotlin and Jetpack Compose. It u
 
 - YouTube videos, Shorts, playlists, and live streams (subject to the source's access rules).
 - Video and audio from sites with a yt-dlp extractor.
-- Instagram posts and carousels: a selectable picker that labels photo and video slides separately, routes videos through the video path, and preserves signed CDN URLs.
+- Instagram posts, reels and carousels (`/p/`, `/reel/`, `/reels/`, `/tv/` and forwarded `/share/…` links): the picker lists a gallery's slides in the order the post gave them, labels each as a picture or a video, previews clips with their poster frame, and offers one-tap "pictures only" / "videos only" selection. Signed CDN URLs are preserved, and a partially read album says so instead of presenting itself as complete.
 - TikTok photo-mode posts: a no-cookie public-page parser reads `imagePost.images` and opens the same selectable image gallery; yt-dlp remains the primary route for TikTok videos.
-- Direct image links and images exposed by common page metadata (`og:image`, Twitter cards, JSON-LD, `img`, and `srcset`).
-- Quality/format and audio-track selection, subtitles, optional user cookies for less-common sites that explicitly require them, foreground-service downloads, pause/resume, and download history. Known public social extractors do not receive the saved cookie file.
+- Direct image links, and media exposed by common page metadata: images (`og:image`, Twitter cards, JSON-LD, `img`, `srcset`) and, on pages a search engine can reach, the page's own video (`og:video`, a player stream, `<video>`/`<source>`, manifest links, JSON-LD `contentUrl`). A page that advertises a video it cannot hand over reports that instead of offering its thumbnails.
+- Quality/format and audio-track selection — format rows show frame size, codec, frame rate and bitrate, not only a quality bucket — subtitles, optional user cookies, foreground-service downloads, pause/resume, and download history. Saved cookies go to the engine only when the switch in Settings says so, and never to the app's own public-page readers.
 - Clipboard links are detected while the Home screen is resumed, inserted automatically, and fetched without an extra paste tap. The Android foreground service keeps downloads running when the screen closes and restores an interrupted request after ordinary process reclamation when possible.
 - History entries keep the title, description and hashtags of what was downloaded; tap an entry to read them and copy each one.
 - Share-sheet quick downloads for video links; image and Instagram post links open the selectable media flow. Quick downloads skip the metadata step, so their history entries may have no description or hashtags.
@@ -19,7 +19,11 @@ Site extractors change over time. No app can promise zero-second resolution or s
 
 ## Build
 
-Requires JDK 17 and Android SDK Platform 35.
+Requires JDK 17 and Android SDK Platform 35. Unit tests for the URL, ranking, retry and validation rules run on the JVM alone:
+
+```sh
+./gradlew :app:testDebugUnitTest
+```
 
 ```sh
 ./gradlew :app:assembleDebug

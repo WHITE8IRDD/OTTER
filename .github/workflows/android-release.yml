@@ -1,7 +1,7 @@
 name: Android Release (official)
 
 # Official sideload release: signed, minified release builds (AAB + APKs).
-# Runs on workflow_dispatch ONLY — no push trigger, so it never fires by accident.
+# Fires on a version tag push or a manual dispatch, never on an ordinary branch push.
 # Publishes a NEW tag (v<versionName>) and never deletes anything.
 
 on:
@@ -9,7 +9,11 @@ on:
   push:
     branches:
       - release/v26.2
-      - arena/e48233d3-otter
+    # Pushing a tag is the normal way to cut a release: `git tag v0.2 && git push origin v0.2`.
+    # A release can therefore be published from any branch, which is why the work-branch entry the
+    # previous release used is gone: it made every push to that branch publish a release.
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -18,6 +22,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # The keystore in this repository was created with this password and is committed as a CI
+    # secret; `|| 'otter123'` keeps the build working when the secret has not been set, which is
+    # what a fork sees. An empty secret would otherwise reach Gradle as an empty password.
+    env:
+      OTTER_KEYSTORE_PASSWORD: ${{ secrets.OTTER_KEYSTORE_PASSWORD || 'otter123' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -43,7 +52,7 @@ jobs:
           test -n "${KS_B64:-}" || { echo "RELEASE_KEYSTORE_BASE64 secret is empty or missing"; exit 1; }
           printf '%s' "$KS_B64" | base64 -d > "$GITHUB_WORKSPACE/../release.keystore"
           test -s "$GITHUB_WORKSPACE/../release.keystore" || { echo "keystore restore failed"; exit 1; }
-          keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass otter123 -alias otter
+          keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass "$OTTER_KEYSTORE_PASSWORD" -alias otter
 
       - name: Clean
         run: ./gradlew --no-daemon clean
@@ -104,8 +113,11 @@ jobs:
           set -euo pipefail
           mkdir -p build-artifacts
           V="${{ steps.version.outputs.version }}"
+          UNIVERSAL_ASSET="OTTER new perspective 0.1.apk"
           cp app/build/outputs/bundle/release/app-release.aab "build-artifacts/OTTER-${V}-release.aab"
-          cp app/build/outputs/apk/release/app-universal-release.apk "build-artifacts/Otter-26-better-2.apk"
+          # The name a user sees in the release list, spelled out once: the universal build is the
+          # file the README and the release notes point at.
+          cp app/build/outputs/apk/release/app-universal-release.apk "build-artifacts/$UNIVERSAL_ASSET"
           for f in app/build/outputs/apk/release/*.apk; do
             base=$(basename "$f" .apk | sed 's/^app-/OTTER-'"${V}"'-/')
             cp "$f" "build-artifacts/${base}.apk"
@@ -127,32 +139,61 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           CODE="${{ steps.version.outputs.code }}"
           TAG="v${VERSION}"
-          CERT_SHA256=$(keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass otter123 -alias otter | grep -iE "SHA-?256")
-          UNIVERSAL_SIZE=$(ls -lh build-artifacts/Otter-26-better-2.apk | awk '{print $5}')
+          CERT_SHA256=$(keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass "$OTTER_KEYSTORE_PASSWORD" -alias otter | grep -iE "SHA-?256")
+          UNIVERSAL_SIZE=$(ls -lh "build-artifacts/OTTER new perspective 0.1.apk" | awk '{print $5}')
           ARM64_SIZE=$(ls -lh build-artifacts/*arm64-v8a*.apk 2>/dev/null | awk '{print $5}' | head -n1 || echo "N/A")
           {
-            echo "## Otter 26-better 2"
+            echo "## OTTER — New Perspective 0.1"
             echo
             echo "\`versionName\` ${VERSION}, \`versionCode\` ${CODE}, built from \`${GITHUB_SHA}\`."
             echo
-            echo "### APK Size After Reduction"
+            echo "This release is a pass over the parts that made a download fail quietly rather than"
+            echo "loudly: retrying, trusting a file, reading a post, and asking the user to pick slides."
             echo
-            echo "- **Universal APK (all ABIs)**: ~${UNIVERSAL_SIZE} (reduced by over 70MB from the ~220MB previous build by eliminating bundled aria2c binaries and optimizing resources)"
-            echo "- **arm64-v8a APK (recommended for modern Android devices)**: ~${ARM64_SIZE}"
+            echo "### Engine freshness"
+            echo "The APK ships a frozen \`yt-dlp\` build, and every extractor fix after it was lost —"
+            echo "this build bundled a 2025.11.12 while upstream was at 2026.08.19. OTTER now checks the"
+            echo "stable channel once a day on an unmetered connection when nothing else is using the"
+            echo "engine, and the manual update button in Settings is unchanged."
+            echo
+            echo "### Failures that end"
+            echo "- A download whose format URLs kept answering 403 used to retry forever: the recovery reset the attempt counter. The ladder is now bounded (3 attempts, one format refresh) and ends with an error."
+            echo "- A failed attempt that used a cached extraction invalidates that cache, so the retry is not repeating the same stale answer."
+            echo "- Before a download is called a success, the file is proven: it exists, is big enough, has no \`.part\` sibling, and its header is a media container rather than an HTML error page."
+            echo "- Cancel on a running extraction now stops the engine child process instead of leaving it running."
+            echo
+            echo "### Instagram and carousels"
+            echo "- \`/reel/\`, \`/reels/\`, \`/tv/\` and forwarded \`/share/…\` links are recognised as posts, which is how a one-video post is shared."
+            echo "- A page is read for the post that was asked for. Suggested-post media is no longer merged into the result, and the slides keep the order the post gave them."
+            echo "- The picker shows one ordered list of a gallery's items — pictures and clips together — with per-item kind badges, a poster frame for each clip, and \`Pictures only\` / \`Videos only\` shortcuts."
+            echo "- A partially read album says so, and is never reused from the result cache until it is complete."
+            echo "- A failed slide reports why (expired link, rate limit, no longer there) instead of a count."
+            echo
+            echo "### Pages the engine does not know"
+            echo "- The fallback reader finds the page's video, not only its pictures: declared open-graph video, a player stream, \`<video>\` and \`<source>\` elements, manifest links and JSON-LD \`contentUrl\`. A page that advertises a video it cannot hand over says so, instead of offering its thumbnails."
+            echo
+            echo "### Format sheet"
+            echo "- Rows now show frame size, codec, frame rate and bitrate, so two entries that both read \`1080p • MP4\` can be told apart."
+            echo "- \`Concurrent fragments\` in Settings now actually reaches the engine (it was being overridden by a second flag)."
+            echo "- Saved cookies are attached only when the setting is on; before, the session jar went with every request."
+            echo
+            echo "### Speed"
+            echo "- A fetch runs one quiet engine call with a single network retry, parses the response once, and joins duplicate in-flight requests for the same URL."
+            echo "- A complete Instagram read is cached for 5 minutes, so opening the same post twice does not scrape it twice."
+            echo "- Slide previews are decoded at card size instead of at full CDN resolution."
+            echo
+            echo "### Tests"
+            echo "URL recognition, the retry ladder, media ranking, engine argument resolution, file validation, carousel media ordering and the format labels are covered by JVM unit tests (\`./gradlew :app:testDebugUnitTest\`). This build was produced by CI; the engine changes have not been exercised on a physical device in this pass."
+            echo
+            echo "### APK size"
+            echo "- **Universal APK (all ABIs)**: ~${UNIVERSAL_SIZE}"
+            echo "- **arm64-v8a APK**: ~${ARM64_SIZE}"
             echo
             cat test-summary.md
             echo
-            echo "### What changed in this release"
-            echo
-            echo "- **YouTube Preparing & Quick Download Speed**: Instant start using cached metadata extraction (\`--load-info-json\`) avoiding duplicate yt-dlp calls; removed blocking ping on app warm-up; Quick Download now starts downloads immediately without getting stuck."
-            echo "- **Instagram Carousel Video Support**: Instagram carousels now correctly extract and distinguish videos from images. Videos are presented and downloaded as video files, not mistakenly treated as static poster images."
-            echo "- **APK Size Trimmed**: Removed unused bundled aria2c native binaries and unneeded package bloat, dramatically slashing APK size down from ~220MB."
-            echo "- **Automatic Web Session Cookie Extraction**: Built-in interactive Web Session login and cookie extractor for YouTube, TikTok, Facebook, and Instagram. Automatically captures session cookies and saves Netscape cookie jars directly inside Otter without manual export/import."
-            echo "- **Retained All Working Features**: TikTok photo mode, direct media downloads, background service persistence, and clipboard auto-fetch remain fully functional."
-            echo
             echo "### Which file to install"
             echo
-            echo "The universal build is attached as **\`Otter-26-better-2.apk\`** and runs on every supported ABI. The smaller per-ABI APKs are attached alongside it if you would rather download less (arm64-v8a covers most current phones)."
+            echo "The universal build is attached as **\`OTTER.new.perspective.0.1.apk\`** (GitHub writes asset names with dots) and runs on every supported ABI. The smaller per-ABI APKs are attached alongside it if you would rather download less (arm64-v8a covers most current phones)."
             echo
             echo "## Files"
             echo
@@ -166,6 +207,6 @@ jobs:
           } > release-notes.md
           gh release create "$TAG" build-artifacts/* \
             --target "$GITHUB_SHA" \
-            --title "Otter 26-better 2" \
+            --title "OTTER — New Perspective 0.1" \
             --notes-file release-notes.md
           echo "Published $TAG"

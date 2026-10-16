@@ -3,7 +3,9 @@ package com.otter.app.engine
 import android.content.Context
 import com.otter.app.R
 import android.util.Log
+import com.otter.app.data.datastore.UserPreferences
 import com.otter.app.data.model.AudioTrack
+import com.otter.app.data.model.CarouselItem
 import com.otter.app.data.model.SubtitleTrack
 import com.otter.app.data.model.VideoFormat
 import com.otter.app.data.model.VideoInfo
@@ -13,6 +15,9 @@ import com.yausername.youtubedl_android.YoutubeDLRequest
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -30,14 +35,25 @@ class FormatParser(private val context: Context? = null) {
         private const val OUTPUT_BASENAME = "%(title).200B"
         /** Instagram never renders more than 20 slides in one post. */
         private const val MAX_CAROUSEL_SLIDES = 20
-        /** Hard ceiling on reading one Instagram post before yt-dlp gets its turn. */
-        private const val INSTAGRAM_SCRAPE_BUDGET_MS = 60_000L
+        /**
+         * Hard ceiling on reading one Instagram post before yt-dlp gets its turn. It was 60 s,
+         * which meant a post nobody could read kept the screen on "parsing" for a minute before
+         * anything was reported; the endpoints themselves finish in seconds, and only the browser
+         * render is slow, so 30 s is the point where waiting longer stops paying for itself.
+         */
+        private const val INSTAGRAM_SCRAPE_BUDGET_MS = 30_000L
         /** Photo-mode links have no video formats, so read their public hydration payload directly. */
         private const val TIKTOK_PHOTO_SCRAPE_BUDGET_MS = 8_000L
         private const val UA = MediaUrlNormalizer.TIKTOK_USER_AGENT
         private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
         val engineReady = MutableStateFlow(false)
+
+        /** How long a finished extraction is reused. */
+        private const val INFO_CACHE_TTL_MS = 300_000L
+
+        /** A URL without its query string, for logs: signed CDN links are capability tokens. */
+        private fun redact(url: String): String = url.substringBefore('?')
 
         private fun applyPlatformArgs(request: YoutubeDLRequest, url: String) {
             fun hostMatches(vararg domains: String) = domains.any { MediaUrlNormalizer.hostMatches(url, it) }
@@ -92,18 +108,23 @@ class FormatParser(private val context: Context? = null) {
             }
         }
 
-        private suspend fun ensureEngineReady() {
-            if (engineReady.value) return
-            Log.i(TAG, "[PREFLIGHT] Engine not confirmed ready — running --version check")
-            try {
-                kotlinx.coroutines.withTimeout(3000L) {
-                    val pingRequest = YoutubeDLRequest("").apply { addOption("--version") }
-                    YoutubeDL.getInstance().execute(pingRequest)
-                }
-                engineReady.value = true
-                Log.i(TAG, "[PREFLIGHT] --version check succeeded, engine now confirmed ready")
-            } catch (e: Exception) {
-                Log.w(TAG, "[PREFLIGHT] --version check failed (non-blocking): ${e.message}")
+        /**
+         * Makes sure the engine is laid out on disk before the first run of a session.
+         *
+         * This used to start the interpreter to ask it for its version, which cost one to three
+         * seconds of Python startup before the user saw anything — and told the app nothing, since
+         * the fetch itself reports a broken binary perfectly well. `init` is synchronised, copies
+         * the files once and returns at once afterwards, so it is the whole check.
+         */
+        suspend fun ensureEngineReady(context: Context?) {
+            if (engineReady.value || context == null) return
+            withContext(Dispatchers.IO) {
+                runCatching { YoutubeDL.getInstance().init(context) }
+                    .onSuccess {
+                        engineReady.value = true
+                        Log.i(TAG, "[PREFLIGHT] engine initialised without a version subprocess")
+                    }
+                    .onFailure { Log.w(TAG, "[PREFLIGHT] engine init failed (non-blocking): ${it.message}") }
             }
         }
 
@@ -183,15 +204,76 @@ class FormatParser(private val context: Context? = null) {
         val timestamp: Long
     )
 
+    /**
+     * Reads in flight for the same URL, so one paste cannot start two extractions.
+     *
+     * A paste can reach this method from three places at once — the 300 ms typing debounce, the
+     * clipboard listener and the share intent — and each of them used to run its own engine pass.
+     */
+    private val inFlight = ConcurrentHashMap<String, Deferred<Result<VideoInfo>>>()
+
     suspend fun fetchVideoInfo(
         url: String,
         onRetryMessage: ((String) -> Unit)? = null,
         onRetryStatus: ((Int, Int) -> Unit)? = null
+    ): Result<VideoInfo> = coroutineScope {
+        val key = url.trim()
+        inFlight[key]?.let { running ->
+            Log.i(TAG, "[FETCH] joining the extraction already running for ${redact(key)}")
+            return@coroutineScope running.await()
+        }
+        val startedAt = System.currentTimeMillis()
+        val job = async { fetchVideoInfoInner(key, onRetryMessage, onRetryStatus, startedAt) }
+        inFlight[key] = job
+        try {
+            job.await()
+        } finally {
+            inFlight.remove(key, job)
+        }
+    }
+
+    // ---- cancellable extraction -------------------------------------------------------------
+
+    private val fetchProcesses = ConcurrentHashMap<String, MutableSet<String>>()
+
+    private fun registerFetchProcess(url: String, processId: String) {
+        fetchProcesses.computeIfAbsent(url) {
+            java.util.Collections.synchronizedSet(mutableSetOf<String>())
+        }.add(processId)
+    }
+
+    private fun unregisterFetchProcess(url: String, processId: String) {
+        val ids = fetchProcesses[url] ?: return
+        ids.remove(processId)
+        if (ids.isEmpty()) fetchProcesses.remove(url, ids)
+    }
+
+    /**
+     * Ends the engine run for [url], if one is in flight.
+     *
+     * Cancelling the coroutine alone did not stop `yt-dlp`: the child kept working for up to a
+     * minute on a video nobody wanted, holding the network and the CPU that the next attempt needs.
+     */
+    fun cancelFetch(url: String) {
+        val ids = fetchProcesses.remove(url) ?: return
+        ids.toList().forEach { id ->
+            runCatching { YoutubeDL.getInstance().destroyProcessById(id) }
+                .onFailure { Log.w(TAG, "cancelFetch: destroyProcessById(${'$'}id) failed: ${'$'}{it.message}") }
+        }
+    }
+
+    private suspend fun fetchVideoInfoInner(
+        url: String,
+        onRetryMessage: ((String) -> Unit)?,
+        onRetryStatus: ((Int, Int) -> Unit)?,
+        startedAt: Long
     ): Result<VideoInfo> = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
-        Log.i(TAG, "fetchVideoInfo START url=$url")
+        Log.i(TAG, "fetchVideoInfo START url=${redact(url)}")
         val resolvedUrl = MediaUrlNormalizer.normalizeYouTubeShortsUrl(resolveTikTokShortUrl(url))
-        val isInstaCarousel = isInstagramPostUrl(resolvedUrl)
+        // Reels and /tv/ links belong here too: they are how Instagram shares a one-video post,
+        // and excluding them is what sent those links to an extractor that needs a login.
+        val isInstaPost = InstagramMediaParser.isPostUrl(resolvedUrl)
 
         if (MediaUrlNormalizer.isDirectImageUrl(resolvedUrl)) {
             val info = createImageGalleryInfo(
@@ -204,11 +286,17 @@ class FormatParser(private val context: Context? = null) {
             return@withContext Result.success(info)
         }
 
-        if (!isInstaCarousel) {
-            videoInfoCache[url]?.let { cached ->
-                if (System.currentTimeMillis() - cached.timestamp < 300_000L) {
-                    return@withContext Result.success(cached.info)
-                }
+        // Instagram used to be excluded from this cache wholesale, so every retry, every
+        // back-navigation and every second tap re-read the whole post (up to five endpoints and a
+        // browser render). A read that came back complete is safe to reuse for the same short window
+        // as any other result; a partial one is not, because it may be missing slides.
+        videoInfoCache[url]?.let { cached ->
+            val fresh = System.currentTimeMillis() - cached.timestamp < INFO_CACHE_TTL_MS
+            val reusable = !isInstaPost || cached.info.isCarouselComplete ||
+                cached.info.formats.isNotEmpty()
+            if (fresh && reusable) {
+                Log.i(TAG, "[FETCH] reusing the extraction from ${System.currentTimeMillis() - cached.timestamp}ms ago")
+                return@withContext Result.success(cached.info)
             }
         }
 
@@ -241,7 +329,7 @@ class FormatParser(private val context: Context? = null) {
         // the screen sitting on "parsing" with no result and no error at all.
         var instagramDiagnostic = "not tried"
         var instagramScrape: InstagramImageScraper.ScrapeResult? = null
-        if (isInstaCarousel && context != null) {
+        if (isInstaPost && context != null) {
             instagramScrape = runCatching {
                 withTimeoutOrNull(INSTAGRAM_SCRAPE_BUDGET_MS) {
                     InstagramImageScraper(context).scrapeDetailed(url)
@@ -256,8 +344,8 @@ class FormatParser(private val context: Context? = null) {
                 instagramDiagnostic = "scraper gave up (timeout or error)"
             }
             if (scraped != null && scraped.mediaCount > 0) {
-                Log.i(TAG, "Scraper found ${scraped.imageUrls.size} photo(s) and " +
-                    "${scraped.videoUrls.size} video(s) for Instagram carousel")
+                Log.i(TAG, "[TIMING] Instagram read ${scraped.imageUrls.size} photo(s) and " +
+                    "${scraped.videoUrls.size} video(s) in ${System.currentTimeMillis() - startedAt}ms")
                 val info = createImageGalleryInfo(
                     sourceUrl = url,
                     title = instagramTitle(scraped.caption, scraped.shortcode),
@@ -265,6 +353,7 @@ class FormatParser(private val context: Context? = null) {
                     images = scraped.imageUrls,
                     videos = scraped.videoUrls,
                     videoPosters = scraped.videoPosters,
+                    slides = scraped.orderedSlides(),
                     expectedCount = scraped.expectedCount,
                     description = scraped.caption
                 )
@@ -274,10 +363,10 @@ class FormatParser(private val context: Context? = null) {
             Log.i(TAG, "Scraper returned empty ($instagramDiagnostic), falling back to yt-dlp")
         }
 
-        // Pre-flight: ensure yt-dlp binary is responsive before first attempt
+        // Pre-flight: only a file-layout check now; a broken binary shows up on the first run.
         if (!engineReady.value) {
             Log.i(TAG, "[PREFLIGHT] Engine not ready yet, running warmup check")
-            ensureEngineReady()
+            ensureEngineReady(context)
         }
 
         val delays = listOf(1500L, 5000L)
@@ -300,12 +389,16 @@ class FormatParser(private val context: Context? = null) {
                     if (!isInstagramUrl(url)) {
                         addOption("--no-playlist")
                     }
-                    addOption("--skip-download")
                     addOption("--no-warnings")
                     addOption("--no-check-certificate")
-                    addOption("--no-write-info-json")
-                    addOption("--no-write-description")
-                    addOption("--no-write-thumbnail")
+                    // The app owns the retry ladder, so the engine is not allowed to run a private
+                    // one underneath it: -R 1 is what stops a two-second connect failure from
+                    // turning into a two-minute wait before the user sees anything.
+                    EngineArgs.FETCH_QUIET_ARGS.forEach { addOption(it) }
+                    addOption("-R", EngineArgs.FETCH_NETWORK_RETRIES.toString())
+                    // Sizes in the sheet come from the format list; without this a DASH/HLS
+                    // format reports no size at all.
+                    addOption("--compat-options", "manifest-filesize-approx")
                     addOption("--extractor-retries", "3")
                     addOption("--flat-playlist")
                     addOption("--ignore-errors")
@@ -317,14 +410,14 @@ class FormatParser(private val context: Context? = null) {
                             MediaUrlNormalizer.hostMatches(url, "fb.watch") -> 15
                         else -> 10
                     }
-                    val socketTimeout = (baseTimeout + (attempt - 1) * 10).coerceAtMost(30)
+                    val socketTimeout = EngineArgs.socketTimeoutSeconds(baseTimeout, attempt, isLive = false)
                     addOption("--socket-timeout", socketTimeout.toString())
                     Log.i(TAG, "[FETCH-RETRY] attempt=$attempt socketTimeout=${socketTimeout}s")
 
                     // Platform-specific flags (user-agent, headers, geo-bypass, etc.)
                     applyPlatformArgs(this, url)
 
-                    if (context != null && MediaUrlNormalizer.shouldUseOptionalCookies(url)) {
+                    if (context != null && useSavedCookies(url)) {
                         val cookieFile = File(context.filesDir, "cookies.txt")
                         if (cookieFile.exists() && cookieFile.length() > 0) {
                             addOption("--cookies", cookieFile.absolutePath)
@@ -333,7 +426,15 @@ class FormatParser(private val context: Context? = null) {
                 }
 
                 val ytExecStart = System.currentTimeMillis()
-                val ytResponse = YoutubeDL.getInstance().execute(request, null, null)
+                // The engine call is given a process id of our own so that pressing Cancel stops
+                // the yt-dlp child instead of leaving it running while the app pretends to be idle.
+                val fetchProcessId = EngineArgs.processId(url)
+                registerFetchProcess(url, fetchProcessId)
+                val ytResponse = try {
+                    YoutubeDL.getInstance().execute(request, fetchProcessId)
+                } finally {
+                    unregisterFetchProcess(url, fetchProcessId)
+                }
                 val ytExecTime = System.currentTimeMillis() - ytExecStart
                 Log.i(TAG, "[FETCH] yt-dlp execute returned in ${ytExecTime}ms attempt=$attempt")
                 val videoInfo = YoutubeDL.objectMapper.readValue(
@@ -345,18 +446,24 @@ class FormatParser(private val context: Context? = null) {
                 val playlistCount = rawJson.optInt("playlist_count", 0)
                 Log.i(TAG, "[FETCH] JSON parse took ${System.currentTimeMillis() - parseStart}ms")
 
+                Log.i(TAG, "[TIMING] engine run ${ytExecTime}ms + json ${System.currentTimeMillis() - parseStart}ms for ${redact(url)} attempt=$attempt")
                 val rawFormatCount = rawJson.optJSONArray("formats")?.length() ?: 0
                 if (rawFormatCount == 0 && !isKnownExtractorHost(url)) {
-                    val pageImages = discoverGenericPageImageInfo(url)
-                    if (pageImages != null) {
-                        videoInfoCache[url] = CachedInfo(pageImages, System.currentTimeMillis())
-                        return@withContext Result.success(pageImages)
+                    val pageMedia = discoverGenericPageMedia(url)
+                    if (pageMedia != null) {
+                        return@withContext pageMedia.also { outcome ->
+                            outcome.getOrNull()?.let { videoInfoCache[url] = CachedInfo(it, System.currentTimeMillis()) }
+                        }
                     }
+                    // Nothing declared a video and nothing was found: the engine's own "no formats"
+                    // answer is the honest failure, so it is reported below rather than masked.
                 }
 
                 val formats = parseFormats(videoInfo)
-                val subtitleTracks = parseSubtitleTracks(ytResponse.out)
-                val audioTracks = parseAudioTracks(ytResponse.out)
+                // Both of these used to build their own JSONObject from the same multi-megabyte
+                // string the line above had already parsed, on the fetch's critical path.
+                val subtitleTracks = parseSubtitleTracks(rawJson)
+                val audioTracks = parseAudioTracks(rawJson)
                 val rawTags = videoInfo.tags?.filterNotNull() ?: emptyList()
                 val hashtags = HashtagExtractor.extract(videoInfo.description ?: "")
                 var carouselMedia = extractCarouselMedia(videoInfo, ytResponse.out, rawJson, url)
@@ -422,7 +529,9 @@ class FormatParser(private val context: Context? = null) {
                     val detail = "$instagramDiagnostic · $ytSummary"
                     val message = context?.getString(R.string.error_instagram_no_slides, detail)
                         ?: "Instagram returned no readable slides for this post ($detail)"
-                    return@withContext Result.failure(IllegalStateException(message))
+                    // Already written for the user, detail included: it must not be flattened into
+                    // a generic hint by the classifier on the way to the screen.
+                    return@withContext Result.failure(FetchUserMessage(message))
                 }
                 val isPlaylist = responseType == "playlist" || isCarousel ||
                         (videoInfo.extractor?.lowercase()?.contains("playlist") == true) ||
@@ -476,7 +585,7 @@ class FormatParser(private val context: Context? = null) {
                             }.getOrNull().also { instagramScrape = it }
                         if (scraped != null && scraped.mediaCount > 0) {
                             Log.i(TAG, "Scraper found ${scraped.imageUrls.size} photo(s) and " +
-                                "${scraped.videoUrls.size} video(s) for Instagram carousel (engine fallback)")
+                                "${scraped.videoUrls.size} video(s) for Instagram post (engine fallback)")
                             val info = createImageGalleryInfo(
                                 sourceUrl = url,
                                 title = instagramTitle(scraped.caption, scraped.shortcode),
@@ -484,6 +593,7 @@ class FormatParser(private val context: Context? = null) {
                                 images = scraped.imageUrls,
                                 videos = scraped.videoUrls,
                                 videoPosters = scraped.videoPosters,
+                                slides = scraped.orderedSlides(),
                                 expectedCount = scraped.expectedCount,
                                 description = scraped.caption
                             )
@@ -496,18 +606,22 @@ class FormatParser(private val context: Context? = null) {
                 }
                 if (attempt == 1 && !isKnownExtractorHost(url)) {
                     try {
-                        val pageImages = discoverGenericPageImageInfo(url)
-                        if (pageImages != null) {
-                            videoInfoCache[url] = CachedInfo(pageImages, System.currentTimeMillis())
-                            return@withContext Result.success(pageImages)
+                        val pageMedia = discoverGenericPageMedia(url)
+                        if (pageMedia != null) {
+                            return@withContext pageMedia.also { outcome ->
+                                outcome.getOrNull()?.let {
+                                    videoInfoCache[url] = CachedInfo(it, System.currentTimeMillis())
+                                }
+                            }
                         }
                     } catch (scrapeErr: Exception) {
-                        Log.w(TAG, "Generic page image fallback failed", scrapeErr)
+                        Log.w(TAG, "Generic page media fallback failed", scrapeErr)
                     }
                 }
                 lastError = e
-                Log.w(TAG, "Attempt $attempt/$maxAttempts failed for $url: ${e.message}")
+                Log.w(TAG, "Attempt $attempt/$maxAttempts failed for ${redact(url)}: ${e.message}")
                 videoInfoCache.remove(url)
+                if (DownloadRetryPolicy.isPermanent(e.message)) break
             }
         }
 
@@ -516,28 +630,85 @@ class FormatParser(private val context: Context? = null) {
         Result.failure(lastError ?: Exception("Failed to fetch video info after $maxAttempts attempts"))
     }
 
-    private fun isInstagramUrl(url: String): Boolean =
-        MediaUrlNormalizer.hostMatches(url, "instagram.com")
-
-    private fun isInstagramPostUrl(url: String): Boolean {
-        if (!isInstagramUrl(url)) return false
-        val path = runCatching { URL(url).path.lowercase() }.getOrNull() ?: return false
-        return path.contains("/p/") && !path.contains("/reel/")
+    /**
+     * Whether the user's saved cookie jar may be handed to the engine for this URL.
+     *
+     * The jar is only ever sent when the user turned cookies on in Settings — it used to be sent to
+     * every request regardless, which contradicts the documented policy and can make the difference
+     * between a public page that reads and a session-bound one that answers with a login wall.
+     */
+    private suspend fun useSavedCookies(url: String): Boolean {
+        val context = context ?: return false
+        // The scheme check only: `settingEnabled = true` because the preference is read next.
+        if (!MediaUrlNormalizer.shouldAttachSavedCookies(url, settingEnabled = true)) return false
+        return runCatching { UserPreferences(context).getCookiesEnabledOnce() }.getOrDefault(false)
     }
 
-    private suspend fun discoverGenericPageImageInfo(url: String): VideoInfo? {
+    private fun isInstagramUrl(url: String): Boolean =
+        MediaUrlNormalizer.hostMatches(url, "instagram.com") ||
+            MediaUrlNormalizer.hostMatches(url, "instagr.am")
+
+    /** A post page as opposed to a profile or a tag page: any of p / reel / tv, share form included. */
+    private fun isInstagramPostUrl(url: String): Boolean = InstagramMediaParser.isPostUrl(url)
+
+    /**
+     * The fallback for a page no extractor owns.
+     *
+     * Two rules make this behave like "find the media of this page" rather than "scrape the page":
+     * the video the page declares is returned as the primary item and is listed first, and a page
+     * that declares a video the app could not open is reported as that failure instead of being
+     * answered with its own thumbnails.
+     */
+    private suspend fun discoverGenericPageMedia(url: String): Result<VideoInfo>? {
         val appContext = context ?: return null
         if (isKnownExtractorHost(url)) return null
-        val discovery = GenericPageMediaScraper(appContext).discoverImages(url) ?: return null
-        if (discovery.imageUrls.isEmpty()) return null
-        return createImageGalleryInfo(
-            sourceUrl = url,
-            title = discovery.title.ifBlank { "Website images" },
-            extractor = "Website images",
-            images = discovery.imageUrls
+        val discovery = runCatching { GenericPageMediaScraper(appContext).discoverImages(url) }
+            .onFailure { Log.w(TAG, "Could not inspect page for media: ${it.message}") }
+            .getOrNull() ?: return null
+
+        val videos = discovery.videoUrls.filter { MediaClassifier.isDirectlyDownloadable(it) }
+        if (discovery.imageUrls.isEmpty() && videos.isEmpty()) {
+            // A page that advertises a video (og:video, a <video> element, a manifest link) whose
+            // media the app cannot open is a video problem, not an image gallery. Listing its
+            // pictures as the result is what made this look like a success that downloaded nothing.
+            if (discovery.hasVideoSignals) {
+                return Result.failure(
+                    FetchUserMessage(
+                        context?.getString(R.string.error_page_video_unavailable)
+                            ?: "This page declares a video that OTTER could not open. " +
+                            "It may need a login, may be DRM protected, or may only play in a browser."
+                    )
+                )
+            }
+            return null
+        }
+
+        val slides = buildList {
+            discovery.videoUrls.forEachIndexed { index, url ->
+                add(
+                    InstagramMediaParser.Slide(
+                        url = url,
+                        isVideo = true,
+                        posterUrl = discovery.videoPosters.getOrNull(index).orEmpty()
+                    )
+                )
+            }
+            discovery.imageUrls.forEach { add(InstagramMediaParser.Slide(it, isVideo = false)) }
+        }
+        return Result.success(
+            createImageGalleryInfo(
+                sourceUrl = url,
+                title = discovery.title.ifBlank { "Website media" },
+                extractor = "Website media",
+                images = discovery.imageUrls,
+                videos = discovery.videoUrls,
+                videoPosters = discovery.videoPosters,
+                slides = slides
+            )
         )
     }
 
+    /** Kept for the callers that only ever wanted the image list. */
     private fun createImageGalleryInfo(
         sourceUrl: String,
         title: String,
@@ -545,6 +716,7 @@ class FormatParser(private val context: Context? = null) {
         images: List<String>,
         videos: List<String> = emptyList(),
         videoPosters: List<String> = emptyList(),
+        slides: List<InstagramMediaParser.Slide> = emptyList(),
         expectedCount: Int = 0,
         description: String = ""
     ): VideoInfo {
@@ -570,6 +742,17 @@ class FormatParser(private val context: Context? = null) {
             carouselImages = imageUrls,
             carouselVideos = videoUrls,
             carouselVideoPosters = posters,
+            carouselItems = slides
+                .filter { slide -> imageUrls.contains(slide.url) || videoUrls.contains(slide.url) }
+                .map { slide ->
+                    CarouselItem(
+                        url = slide.url,
+                        isVideo = slide.isVideo,
+                        posterUrl = slide.posterUrl
+                    )
+                },
+            carouselPrimaryIsVideo = slides.firstOrNull()?.isVideo
+                ?: (videoUrls.isNotEmpty() && imageUrls.isEmpty()),
             carouselExpectedCount = if (expectedCount > 0) expectedCount else readCount,
             isCarousel = readCount > 0
         )
@@ -681,9 +864,8 @@ class FormatParser(private val context: Context? = null) {
         )
     }
 
-    private fun parseSubtitleTracks(rawJson: String): List<SubtitleTrack> {
+    private fun parseSubtitleTracks(json: JSONObject): List<SubtitleTrack> {
         return try {
-            val json = JSONObject(rawJson)
             val tracks = mutableListOf<SubtitleTrack>()
 
             fun parseLanguage(code: String, formats: JSONArray, isAuto: Boolean) {
@@ -738,9 +920,8 @@ class FormatParser(private val context: Context? = null) {
         }
     }
 
-    private fun parseAudioTracks(rawJson: String): List<AudioTrack> {
+    private fun parseAudioTracks(json: JSONObject): List<AudioTrack> {
         return try {
-            val json = JSONObject(rawJson)
             val formats = json.optJSONArray("formats") ?: return emptyList()
             val audioMap = mutableMapOf<String, Pair<JSONObject, Int>>()
 

@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.otter.app.engine.FormatSpec
+import com.otter.app.engine.FetchUserMessage
 import com.otter.app.data.datastore.UserPreferences
 import com.otter.app.data.model.DownloadItem
 import com.otter.app.data.model.DownloadPhase
@@ -69,12 +70,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _retryStatus = MutableStateFlow(RetryStatus())
     val retryStatus: StateFlow<RetryStatus> = _retryStatus.asStateFlow()
 
-    // A carousel lists photos and videos separately, so the selection is kept per group.
-    private val _selectedPhotoIndices = MutableStateFlow<Set<Int>>(emptySet())
-    val selectedPhotoIndices: StateFlow<Set<Int>> = _selectedPhotoIndices.asStateFlow()
-
-    private val _selectedVideoIndices = MutableStateFlow<Set<Int>>(emptySet())
-    val selectedVideoIndices: StateFlow<Set<Int>> = _selectedVideoIndices.asStateFlow()
+    /**
+     * Which items of a gallery post are chosen, as indexes into `VideoInfo.carouselMedia`.
+     *
+     * One set over one ordered list, rather than one set for photos and one for videos: a post that
+     * alternates pictures and clips is one list of items, and a user must be able to take the third
+     * picture and the one video and nothing else.
+     */
+    private val _carouselSelection = MutableStateFlow<Set<Int>>(emptySet())
+    val carouselSelection: StateFlow<Set<Int>> = _carouselSelection.asStateFlow()
 
     private val _showThumbnailOnly = MutableStateFlow(false)
     val showThumbnailOnly: StateFlow<Boolean> = _showThumbnailOnly.asStateFlow()
@@ -227,27 +231,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun togglePhotoIndex(index: Int) {
-        val current = _selectedPhotoIndices.value.toMutableSet()
-        if (current.contains(index)) current.remove(index) else current.add(index)
-        _selectedPhotoIndices.value = current
+    fun toggleCarouselIndex(index: Int) {
+        val current = _carouselSelection.value.toMutableSet()
+        if (!current.add(index)) current.remove(index)
+        _carouselSelection.value = current
     }
 
-    fun toggleVideoIndex(index: Int) {
-        val current = _selectedVideoIndices.value.toMutableSet()
-        if (current.contains(index)) current.remove(index) else current.add(index)
-        _selectedVideoIndices.value = current
+    /** Selects only one kind, which is what "just the videos of this post" means. */
+    fun selectKindOfCarousel(isVideo: Boolean) {
+        val items = _currentVideoInfo.value?.carouselMedia ?: return
+        _carouselSelection.value = items.indices.filter { items[it].isVideo == isVideo }.toSet()
     }
+
 
     fun selectAllCarousel() {
-        val info = _currentVideoInfo.value
-        _selectedPhotoIndices.value = (0 until (info?.carouselImages?.size ?: 0)).toSet()
-        _selectedVideoIndices.value = (0 until (info?.carouselVideos?.size ?: 0)).toSet()
+        val total = _currentVideoInfo.value?.carouselMedia?.size ?: 0
+        _carouselSelection.value = (0 until total).toSet()
     }
 
     fun deselectAllCarousel() {
-        _selectedPhotoIndices.value = emptySet()
-        _selectedVideoIndices.value = emptySet()
+        _carouselSelection.value = emptySet()
     }
 
     /**
@@ -258,12 +261,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun downloadCarouselSelected() {
         val info = _currentVideoInfo.value ?: return
-        val photos = _selectedPhotoIndices.value.sorted()
-            .mapNotNull { info.carouselImages.getOrNull(it) }
-        val videos = _selectedVideoIndices.value.sorted()
-            .mapNotNull { info.carouselVideos.getOrNull(it) }
-        val slides = photos.map { MediaSlide(it, isVideo = false) } +
-            videos.map { MediaSlide(it, isVideo = true) }
+        // Sorted by index so the files are numbered in the order the post listed them.
+        val slides = _carouselSelection.value.sorted()
+            .mapNotNull { index -> info.carouselMedia.getOrNull(index) }
+            .map { item -> MediaSlide(item.url, isVideo = item.isVideo) }
         if (slides.isEmpty()) return
 
         _showFormatSheet.value = false
@@ -284,7 +285,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 throw e
             } catch (e: Exception) {
                 Log.w("HomeViewModel", "Carousel download failed", e)
-                ImageDownloadSummary(emptyList(), slides.size)
+                ImageDownloadSummary(emptyList(), slides.size, e.message.orEmpty())
             }
 
             if (summary.savedCount > 0) {
@@ -299,8 +300,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
             val failedCount = slides.size - summary.savedCount
             val toastMsg = when {
-                summary.savedCount == 0 -> getApplication<Application>()
-                    .getString(R.string.media_saved_none)
+                // The first failure reason is shown rather than a bare count: "nothing saved" is
+                // not actionable, "the link answered 403 (expired)" is.
+                summary.savedCount == 0 -> getApplication<Application>().getString(
+                    if (summary.firstFailure.isBlank()) R.string.media_saved_none
+                    else R.string.media_saved_none_reason, summary.firstFailure
+                )
                 failedCount > 0 -> getApplication<Application>()
                     .getString(R.string.media_saved_partial, summary.savedCount, failedCount)
                 summary.savedCount == 1 -> getApplication<Application>()
@@ -380,7 +385,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         selectAllCarousel()
                         _showThumbnailOnly.value = false
                         _downloadState.value = DownloadState.InfoReady(info)
-                        _showFormatSheet.value = true
+                        // "Download everything in this post" is what the auto-download switch means,
+                        // and a shared gallery link already says so by being shared: take the user
+                        // straight to the download instead of opening a picker behind a progress bar.
+                        if (_autoDownload.value) {
+                            _showFormatSheet.value = false
+                            downloadCarouselSelected()
+                        } else {
+                            _showFormatSheet.value = true
+                        }
                     } else if (info.isPlaylist) {
                         _downloadState.value = DownloadState.PlaylistDetected(info, info.playlistCount)
                         _showFormatSheet.value = false
@@ -396,7 +409,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 onFailure = { error ->
                     _showFormatSheet.value = false
                     val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
-                    val friendly = friendlyErrorMessage(msg, url)
+                    // A message this app composed after diagnosing the failure is already the
+                    // explanation; classifying it would replace a specific reason with a hint.
+                    val friendly = if (error is FetchUserMessage && !msg.isBlank()) msg
+                    else friendlyErrorMessage(msg, url)
                     Log.w("HomeViewModel", "[ERROR-STATE] error shown to user: $friendly")
                     _downloadState.value = DownloadState.Error(friendly)
                     onConsumed()
@@ -407,6 +423,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelFetch() {
         fetchJob?.cancel()
+        // The coroutine is only half of it: the engine child process keeps running to completion
+        // unless it is told to stop.
+        _urlInput.value.trim().takeIf { it.isNotEmpty() }?.let { repository.cancelFetch(it) }
         _downloadState.value = DownloadState.Idle
         _showFormatSheet.value = false
     }
@@ -454,7 +473,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 onFailure = { error ->
                     val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
-                    _downloadState.value = DownloadState.Error(friendlyErrorMessage(msg, url))
+                    _downloadState.value = DownloadState.Error(
+                        if (error is FetchUserMessage && !msg.isBlank()) msg
+                        else friendlyErrorMessage(msg, url)
+                    )
                 }
             )
         }
@@ -651,6 +673,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val app = getApplication<Application>()
 
         return when (FetchErrorClassifier.classify(rawError, platform)) {
+            FetchErrorClassifier.Kind.NO_DOWNLOADABLE_MEDIA ->
+                app.getString(R.string.error_no_downloadable_media)
+
+            FetchErrorClassifier.Kind.EXTRACTION_FAILED ->
+                app.getString(R.string.error_extraction_failed)
+
+            FetchErrorClassifier.Kind.INSUFFICIENT_STORAGE ->
+                app.getString(R.string.error_storage_full)
+
             FetchErrorClassifier.Kind.NETWORK_TIMEOUT ->
                 app.getString(R.string.error_network_timeout)
 
