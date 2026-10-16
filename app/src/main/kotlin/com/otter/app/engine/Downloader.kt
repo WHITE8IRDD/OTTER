@@ -31,7 +31,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         private const val OUTPUT_TEMPLATE_DEFAULT = "%(title).200B [%(id)s].%(ext)s"
 
         private val progressRegex = Regex(
-            """\[download\]\s+(\d+\.?\d*)%\s+of\s+~?\s*(\d+\.?\d*)([KMG]i?B|B)\s+at\s+(\d+\.?\d*)([KMG]i?B|B)/s\s+ETA\s+(\d+):(\d+)(?::(\d+))?"""
+            """\[download\]\s+(\d+\.?\d*)%\s+of\s+~?\s*(\d+\.?\d*)([KMG]i?B|B)(?:\s+at\s+(\d+\.?\d*)([KMG]i?B|B)/s)?(?:\s+ETA\s+(\d+):(\d+)(?::(\d+))?)?""",
+            RegexOption.IGNORE_CASE
         )
 
         private data class ParsedProgress(
@@ -48,13 +49,15 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             val sizeUnit = m.groupValues[3]
             val speedVal = m.groupValues[4].toDoubleOrNull() ?: 0.0
             val speedUnit = m.groupValues[5]
-            val h = if (m.groupValues[8].isNotEmpty()) m.groupValues[6].toInt() else 0
-            val mn = if (m.groupValues[8].isNotEmpty()) m.groupValues[7].toInt() else m.groupValues[6].toInt()
-            val s = if (m.groupValues[8].isNotEmpty()) m.groupValues[8].toInt() else m.groupValues[7].toInt()
+            val hasEta = m.groupValues.size > 7 && m.groupValues[6].isNotEmpty()
+            val hasSeconds = m.groupValues.size > 8 && m.groupValues[8].isNotEmpty()
+            val h = if (hasSeconds) m.groupValues[6].toIntOrNull() ?: 0 else 0
+            val mn = if (hasSeconds) m.groupValues[7].toIntOrNull() ?: 0 else if (hasEta) m.groupValues[6].toIntOrNull() ?: 0 else 0
+            val s = if (hasSeconds) m.groupValues[8].toIntOrNull() ?: 0 else if (hasEta) m.groupValues[7].toIntOrNull() ?: 0 else 0
             return ParsedProgress(
                 percent = pct,
                 totalBytes = parseSize(sizeVal, sizeUnit),
-                speedBytesPerSec = parseSize(speedVal, speedUnit),
+                speedBytesPerSec = if (speedUnit.isNotEmpty()) parseSize(speedVal, speedUnit) else 0L,
                 etaSeconds = (h * 3600L + mn * 60L + s)
             )
         }
@@ -504,6 +507,14 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
 
+                    if (writesDirectly && attempt == 1) {
+                        val saved = YoutubeInfoCache.file(context, youtubeVideoId)
+                        if (YoutubeInfoCache.isFresh(saved)) {
+                            addOption("--load-info-json", saved.absolutePath)
+                            Log.i(TAG, "[DL] reusing the extraction from the format list")
+                        }
+                    }
+
                     val platform = detectPlatform(url)
                     val cf = concurrentFragments(platform, isLive)
                     addOption("--concurrent-fragments", cf.toString())
@@ -523,16 +534,24 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     lastEmitTime = now
 
                     val monoProgress = monotonicProgress(progress / 100f)
-                    val parsed = parseProgressLine(line ?: "")
-                    val rawBytes = if (parsed != null && parsed.totalBytes > 0) (parsed.totalBytes * monoProgress).toLong() else 0L
+                    val rawLine = line ?: ""
+                    val parsed = parseProgressLine(rawLine)
+                    val totalBytes = if (parsed != null && parsed.totalBytes > 0) parsed.totalBytes else activeInfo.lastTotalBytes
+                    val rawBytes = if (totalBytes > 0) (totalBytes * monoProgress).toLong() else 0L
                     val rawSpeed = parsed?.speedBytesPerSec ?: 0L
                     val smoothSpeed = smoothedSpeed(rawSpeed)
-                    val totalBytes = parsed?.totalBytes ?: 0L
                     val etaSec = if (smoothSpeed > 0 && totalBytes > 0) ((totalBytes - rawBytes) / smoothSpeed) else etaInSeconds
 
                     activeInfo.lastProgress = monoProgress
                     activeInfo.lastDownloadedBytes = rawBytes
                     activeInfo.lastTotalBytes = totalBytes
+
+                    val phase = when {
+                        rawLine.contains("[Merger]") || rawLine.contains("Merging formats") -> DownloadPhase.MERGING
+                        rawLine.contains("[ExtractAudio]") -> DownloadPhase.POST_PROCESSING
+                        monoProgress > 0f || rawLine.contains("[download]") -> DownloadPhase.DOWNLOADING
+                        else -> DownloadPhase.PREPARING
+                    }
 
                     onProgress(
                         DownloadState.Downloading(
@@ -541,7 +560,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                             totalBytes = totalBytes,
                             speedBytesPerSec = smoothSpeed,
                             etaSeconds = etaSec,
-                            phase = DownloadPhase.DOWNLOADING
+                            phase = phase
                         )
                     )
                 }
@@ -724,6 +743,14 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
 
+                    if (writesDirectly && attempt == 1) {
+                        val saved = YoutubeInfoCache.file(context, youtubeVideoId)
+                        if (YoutubeInfoCache.isFresh(saved)) {
+                            addOption("--load-info-json", saved.absolutePath)
+                            Log.i(TAG, "[DL] reusing the extraction from the format list")
+                        }
+                    }
+
                     val cf = concurrentFragments(platform, isLive)
                     addOption("--concurrent-fragments", cf.toString())
                 }
@@ -742,16 +769,24 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     lastEmitTime = now
 
                     val monoProgress = monotonicProgress(progress / 100f)
-                    val parsed = parseProgressLine(line ?: "")
-                    val rawBytes = if (parsed != null && parsed.totalBytes > 0) (parsed.totalBytes * monoProgress).toLong() else 0L
+                    val rawLine = line ?: ""
+                    val parsed = parseProgressLine(rawLine)
+                    val totalBytes = if (parsed != null && parsed.totalBytes > 0) parsed.totalBytes else activeInfo.lastTotalBytes
+                    val rawBytes = if (totalBytes > 0) (totalBytes * monoProgress).toLong() else 0L
                     val rawSpeed = parsed?.speedBytesPerSec ?: 0L
                     val smoothSpeed = smoothedSpeed(rawSpeed)
-                    val totalBytes = parsed?.totalBytes ?: 0L
                     val etaSec = if (smoothSpeed > 0 && totalBytes > 0) ((totalBytes - rawBytes) / smoothSpeed) else etaInSeconds
 
                     activeInfo.lastProgress = monoProgress
                     activeInfo.lastDownloadedBytes = rawBytes
                     activeInfo.lastTotalBytes = totalBytes
+
+                    val phase = when {
+                        rawLine.contains("[Merger]") || rawLine.contains("Merging formats") -> DownloadPhase.MERGING
+                        rawLine.contains("[ExtractAudio]") -> DownloadPhase.POST_PROCESSING
+                        monoProgress > 0f || rawLine.contains("[download]") -> DownloadPhase.DOWNLOADING
+                        else -> DownloadPhase.PREPARING
+                    }
 
                     onProgress(
                         DownloadState.Downloading(
@@ -760,7 +795,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                             totalBytes = totalBytes,
                             speedBytesPerSec = smoothSpeed,
                             etaSeconds = etaSec,
-                            phase = DownloadPhase.DOWNLOADING
+                            phase = phase
                         )
                     )
                 }

@@ -90,10 +90,9 @@ object MediaUrlNormalizer {
     }
 
     /**
-     * Stored cookies remain available for less common sites that explicitly need
-     * user-provided authentication. Public social extractors run without the file,
-     * so a saved login is never silently sent to the major public platforms.
+     * When cookies exist, they are made available to extractors that need session
+     * authentication (including YouTube bot checks, TikTok videos, and Facebook).
      */
-    fun shouldUseOptionalCookies(url: String): Boolean =
-        publicExtractorDomains.none { hostMatches(url, it) }
+    fun shouldUseOptionalCookies(url: String): Boolean = true
+
 }

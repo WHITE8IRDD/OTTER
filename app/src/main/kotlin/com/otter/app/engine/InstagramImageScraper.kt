@@ -57,9 +57,9 @@ class InstagramImageScraper(private val context: Context) {
 
     companion object {
         private const val TAG = "InstaScraper"
-        private const val HTTP_TIMEOUT_MS = 15_000
-        private const val WEBVIEW_TIMEOUT_MS = 20_000L
-        private const val OVERALL_HTTP_BUDGET_MS = 40_000L
+        private const val HTTP_TIMEOUT_MS = 6_000
+        private const val WEBVIEW_TIMEOUT_MS = 25_000L
+        private const val OVERALL_HTTP_BUDGET_MS = 12_000L
 
         const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -73,7 +73,7 @@ class InstagramImageScraper(private val context: Context) {
         private val JS_EXTRACTOR = """
 (function(){
     var SEEN={}, ORDER=[], MAX=24, MS=1400, C=0;
-    var VSEEN={}, VORDER=[];
+    var VSEEN={}, VORDER=[], VPOSTERS=[];
     function key(u){ return u.split('?')[0]; }
     function norm(u){
         if(!u) return '';
@@ -85,29 +85,74 @@ class InstagramImageScraper(private val context: Context) {
         if(k.indexOf('/rsrc.php')>=0 || k.indexOf('/v/t51.2885-19/')>=0) return false;
         return true;
     }
-    function isVideo(u){ return /(\.mp4|\.m4v|\.webm|\.mov)(\?|$)/i.test(key(u)); }
+    function isVideo(u){
+        var k = key(u);
+        return /(\.mp4|\.m4v|\.webm|\.mov)(\?|$)/i.test(k) ||
+               /(\/o1\/v\/t16|\/v\/t66)/i.test(k);
+    }
     function add(u){
         u = norm(u);
         if(!u || u.indexOf('http')!==0) return;
         if(!isCdn(u)) return;
-        if(isVideo(u)){ addV(u); return; }
+        if(isVideo(u)){ addV(u, ''); return; }
         var k = key(u);
         if(SEEN[k]) return;
         SEEN[k]=true; ORDER.push(u);
     }
-    function addV(u){
+    function addV(u, poster){
         u = norm(u);
         if(!u || u.indexOf('http')!==0) return;
         if(!isCdn(u)) return;
-        if(!isVideo(u)) return;
         var k = key(u);
         if(VSEEN[k]) return;
         VSEEN[k]=true; VORDER.push(u);
+        VPOSTERS.push(poster ? norm(poster) : '');
+    }
+    function walkJson(node){
+        if(!node || typeof node!=='object') return;
+        if(Array.isArray(node)){
+            for(var i=0; i<node.length; i++) walkJson(node[i]);
+            return;
+        }
+        var isVid = node.is_video === true ||
+                    (node.__typename && node.__typename.indexOf('Video')>=0) ||
+                    (node.video_versions && node.video_versions.length>0);
+        if(isVid){
+            var poster = node.display_url || '';
+            if(node.video_versions && Array.isArray(node.video_versions)){
+                for(var v=0; v<node.video_versions.length; v++){
+                    if(node.video_versions[v].url) addV(node.video_versions[v].url, poster);
+                }
+            }
+            if(node.video_url) addV(node.video_url, poster);
+            if(node.playback_url) addV(node.playback_url, poster);
+        } else {
+            if(node.display_url) add(node.display_url);
+            if(node.display_resources && Array.isArray(node.display_resources)){
+                for(var r=0; r<node.display_resources.length; r++){
+                    if(node.display_resources[r].src) add(node.display_resources[r].src);
+                }
+            }
+            if(node.image_versions2 && node.image_versions2.candidates && Array.isArray(node.image_versions2.candidates)){
+                for(var c=0; c<node.image_versions2.candidates.length; c++){
+                    if(node.image_versions2.candidates[c].url) add(node.image_versions2.candidates[c].url);
+                }
+            }
+        }
+        for(var k in node){
+            if(node.hasOwnProperty(k) && typeof node[k]==='object') walkJson(node[k]);
+        }
     }
     function scanText(txt){
         if(!txt) return;
-        var re=/https?:[^"'\\\s<>]*?(?:scontent|cdninstagram|fbcdn)[^"'\\\s<>]*/g, m;
-        while((m=re.exec(txt))!==null){ add(m[0]); }
+        try {
+            var data = JSON.parse(txt);
+            walkJson(data);
+        } catch(e) {
+            var unescaped = txt.replace(/\\\//g,'/').replace(/\\u0026/g,'&');
+            var re=/https?:\/\/[^\s"'<>\\]*?(?:scontent|cdninstagram|fbcdn)[^\s"'<>\\]*/g, m;
+            while((m=re.exec(unescaped))!==null){ add(m[0]); }
+        }
     }
     function total(){ return ORDER.length + VORDER.length; }
     function collect(){
@@ -118,12 +163,13 @@ class InstagramImageScraper(private val context: Context) {
             if(ss){ ss.split(',').forEach(function(p){ add(p.trim().split(' ')[0]); }); }
         });
         document.querySelectorAll('video').forEach(function(v){
-            if(v.poster) add(v.poster);
-            if(v.src) addV(v.src);
-            if(v.currentSrc) addV(v.currentSrc);
+            var vs = v.currentSrc || v.src;
+            var vp = v.poster || '';
+            if(vs && vs.indexOf('http')===0) addV(vs, vp);
         });
         document.querySelectorAll('source').forEach(function(s){
-            if(s.src) addV(s.src);
+            var ss = s.src;
+            if(ss && ss.indexOf('http')===0) addV(ss, '');
         });
         document.querySelectorAll('*').forEach(function(el){
             var bg=window.getComputedStyle(el).backgroundImage;
@@ -137,8 +183,6 @@ class InstagramImageScraper(private val context: Context) {
         });
         return total()-before;
     }
-    // A detached WebView reports nothing as visible, so accept any matching node as a
-    // last resort instead of giving up on paging entirely.
     function shown(el){ return !!el && (el.offsetParent!==null || el.getClientRects().length>0); }
     function nextBtn(){
         var a=document.querySelector('button[aria-label="Next"],button[aria-label*="Next" i],button[aria-label*="next" i]');
@@ -166,7 +210,8 @@ class InstagramImageScraper(private val context: Context) {
     }
     function done(){
         collect();
-        Android.onResult(JSON.stringify({images:ORDER, videos:VORDER}));
+        var html = (document.documentElement && document.documentElement.outerHTML) ? document.documentElement.outerHTML : '';
+        Android.onResult(JSON.stringify({images:ORDER, videos:VORDER, posters:VPOSTERS, html:html.substring(0, 1500000)}));
     }
     setTimeout(tick,2000);
 })();
@@ -328,10 +373,16 @@ class InstagramImageScraper(private val context: Context) {
         // request comes back empty. It is slow, so a partial read is never retried here.
         if (total() == 0) {
             val rendered = scrapeWithWebView(canonical)
-            val renderedCount = rendered.first.size + rendered.second.size
+            val renderedCount = rendered.photos.size + rendered.videos.size
             if (renderedCount > 0) {
-                rendered.first.forEach { url -> merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url) }
-                rendered.second.forEach { url -> mergedVideos.putIfAbsent(InstagramMediaParser.mediaKey(url), url) }
+                rendered.photos.forEach { url -> merged.putIfAbsent(InstagramMediaParser.mediaKey(url), url) }
+                rendered.videos.forEachIndexed { index, url ->
+                    val key = InstagramMediaParser.mediaKey(url)
+                    if (!mergedVideos.containsKey(key)) {
+                        mergedVideos[key] = url
+                        mergedPosters[key] = rendered.posters.getOrNull(index).orEmpty()
+                    }
+                }
                 sources += "webview($renderedCount)"
                 if (expected == 0) expected = renderedCount
             } else {
@@ -342,9 +393,15 @@ class InstagramImageScraper(private val context: Context) {
             sources += "webview(skipped-partial-read)"
         }
 
-        val urls = merged.values.toList()
         val videos = mergedVideos.values.toList()
         val posters = videos.map { mergedPosters[InstagramMediaParser.mediaKey(it)].orEmpty() }
+        val videoKeys = mergedVideos.keys
+        val posterKeys = mergedPosters.values.filter { it.isNotBlank() }
+            .map { InstagramMediaParser.mediaKey(it) }.toSet()
+        val urls = merged.values.filterNot { url ->
+            val key = InstagramMediaParser.mediaKey(url)
+            videoKeys.contains(key) || posterKeys.contains(key)
+        }
         val readCount = urls.size + videos.size
         if (readCount == 0) {
             Log.w(TAG, "No Instagram media found for $canonical (${sources.joinToString()})")
@@ -452,15 +509,21 @@ class InstagramImageScraper(private val context: Context) {
         }
     }
 
+    data class WebViewResult(
+        val photos: List<String> = emptyList(),
+        val videos: List<String> = emptyList(),
+        val posters: List<String> = emptyList()
+    )
+
     /** Returns the rendered photo URLs and video URLs. */
     @SuppressLint("SetJavaScriptEnabled")
-    private suspend fun scrapeWithWebView(url: String): Pair<List<String>, List<String>> =
+    private suspend fun scrapeWithWebView(url: String): WebViewResult =
         withContext(Dispatchers.Main) {
             Log.i(TAG, "Starting WebView scrape for $url")
             var webView: WebView? = null
             val result = try {
                 withTimeoutOrNull(WEBVIEW_TIMEOUT_MS) {
-                    suspendCancellableCoroutine<Pair<List<String>, List<String>>> { cont ->
+                    suspendCancellableCoroutine<WebViewResult> { cont ->
                         val activity = context as? Activity
                         val container = activity?.let { act ->
                             FrameLayout(context).apply {
@@ -490,7 +553,7 @@ class InstagramImageScraper(private val context: Context) {
                                 @JavascriptInterface
                                 fun onResult(json: String) {
                                     Log.i(TAG, "WebView JS returned ${json.length} chars")
-                                    if (cont.isActive) cont.resume(parseExtractorPayload(json))
+                                    if (cont.isActive) cont.resume(parseExtractorPayload(json, url))
                                 }
 
                                 @JavascriptInterface
@@ -534,7 +597,7 @@ class InstagramImageScraper(private val context: Context) {
                         container?.addView(webView)
                         webView?.loadUrl(url)
                     }
-                } ?: (emptyList<String>() to emptyList<String>())
+                } ?: WebViewResult()
             } finally {
                 webView?.let { wv ->
                     wv.stopLoading()
@@ -549,26 +612,29 @@ class InstagramImageScraper(private val context: Context) {
         }
 
     /**
-     * Reads the extractor payload: `{"images":[…],"videos":[…]}` from the current
-     * script, and the bare `[…]` array older builds may still return.
+     * Reads the extractor payload: `{"images":[…],"videos":[…],"posters":[…],"html":"…"}`
+     * from the current script, and the bare `[…]` array older builds may still return.
      */
-    private fun parseExtractorPayload(json: String): Pair<List<String>, List<String>> {
+    private fun parseExtractorPayload(json: String, canonicalUrl: String = ""): WebViewResult {
         val trimmed = json.trim()
+        val photos = mutableListOf<String>()
+        val videos = mutableListOf<String>()
+        val posters = mutableListOf<String>()
+
         if (!trimmed.startsWith("{")) {
             val images = runCatching { org.json.JSONArray(trimmed) }.getOrNull()?.let { array ->
                 (0 until array.length()).mapNotNull { index ->
                     InstagramMediaParser.normalizeUrl(array.optString(index, ""))
                 }
             } ?: emptyList()
-            return images to emptyList()
+            return WebViewResult(photos = images)
         }
-        val images = mutableListOf<String>()
-        val videos = mutableListOf<String>()
+
         runCatching {
             val root = org.json.JSONObject(trimmed)
             root.optJSONArray("images")?.let { array ->
                 for (index in 0 until array.length()) {
-                    InstagramMediaParser.normalizeUrl(array.optString(index, ""))?.let { images.add(it) }
+                    InstagramMediaParser.normalizeUrl(array.optString(index, ""))?.let { photos.add(it) }
                 }
             }
             root.optJSONArray("videos")?.let { array ->
@@ -576,8 +642,24 @@ class InstagramImageScraper(private val context: Context) {
                     InstagramMediaParser.normalizeUrl(array.optString(index, ""))?.let { videos.add(it) }
                 }
             }
+            root.optJSONArray("posters")?.let { array ->
+                for (index in 0 until array.length()) {
+                    InstagramMediaParser.normalizeUrl(array.optString(index, ""))?.let { posters.add(it) }
+                }
+            }
+            val html = root.optString("html", "")
+            if (html.isNotBlank()) {
+                val parsed = InstagramMediaParser.parseHtml(html, canonicalUrl)
+                parsed.imageUrls.forEach { if (!photos.contains(it)) photos.add(it) }
+                parsed.videoUrls.forEachIndexed { idx, vUrl ->
+                    if (!videos.contains(vUrl)) {
+                        videos.add(vUrl)
+                        posters.add(parsed.videoPosters.getOrNull(idx).orEmpty())
+                    }
+                }
+            }
         }
-        return images to videos
+        return WebViewResult(photos = photos, videos = videos, posters = posters)
     }
 
     fun canExtract(url: String): Boolean =

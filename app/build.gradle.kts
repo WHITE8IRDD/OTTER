@@ -22,8 +22,8 @@ android {
         applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "26.3"
+        versionCode = 17
+        versionName = "26-better-2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -83,7 +83,6 @@ dependencies {
     // Updated Android wrapper: newer yt-dlp bundle + QuickJS runtime for current YouTube extraction.
     implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
-    implementation("io.github.junkfood02.youtubedl-android:aria2c:0.18.1")
 
     // Core / lifecycle
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")

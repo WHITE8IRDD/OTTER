@@ -37,6 +37,13 @@ class CookiesViewModel(application: Application) : AndroidViewModel(application)
         _cookieText.value = text
     }
 
+    fun refresh() {
+        cookieManager.load()?.let { content ->
+            _cookieText.value = content
+            _hasCookies.value = cookieManager.exists()
+        }
+    }
+
     fun save() {
         val text = _cookieText.value.trim()
         if (text.isEmpty()) {

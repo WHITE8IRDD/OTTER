@@ -2,11 +2,8 @@ package com.otter.app
 
 import android.app.Application
 import android.util.Log
-import com.otter.app.engine.EngineLock
 import com.otter.app.engine.FormatParser
-import com.otter.app.engine.YtDlpUpdater
 import com.otter.app.util.NotificationHelper
-import com.yausername.aria2c.Aria2c
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
@@ -30,7 +27,6 @@ class OtterApplication : Application() {
             val warmJob = async { FormatParser.warmUpEngine(this@OtterApplication) }
             initJob.await()
             warmJob.await()
-            autoUpdateYtDlp()
         }
     }
 
@@ -38,26 +34,9 @@ class OtterApplication : Application() {
         try {
             YoutubeDL.getInstance().init(this@OtterApplication)
             FFmpeg.getInstance().init(this@OtterApplication)
-            Aria2c.getInstance().init(this@OtterApplication)
             Log.i(TAG, "Engine initialized successfully")
         } catch (e: YoutubeDLException) {
             Log.e(TAG, "Failed to initialize engine", e)
-        }
-    }
-
-    private suspend fun autoUpdateYtDlp() {
-        val updater = YtDlpUpdater(this)
-        if (!(updater.shouldAutoUpdate() || updater.getVersion() == "Unknown")) return
-        // The update is a fresh yt-dlp binary: tens of megabytes pulled over the same
-        // connection the user is about to download with. If they have already started
-        // fetching or downloading in this session, leave it for the next launch.
-        if (EngineLock.wasUsed) {
-            Log.i(TAG, "Skipping yt-dlp update: the engine is in use")
-            return
-        }
-        Log.i(TAG, "Auto-updating engine (nightly channel)...")
-        updater.update { progress ->
-            Log.i(TAG, "Engine update: $progress")
         }
     }
 
