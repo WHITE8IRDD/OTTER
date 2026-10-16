@@ -163,14 +163,14 @@ jobs:
             echo "- Cancel on a running extraction now stops the engine child process instead of leaving it running."
             echo
             echo "### Instagram and carousels"
-            "- \`/reel/\`, \`/reels/\`, \`/tv/\` and forwarded \`/share/…\` links are recognised as posts, which is how a one-video post is shared."
+            echo "- \`/reel/\`, \`/reels/\`, \`/tv/\` and forwarded \`/share/…\` links are recognised as posts, which is how a one-video post is shared."
             echo "- A page is read for the post that was asked for. Suggested-post media is no longer merged into the result, and the slides keep the order the post gave them."
             echo "- The picker shows one ordered list of a gallery's items — pictures and clips together — with per-item kind badges, a poster frame for each clip, and \`Pictures only\` / \`Videos only\` shortcuts."
             echo "- A partially read album says so, and is never reused from the result cache until it is complete."
             echo "- A failed slide reports why (expired link, rate limit, no longer there) instead of a count."
             echo
             echo "### Pages the engine does not know"
-            echo "- The fallback reader finds the page's video, not only its pictures: \`og:video\", "twitter:player:stream", <video>/<source>, manifest links and JSON-LD \`contentUrl\`. A page that declares a video it cannot hand over says so, instead of offering its thumbnails."
+            echo "- The fallback reader finds the page's video, not only its pictures: declared open-graph video, a player stream, \`<video>\` and \`<source>\` elements, manifest links and JSON-LD \`contentUrl\`. A page that advertises a video it cannot hand over says so, instead of offering its thumbnails."
             echo
             echo "### Format sheet"
             echo "- Rows now show frame size, codec, frame rate and bitrate, so two entries that both read \`1080p • MP4\` can be told apart."
