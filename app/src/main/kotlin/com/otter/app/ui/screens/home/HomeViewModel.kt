@@ -647,97 +647,77 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun friendlyErrorMessage(rawError: String, url: String): String {
-        val platform = detectPlatform(url)
+        val platform = FetchErrorClassifier.detectPlatform(url)
         val app = getApplication<Application>()
 
-        return when {
-            rawError.contains("timed out", ignoreCase = true) ||
-            rawError.contains("connection refused", ignoreCase = true) ->
+        return when (FetchErrorClassifier.classify(rawError, platform)) {
+            FetchErrorClassifier.Kind.NETWORK_TIMEOUT ->
                 app.getString(R.string.error_network_timeout)
 
-            rawError.contains("Unable to resolve host", ignoreCase = true) ||
-            rawError.contains("no internet", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.NO_INTERNET ->
                 app.getString(R.string.error_no_internet)
 
-            rawError.contains("video unavailable", ignoreCase = true) ||
-            rawError.contains("this video isn't available", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.VIDEO_UNAVAILABLE ->
                 app.getString(R.string.error_video_unavailable)
 
-            rawError.contains("private video", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.PRIVATE_VIDEO ->
                 app.getString(R.string.error_private_video)
 
-            rawError.contains("removed", ignoreCase = true) ||
-            rawError.contains("404", ignoreCase = true) ||
-            rawError.contains("not found", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.VIDEO_REMOVED ->
                 app.getString(R.string.error_video_removed)
 
-            rawError.contains("copyright", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.COPYRIGHT ->
                 app.getString(R.string.error_copyright)
 
-            rawError.contains("sign in", ignoreCase = true) ||
-            rawError.contains("login required", ignoreCase = true) ||
-            rawError.contains("age", ignoreCase = true) && rawError.contains("restrict", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.AUTH_REQUIRED ->
                 app.getString(R.string.error_auth_required, getCookieHint(platform))
 
-            rawError.contains("not available in your country", ignoreCase = true) ||
-            rawError.contains("geo", ignoreCase = true) && rawError.contains("restrict", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.REGION_BLOCKED ->
                 app.getString(R.string.error_region_blocked)
 
-            rawError.contains("live event will begin", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.LIVE_NOT_STARTED ->
                 app.getString(R.string.error_live_not_started)
 
-            rawError.contains("DVR", ignoreCase = true) ||
-            rawError.contains("live stream has ended", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.LIVE_ENDED ->
                 app.getString(R.string.error_live_ended)
 
-            rawError.contains("opus", ignoreCase = true) && rawError.contains("error", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.CODEC_ISSUE ->
                 app.getString(R.string.error_codec_issue)
 
-            rawError.contains("requested format not available", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.FORMAT_UNAVAILABLE ->
                 app.getString(R.string.error_format_unavailable)
 
-            platform == PLATFORM_INSTAGRAM && rawError.contains("login", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.INSTAGRAM_LOGIN ->
                 app.getString(R.string.error_instagram_login)
 
-            platform == PLATFORM_TWITTER && rawError.contains("rate", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.TWITTER_RATE_LIMIT ->
                 app.getString(R.string.error_twitter_rate_limit)
 
-            platform == PLATFORM_TIKTOK && rawError.contains("extract", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.TIKTOK_EXTRACTOR ->
                 app.getString(R.string.error_tiktok_extractor)
 
-            platform == PLATFORM_FACEBOOK && rawError.contains("login", ignoreCase = true) ->
+            FetchErrorClassifier.Kind.FACEBOOK_LOGIN ->
                 app.getString(R.string.error_facebook_login)
 
-            else -> app.getString(R.string.error_generic_with_hint)
+            FetchErrorClassifier.Kind.BOT_CHALLENGE ->
+                app.getString(R.string.error_bot_challenge)
+
+            FetchErrorClassifier.Kind.SOURCE_RESTRICTED ->
+                app.getString(R.string.error_source_restricted)
+
+            FetchErrorClassifier.Kind.GENERIC ->
+                app.getString(R.string.error_generic_with_hint)
         }
     }
 
-    companion object {
-        private const val PLATFORM_YOUTUBE = 0
-        private const val PLATFORM_FACEBOOK = 1
-        private const val PLATFORM_INSTAGRAM = 2
-        private const val PLATFORM_TWITTER = 3
-        private const val PLATFORM_TIKTOK = 4
-        private const val PLATFORM_OTHER = 5
-    }
-
-    private fun detectPlatform(url: String): Int {
-        return when {
-            url.contains("youtube.com") || url.contains("youtu.be") -> PLATFORM_YOUTUBE
-            url.contains("facebook.com") || url.contains("fb.watch") || url.contains("fb.com") -> PLATFORM_FACEBOOK
-            url.contains("instagram.com") -> PLATFORM_INSTAGRAM
-            url.contains("twitter.com") || url.contains("x.com") -> PLATFORM_TWITTER
-            url.contains("tiktok.com") -> PLATFORM_TIKTOK
-            else -> PLATFORM_OTHER
-        }
-    }
+    private fun detectPlatform(url: String): Int = FetchErrorClassifier.detectPlatform(url)
 
     private fun getCookieHint(platform: Int): String {
         return when (platform) {
-            PLATFORM_INSTAGRAM -> getApplication<Application>().getString(R.string.cookie_hint_instagram)
-            PLATFORM_FACEBOOK -> getApplication<Application>().getString(R.string.cookie_hint_facebook)
-            PLATFORM_TWITTER -> getApplication<Application>().getString(R.string.cookie_hint_twitter)
-            PLATFORM_YOUTUBE -> getApplication<Application>().getString(R.string.cookie_hint_youtube_age)
+            FetchErrorClassifier.PLATFORM_INSTAGRAM -> getApplication<Application>().getString(R.string.cookie_hint_instagram)
+            FetchErrorClassifier.PLATFORM_FACEBOOK -> getApplication<Application>().getString(R.string.cookie_hint_facebook)
+            FetchErrorClassifier.PLATFORM_TWITTER -> getApplication<Application>().getString(R.string.cookie_hint_twitter)
+            FetchErrorClassifier.PLATFORM_YOUTUBE -> getApplication<Application>().getString(R.string.cookie_hint_youtube_age)
             else -> getApplication<Application>().getString(R.string.cookie_hint_generic)
         }
     }

@@ -106,4 +106,26 @@ Production users will face edge cases (6th retry, null pointer in format parsing
 - The foreground download service persists the active request and uses sticky restart behavior so Android can restart ordinary process-reclaimed downloads; yt-dlp's existing `--continue` resumes partial files.
 - Added JVM fixtures for TikTok photo-mode parsing and cookie-policy behavior, plus a branch-specific GitHub Actions workflow that runs unit tests, builds a debug candidate, and uploads it as an artifact.
 
-**Verification boundary:** the sandbox has no JDK or Android SDK, and no target-device/emulator or user-provided links were available. The build, unit tests, and live TikTok/Instagram/Facebook/YouTube download matrix still need to pass in CI and on a real device before publishing a release. No claim of universal, zero-second, or login-free success is made for links the app has not tested.
+## Part 6: Device-verified public-link pass (versionCode 16)
+
+Errors now name the cause they actually have. A bot challenge ("Sign in to confirm you're not a bot") was matched by the generic `sign in` rule and reported as an age restriction, which sent users to Settings → Cookies for a video that was never age restricted. TikTok's "status code 0" refusal was reported as a generic failure. Both are now distinct messages, and the mapping lives in `FetchErrorClassifier` so it is unit tested against the exact wording the live sites returned. English, Arabic and French strings were added for both.
+
+- `FetchErrorClassifier` (+11 JVM tests) and an on-device Compose test for the clipboard path (`HomeClipboardAutoFetchTest`, 3 tests).
+
+### What was verified on an Android 15 x86_64 emulator, without login or saved cookies
+
+| Case | Result |
+|------|--------|
+| TikTok photo-mode post (`@mens.guidance/photo/7467226363544554770`) | **Pass.** 6/6 stills read, all 6 downloaded and verified as valid JPEG files. |
+| Instagram carousels (`/p/CUbHfhpswxt/`, `/p/DMIyKdftu68/`, `/p/DZ822XajcA1/`, `/p/DYBjngHzfvt/`) | **Photos: Pass. Mixed photo+video: not verified.** Every plain-HTTP endpoint returned no media (`page(0)`, `page-mobile(0)`, `web-api(0)`, `embed(0)`, `a1` 404); the WebView fallback rendered the page and returned the slides — 5, 20, 5 and 1 respectively. The 20-slide result matters: it is Instagram's per-post maximum, so the renderer pages the whole carousel. All 5 slides of `CUbHfhpswxt` downloaded as valid JPEGs. Logged-out Instagram now answers only through a real browser render, which is slow and depends on Instagram's markup. Every public carousel reachable without an account was photo-only, so the mixed photo+video case is covered only by unit tests (`InstagramMixedCarouselTest`), not by a live post. |
+| Audio download (direct MP3) | **Pass.** Fetch, download through the foreground service, and file verified on disk. |
+| Background audio download | **Pass.** App sent to Home immediately after the tap; service stayed foreground (`isForeground=true`, type `dataSync`), progress notification shown, "Download Complete!" notification posted, file completed. |
+| Clipboard auto-fill and auto-fetch | **Pass.** 3 on-device tests: link copied is inserted with no paste tap, a repeat copy of the same link does not clear or re-trigger, non-link clipboard text is ignored. |
+| YouTube video | **Partial.** One fetch succeeded (57 formats, correct title); later fetches from the same IP returned "Sign in to confirm you're not a bot". |
+| TikTok video | **Blocked.** yt-dlp reports "Video not available, status code 0" on every attempt; the page's own `playAddr` CDN link answers 403 without a session-bound `ttwid` cookie. |
+| Facebook reel | **Blocked.** yt-dlp reports "Cannot parse data"; Facebook answers logged-out requests with a login wall. |
+| SoundCloud track | **Blocked.** yt-dlp reports "Unable to extract client id" (upstream extractor breakage, not app behaviour). |
+
+No attempt was made to work around a login, a session cookie, or an anti-bot control. No claim is made that any link downloads instantly or that every public link works without a login.
+
+**Verification boundary:** the earlier statement that no JDK, Android SDK or device was available no longer holds. The build, the JVM unit tests (59) and the on-device instrumented tests (3) pass locally, and the live matrix above was run on an Android 15 emulator. Physical-hardware behaviour, OEM background-killer behaviour (MIUI/EMUI), and region-specific results are still unverified.

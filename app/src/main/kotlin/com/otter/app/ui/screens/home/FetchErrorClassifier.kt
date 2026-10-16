@@ -1,0 +1,132 @@
+package com.otter.app.ui.screens.home
+
+/**
+ * Classifies the raw failure text an extractor produced into the reason the user
+ * actually sees.
+ *
+ * This is deliberately free of Android types so the mapping can be unit tested
+ * against the exact strings real sites return; [HomeViewModel] only turns the
+ * resulting [Kind] into a localised message.
+ *
+ * The mapping matters because the advice attached to a failure has to match its
+ * cause. A bot challenge ("Sign in to confirm you're not a bot") was previously
+ * reported as an age restriction, which sent users to add cookies for a video that
+ * was never age restricted and whose real problem is the network the device is on.
+ */
+object FetchErrorClassifier {
+
+    const val PLATFORM_YOUTUBE = 0
+    const val PLATFORM_FACEBOOK = 1
+    const val PLATFORM_INSTAGRAM = 2
+    const val PLATFORM_TWITTER = 3
+    const val PLATFORM_TIKTOK = 4
+    const val PLATFORM_OTHER = 5
+
+    enum class Kind {
+        NETWORK_TIMEOUT,
+        NO_INTERNET,
+        VIDEO_UNAVAILABLE,
+        PRIVATE_VIDEO,
+        VIDEO_REMOVED,
+        COPYRIGHT,
+        AUTH_REQUIRED,
+        REGION_BLOCKED,
+        LIVE_NOT_STARTED,
+        LIVE_ENDED,
+        CODEC_ISSUE,
+        FORMAT_UNAVAILABLE,
+        INSTAGRAM_LOGIN,
+        TWITTER_RATE_LIMIT,
+        TIKTOK_EXTRACTOR,
+        FACEBOOK_LOGIN,
+        /** The site asked this device to prove it is not an automated client. */
+        BOT_CHALLENGE,
+        /** The site's own anti-automation refused to answer at all. */
+        SOURCE_RESTRICTED,
+        GENERIC
+    }
+
+    fun detectPlatform(url: String): Int = when {
+        url.contains("youtube.com") || url.contains("youtu.be") -> PLATFORM_YOUTUBE
+        url.contains("facebook.com") || url.contains("fb.watch") || url.contains("fb.com") -> PLATFORM_FACEBOOK
+        url.contains("instagram.com") -> PLATFORM_INSTAGRAM
+        url.contains("twitter.com") || url.contains("x.com") -> PLATFORM_TWITTER
+        url.contains("tiktok.com") -> PLATFORM_TIKTOK
+        else -> PLATFORM_OTHER
+    }
+
+    fun classify(rawError: String, url: String): Kind = classify(rawError, detectPlatform(url))
+
+    fun classify(rawError: String, platform: Int): Kind {
+        val lower = rawError.lowercase()
+
+        // Checked before the generic "sign in" branch below: several sites word a
+        // bot challenge as a sign-in request, and reporting that as an age
+        // restriction or a login wall sends the user down the wrong path.
+        if (lower.contains("not a bot") || lower.contains("confirm you're not a bot") ||
+            lower.contains("confirm you’re not a bot") || lower.contains("unusual traffic")
+        ) {
+            return Kind.BOT_CHALLENGE
+        }
+
+        return when {
+            lower.contains("timed out") || lower.contains("connection refused") ->
+                Kind.NETWORK_TIMEOUT
+
+            lower.contains("unable to resolve host") || lower.contains("no internet") ->
+                Kind.NO_INTERNET
+
+            // TikTok answers a blocked automated request with "status code 0"; the
+            // video is usually public, so this is a source restriction and not a
+            // missing or region blocked video.
+            lower.contains("status code 0") ->
+                Kind.SOURCE_RESTRICTED
+
+            lower.contains("video unavailable") || lower.contains("this video isn't available") ->
+                Kind.VIDEO_UNAVAILABLE
+
+            lower.contains("private video") ->
+                Kind.PRIVATE_VIDEO
+
+            lower.contains("removed") || lower.contains("404") || lower.contains("not found") ->
+                Kind.VIDEO_REMOVED
+
+            lower.contains("copyright") ->
+                Kind.COPYRIGHT
+
+            lower.contains("sign in") || lower.contains("login required") ||
+                (lower.contains("age") && lower.contains("restrict")) ->
+                Kind.AUTH_REQUIRED
+
+            lower.contains("not available in your country") ||
+                (lower.contains("geo") && lower.contains("restrict")) ->
+                Kind.REGION_BLOCKED
+
+            lower.contains("live event will begin") ->
+                Kind.LIVE_NOT_STARTED
+
+            lower.contains("dvr") || lower.contains("live stream has ended") ->
+                Kind.LIVE_ENDED
+
+            lower.contains("opus") && lower.contains("error") ->
+                Kind.CODEC_ISSUE
+
+            lower.contains("requested format not available") ->
+                Kind.FORMAT_UNAVAILABLE
+
+            platform == PLATFORM_INSTAGRAM && lower.contains("login") ->
+                Kind.INSTAGRAM_LOGIN
+
+            platform == PLATFORM_TWITTER && lower.contains("rate") ->
+                Kind.TWITTER_RATE_LIMIT
+
+            platform == PLATFORM_TIKTOK && lower.contains("extract") ->
+                Kind.TIKTOK_EXTRACTOR
+
+            platform == PLATFORM_FACEBOOK && lower.contains("login") ->
+                Kind.FACEBOOK_LOGIN
+
+            else -> Kind.GENERIC
+        }
+    }
+}
