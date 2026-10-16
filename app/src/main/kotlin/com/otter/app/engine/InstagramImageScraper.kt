@@ -516,7 +516,7 @@ class InstagramImageScraper(private val context: Context) {
                 }
                 val code = openedConnection.responseCode
                 if (code !in 200..299) {
-                    Log.i(TAG, "GET $url -> $code")
+                    Log.i(TAG, "GET ${redactUrl(url)} -> $code")
                     if (continuation.isActive) continuation.resume(null)
                 } else {
                     val body = BufferedReader(InputStreamReader(openedConnection.inputStream, Charsets.UTF_8)).use { it.readText() }
@@ -525,7 +525,7 @@ class InstagramImageScraper(private val context: Context) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "GET $url failed: ${e.message}")
+                Log.w(TAG, "GET ${redactUrl(url)} failed: ${e.message}")
                 if (continuation.isActive) continuation.resume(null)
             } finally {
                 connection?.disconnect()
@@ -548,7 +548,7 @@ class InstagramImageScraper(private val context: Context) {
     @SuppressLint("SetJavaScriptEnabled")
     private suspend fun scrapeWithWebView(url: String): WebViewResult =
         withContext(Dispatchers.Main) {
-            Log.i(TAG, "Starting WebView scrape for $url")
+            Log.i(TAG, "Starting WebView scrape for ${redactUrl(url)}")
             var webView: WebView? = null
             val result = try {
                 withTimeoutOrNull(WEBVIEW_TIMEOUT_MS) {
