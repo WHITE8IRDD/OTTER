@@ -58,22 +58,18 @@ class QuickDownloadActivity : ComponentActivity() {
             Log.i(TAG, "QuickDownload received URL: $sharedUrl")
             Log.i(TAG, "URL is TikTok? ${isTikTokUrl(sharedUrl)}")
 
-            // TikTok redirect: Quick Download doesn't work reliably for TikTok,
-            // so redirect to the normal share flow with format sheet
-            if (isTikTokUrl(sharedUrl)) {
-                Log.i(TAG, "Redirecting TikTok URL to normal flow via MainActivity")
-                Toast.makeText(this, getString(R.string.tiktok_normal_flow), Toast.LENGTH_SHORT).show()
-                openNormalFlow(sharedUrl)
-                return
-            }
-            if (MediaUrlNormalizer.isDirectImageUrl(sharedUrl) || isInstagramPostUrl(sharedUrl)) {
+            // Gallery/image post redirect: multi-item carousels need user selection
+            if (com.otter.app.engine.TikTokPhotoParser.isPhotoModeUrl(sharedUrl) ||
+                MediaUrlNormalizer.isDirectImageUrl(sharedUrl) ||
+                isInstagramPostUrl(sharedUrl)
+            ) {
                 Log.i(TAG, "Opening image/gallery link in the selectable media flow")
                 Toast.makeText(this, getString(R.string.quick_download_picker_flow), Toast.LENGTH_SHORT).show()
                 openNormalFlow(sharedUrl)
                 return
             }
 
-            Log.i(TAG, "Non-TikTok URL, proceeding with Quick Download")
+            Log.i(TAG, "Proceeding with Quick Download for: $sharedUrl")
             scope.launch {
                 try {
                     ensureEngineReady()

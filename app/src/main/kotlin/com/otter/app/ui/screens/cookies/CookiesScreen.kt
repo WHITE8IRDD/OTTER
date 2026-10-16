@@ -92,6 +92,85 @@ fun CookiesScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        val localContext = androidx.compose.ui.platform.LocalContext.current
+
+        OtterCard(
+            modifier = Modifier.fillMaxWidth(),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Automatic Web Session Capture",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Log in once via in-app browser to automatically extract and save session cookies.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BrutalButton(
+                        text = "YouTube",
+                        onClick = {
+                            val intent = android.content.Intent(localContext, com.otter.app.ui.LoginActivity::class.java).apply {
+                                putExtra(com.otter.app.ui.LoginActivity.EXTRA_PLATFORM, com.otter.app.ui.LoginActivity.PLATFORM_YOUTUBE)
+                            }
+                            localContext.startActivity(intent)
+                        },
+                        backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    BrutalButton(
+                        text = "TikTok",
+                        onClick = {
+                            val intent = android.content.Intent(localContext, com.otter.app.ui.LoginActivity::class.java).apply {
+                                putExtra(com.otter.app.ui.LoginActivity.EXTRA_PLATFORM, com.otter.app.ui.LoginActivity.PLATFORM_TIKTOK)
+                            }
+                            localContext.startActivity(intent)
+                        },
+                        backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BrutalButton(
+                        text = "Instagram",
+                        onClick = {
+                            val intent = android.content.Intent(localContext, com.otter.app.ui.LoginActivity::class.java).apply {
+                                putExtra(com.otter.app.ui.LoginActivity.EXTRA_PLATFORM, com.otter.app.ui.LoginActivity.PLATFORM_INSTAGRAM)
+                            }
+                            localContext.startActivity(intent)
+                        },
+                        backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    BrutalButton(
+                        text = "Facebook",
+                        onClick = {
+                            val intent = android.content.Intent(localContext, com.otter.app.ui.LoginActivity::class.java).apply {
+                                putExtra(com.otter.app.ui.LoginActivity.EXTRA_PLATFORM, com.otter.app.ui.LoginActivity.PLATFORM_FACEBOOK)
+                            }
+                            localContext.startActivity(intent)
+                        },
+                        backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         BrutalMultilineTextField(

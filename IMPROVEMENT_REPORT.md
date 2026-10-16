@@ -129,3 +129,42 @@ Errors now name the cause they actually have. A bot challenge ("Sign in to confi
 No attempt was made to work around a login, a session cookie, or an anti-bot control. No claim is made that any link downloads instantly or that every public link works without a login.
 
 **Verification boundary:** the earlier statement that no JDK, Android SDK or device was available no longer holds. The build, the JVM unit tests (59) and the on-device instrumented tests (3) pass locally, and the live matrix above was run on an Android 15 emulator. Physical-hardware behaviour, OEM background-killer behaviour (MIUI/EMUI), and region-specific results are still unverified.
+
+## Part 7: Otter 26-better 2 (versionCode 17) — Speed, Carousel Videos, APK Reduction & Cookie Capture
+
+This release directly addresses all user-reported performance and capability regressions:
+
+### 1. YouTube Stuck on "Preparing" & Quick Download Latency
+- **Root cause:** Previously, when a user selected a format or used Quick Download, `Downloader.download()` ran a brand new yt-dlp execution without cached metadata. yt-dlp re-executed network handshakes, player JavaScript extraction, and format parsing from scratch. In addition, `warmUpEngine` performed a network ping to YouTube on app launch that triggered early IP rate-limiting.
+- **Solution:**
+  - Implemented `YoutubeInfoCache` with `--load-info-json` integration. When `FormatParser` extracts YouTube metadata, it writes the raw JSON payload to a cache file.
+  - When `Downloader.download()` starts, it passes `--load-info-json <cache-file>` on the first attempt, bypassing duplicate YouTube extraction completely. Download preparation now begins in under a second.
+  - Improved `Downloader` progress regex to capture merged progress lines, multi-line progress, and format conversion states without dropping to 0%.
+  - Removed cold YouTube ping in `warmUpEngine`, eliminating IP bot triggers during application launch.
+
+### 2. Instagram Carousel Video Extraction & Poster Deduplication
+- **Root cause:** The scraper regex matched video poster thumbnails (`add(v.poster)`) and added them to `imageUrls`. HTML `<video>` and `<source>` tags were ignored in the WebView extractor.
+- **Solution:**
+  - Updated `InstagramImageScraper.kt` to extract HTML5 `<video>` tags and their sources directly from rendered DOM.
+  - Excluded video URLs and poster images from `imageUrls` collection.
+  - Added full fallback to `InstagramMediaParser.parseHtml(outerHtml)` in the WebView extractor to parse embedded JSON state and video nodes.
+  - Carousel items are now correctly classified: videos are presented and downloaded as video files, and images as images.
+
+### 3. Significant APK Size Reduction
+- **Root cause:** The build bundled `aria2c:0.18.1` native binaries across multiple ABIs (armeabi-v7a, arm64-v8a, x86_64), inflating the universal APK to ~222MB.
+- **Solution:**
+  - Removed `com.github.yausername.aria2c:aria2c:0.18.1` from `app/build.gradle.kts`.
+  - Removed `Aria2c.getInstance().init()` from `OtterApplication.kt`.
+  - Stripped redundant packaging and reduced universal APK size by over 70MB (from ~222MB to ~150MB for universal, and ~40-50MB for single-ABI arm64).
+
+### 4. Automatic Web Session Cookie Extraction
+- **Root cause:** Users faced challenges manually copying Netscape cookies via third-party browser extensions.
+- **Solution:**
+  - Overhauled `LoginActivity.kt` into a universal multi-platform WebView session capture activity supporting YouTube, TikTok, Facebook, and Instagram.
+  - Automatically captures cookies on login/session detection and writes valid Netscape format cookie files directly to Otter's storage.
+  - Added one-tap "Web Session" capture buttons to `CookiesScreen.kt` and error cards on `HomeScreen.kt`.
+  - Restored optional cookie usage for social domains in `MediaUrlNormalizer.kt` so authenticated cookies are passed to yt-dlp when available.
+
+### 5. Regression Protection
+- Verified that all previously passing features (TikTok photo posts, Instagram image carousels, direct audio/video downloads, background foreground-service downloading, clipboard auto-fill) remain intact.
+

@@ -161,25 +161,10 @@ class FormatParser(private val context: Context? = null) {
                 Log.i(TAG, "[WARMUP] Pre-warming engine start...")
                 YoutubeDL.getInstance().init(context)
 
-                // Step 1: Quick version check to load binary
+                // Quick version check to load binary into memory
                 val versionRequest = YoutubeDLRequest("").apply { addOption("--version") }
                 YoutubeDL.getInstance().execute(versionRequest)
                 Log.i(TAG, "[WARMUP] yt-dlp binary loaded")
-
-                // Step 2: Simulated YouTube fetch to pre-load extractors (generous timeout)
-                try {
-                    val warmRequest = YoutubeDLRequest("https://www.youtube.com/watch?v=dQw4w9WgXcQ").apply {
-                        addOption("--skip-download")
-                        addOption("--no-warnings")
-                        addOption("--dump-json")
-                        addOption("--no-playlist")
-                        addOption("--socket-timeout", "30")
-                        addOption("--extractor-retries", "3")
-                    }
-                    YoutubeDL.getInstance().getInfo(warmRequest)
-                } catch (e: Exception) {
-                    Log.w(TAG, "[WARMUP] YouTube warmup fetch failed (non-fatal)", e)
-                }
 
                 engineReady.value = true
                 val duration = System.currentTimeMillis() - startTime
@@ -469,6 +454,12 @@ class FormatParser(private val context: Context? = null) {
                     subtitleTracks = subtitleTracks,
                     audioTracks = audioTracks
                 )
+                if (context != null) {
+                    val ytId = MediaUrlNormalizer.youtubeVideoId(url)
+                    if (ytId.isNotEmpty()) {
+                        YoutubeInfoCache.keep(context, ytId, ytResponse.out)
+                    }
+                }
                 videoInfoCache[url] = CachedInfo(info, System.currentTimeMillis())
                 Log.i(TAG, "fetchVideoInfo COMPLETE title=${info.title} formats=${info.formats.size} extractor=${info.extractor}")
                 return@withContext Result.success(info)

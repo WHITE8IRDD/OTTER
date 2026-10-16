@@ -533,11 +533,16 @@ fun HomeScreen(
                 exit = fadeOut() + slideOutVertically()
             ) {
                 val errorState = downloadState as? DownloadState.Error
+                val rawMsg = errorState?.message.orEmpty()
                 MascotErrorState(
                     message = errorState?.message ?: stringResource(R.string.download_error_unknown),
                     onRetry = viewModel::fetchVideoInfo,
-                    isCookieError = errorState?.message?.contains("Instagram") == true ||
-                            errorState?.message?.contains("cookies") == true,
+                    isCookieError = rawMsg.contains("Instagram", ignoreCase = true) ||
+                            rawMsg.contains("cookies", ignoreCase = true) ||
+                            rawMsg.contains("bot", ignoreCase = true) ||
+                            rawMsg.contains("sign in", ignoreCase = true) ||
+                            rawMsg.contains("login", ignoreCase = true),
+                    targetUrl = urlInput.trim(),
                     onNavigateToCookies = onNavigateToCookies,
                     logoTint = logoTint
                 )
@@ -743,9 +748,11 @@ private fun MascotErrorState(
     message: String,
     onRetry: () -> Unit,
     isCookieError: Boolean,
+    targetUrl: String = "",
     onNavigateToCookies: () -> Unit,
     logoTint: Color = MaterialTheme.colorScheme.onErrorContainer
 ) {
+    val localContext = androidx.compose.ui.platform.LocalContext.current
     OtterCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = MaterialTheme.colorScheme.errorContainer
@@ -782,6 +789,20 @@ private fun MascotErrorState(
                 Text(stringResource(R.string.btn_try_again), style = MaterialTheme.typography.labelLarge)
             }
             if (isCookieError) {
+                Spacer(Modifier.height(4.dp))
+                BrutalButton(
+                    text = "Log In & Extract Cookies (Web)",
+                    onClick = {
+                        val intent = android.content.Intent(localContext, com.otter.app.ui.LoginActivity::class.java).apply {
+                            if (targetUrl.isNotBlank()) {
+                                putExtra(com.otter.app.ui.LoginActivity.EXTRA_TARGET_URL, targetUrl)
+                            }
+                        }
+                        localContext.startActivity(intent)
+                    },
+                    backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                )
                 Spacer(Modifier.height(4.dp))
                 OutlinedButton(
                     onClick = onNavigateToCookies,

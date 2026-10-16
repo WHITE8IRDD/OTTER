@@ -107,4 +107,29 @@ class YoutubeDownloadTest {
     fun nothingFoundInAnEmptyFolder() {
         assertNull(MediaFileLocator.findDownloaded(folder.root, "dQw4w9WgXcQ"))
     }
+
+    // ------------------------------------------------------ reusing an extraction
+
+    @Test
+    fun aFreshExtractionMayBeReused() {
+        val file = folder.newFile("dQw4w9WgXcQ.info.json")
+
+        assertTrue(YoutubeInfoCache.isFresh(file, file.lastModified()))
+        assertTrue(YoutubeInfoCache.isFresh(file, file.lastModified() + 60_000L))
+    }
+
+    @Test
+    fun aStaleExtractionIsNotReused() {
+        val file = folder.newFile("dQw4w9WgXcQ.info.json")
+
+        // Older than the window: the format URLs inside will have expired.
+        org.junit.Assert.assertFalse(
+            YoutubeInfoCache.isFresh(file, file.lastModified() + YoutubeInfoCache.FRESHNESS_MS + 1L)
+        )
+    }
+
+    @Test
+    fun aMissingExtractionIsNotReused() {
+        org.junit.Assert.assertFalse(YoutubeInfoCache.isFresh(File(folder.root, "nope.info.json")))
+    }
 }
