@@ -5,6 +5,14 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+/**
+ * Release signing password: the CI secret when one is set, otherwise the password this
+ * repository's committed key was generated with, so a plain clone still builds a signed release.
+ * A set-but-empty variable must not win over the fallback.
+ */
+val keystorePassword: String
+    get() = System.getenv("OTTER_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "otter123"
+
 android {
     namespace = "com.otter.app"
     compileSdk = 35
@@ -14,9 +22,9 @@ android {
             storeFile = file("../../release.keystore")
             // The CI secret is the real source; the fallback is the password this repository's key
             // was created with, so a plain clone still produces an installable release build.
-            storePassword = System.getenv("OTTER_KEYSTORE_PASSWORD") ?: "otter123"
+            storePassword = keystorePassword
             keyAlias = "otter"
-            keyPassword = System.getenv("OTTER_KEYSTORE_PASSWORD") ?: "otter123"
+            keyPassword = keystorePassword
         }
     }
 

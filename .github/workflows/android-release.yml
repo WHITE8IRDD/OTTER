@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - release/v26.2
-      - arena/e48233d3-otter
 
 permissions:
   contents: write
@@ -18,6 +17,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # The keystore in this repository was created with this password and is committed as a CI
+    # secret; `|| 'otter123'` keeps the build working when the secret has not been set, which is
+    # what a fork sees. An empty secret would otherwise reach Gradle as an empty password.
+    env:
+      OTTER_KEYSTORE_PASSWORD: ${{ secrets.OTTER_KEYSTORE_PASSWORD || 'otter123' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -43,7 +47,7 @@ jobs:
           test -n "${KS_B64:-}" || { echo "RELEASE_KEYSTORE_BASE64 secret is empty or missing"; exit 1; }
           printf '%s' "$KS_B64" | base64 -d > "$GITHUB_WORKSPACE/../release.keystore"
           test -s "$GITHUB_WORKSPACE/../release.keystore" || { echo "keystore restore failed"; exit 1; }
-          keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass otter123 -alias otter
+          keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass "$OTTER_KEYSTORE_PASSWORD" -alias otter
 
       - name: Clean
         run: ./gradlew --no-daemon clean
@@ -130,7 +134,7 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           CODE="${{ steps.version.outputs.code }}"
           TAG="v${VERSION}"
-          CERT_SHA256=$(keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass "${OTTER_KEYSTORE_PASSWORD:-otter123}" -alias otter | grep -iE "SHA-?256")
+          CERT_SHA256=$(keytool -list -keystore "$GITHUB_WORKSPACE/../release.keystore" -storepass "$OTTER_KEYSTORE_PASSWORD" -alias otter | grep -iE "SHA-?256")
           UNIVERSAL_SIZE=$(ls -lh "build-artifacts/OTTER new perspective 0.1.apk" | awk '{print $5}')
           ARM64_SIZE=$(ls -lh build-artifacts/*arm64-v8a*.apk 2>/dev/null | awk '{print $5}' | head -n1 || echo "N/A")
           {
