@@ -32,11 +32,44 @@ jobs:
       - name: Install Android 35 build packages
         run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
+      # The output is teed to a file so that a failure can be summarised below. Runner logs are
+      # occasionally unreachable from outside the UI, and a red tick with no readable reason costs a
+      # whole round trip to fix; the summary is part of the check run and can be read from the API.
       - name: Run unit tests
-        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest
+        run: |
+          mkdir -p build
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest 2>&1 | tee build/unit-tests.log
 
       - name: Build debug APKs
-        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+        run: |
+          mkdir -p build
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug 2>&1 | tee build/assemble.log
+
+      - name: Report what broke
+        if: failure()
+        run: |
+          {
+            echo '### Validation failed'
+            echo
+            echo '```'
+            grep -hE '^e: |FAILED|expected:|Caused by:|error:|Unresolved reference|Execution failed' \
+              build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 100
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-logs
+          path: |
+            build/unit-tests.log
+            build/assemble.log
+            app/build/reports/tests
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Collect candidate APK
         run: |
