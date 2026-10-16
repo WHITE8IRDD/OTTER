@@ -50,6 +50,16 @@ object EngineBundle {
     private const val SOLVER_VERSION_ENTRY = "yt_dlp_ejs/_version.py"
     private const val ZIP_MAGIC_OFFSET_SEARCH = 64 * 1024
 
+    /** The `VERSION = '…'` / `__version__ = '…'` line a Python version file declares. */
+    private val ASSIGNMENT: Regex = Regex("""(?:VERSION|__version__|version)\s*=\s*['"]([^'"]+)['"]""")
+
+    /** The captured version string out of a `*_version.py`/`_info.py` file's text, blank if none. */
+    private fun versionFrom(fileText: String?): String {
+        if (fileText == null) return ""
+        val match: MatchResult? = ASSIGNMENT.find(fileText)
+        return match?.groupValues?.getOrNull(1).orEmpty()
+    }
+
     /**
      * Where the wrapper keeps the engine it actually runs.
      *
@@ -111,9 +121,9 @@ object EngineBundle {
                 }
             }
         }
-        val version = versionEntry?.let { ASSIGNMENT.firstMatchIn(it) }?.groupValues?.getOrNull(1).orEmpty()
-        val solverExpected = vendorEntry?.let { ASSIGNMENT.firstMatchIn(it) }?.groupValues?.getOrNull(1).orEmpty()
-        val solverInside = solverEntry?.let { ASSIGNMENT.firstMatchIn(it) }?.groupValues?.getOrNull(1).orEmpty()
+        val version = versionFrom(versionEntry)
+        val solverExpected = versionFrom(vendorEntry)
+        val solverInside = versionFrom(solverEntry)
         return Info(
             ytDlpVersion = version,
             solverVersion = solverExpected.ifBlank { solverInside },
@@ -242,11 +252,10 @@ object EngineBundle {
     fun majorMinor(version: String): String = version.split('.').take(2).joinToString(".")
 
     /** The solver version a wheel declares, so it can be checked against what the engine expects. */
-    fun overlaySolverVersion(overlay: File?): String =
-        overlay?.let { readTextEntry(it, SOLVER_VERSION_ENTRY) }
-            ?.let { ASSIGNMENT.firstMatchIn(it)?.groupValues?.getOrNull(1) }.orEmpty()
-
-    private val ASSIGNMENT = Regex("""(?:VERSION|__version__|version)\s*=\s*['"]([^'"]+)['"]""")
+    fun overlaySolverVersion(overlay: File?): String {
+        val text = overlay?.let { file -> readTextEntry(file, SOLVER_VERSION_ENTRY) }
+        return versionFrom(text)
+    }
 
     /**
      * A stream positioned at the start of the zip data, i.e. after any `#!` line a zipapp carries.
