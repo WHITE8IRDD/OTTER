@@ -1,3 +1,10 @@
+# Status of this audit
+
+Every finding below has been acted on in `arena/66d6657c-otter` except the two that need a decision
+from outside the code: adopting `gallery-dl` / a cobalt instance (new dependencies, see
+`RESEARCH-open-source-engines.md`) and on-device verification of the engine paths. Resolution notes
+are in `IMPROVEMENT_REPORT.md` under "Corrections and additions — New Perspective 0.1".
+
 # OTTER — New Perspective 0.1 · Technical audit (Phase 1)
 
 Audited commit: `06381ba` (branch `master`, tagless squash "Merge pull request #7").

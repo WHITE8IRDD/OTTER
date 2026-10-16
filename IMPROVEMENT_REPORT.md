@@ -168,3 +168,48 @@ This release directly addresses all user-reported performance and capability reg
 ### 5. Regression Protection
 - Verified that all previously passing features (TikTok photo posts, Instagram image carousels, direct audio/video downloads, background foreground-service downloading, clipboard auto-fill) remain intact.
 
+---
+
+# Corrections and additions — New Perspective 0.1
+
+The report above was written against an earlier build. Six of its claims stopped being true, and
+three of them were describing code that did not behave as written. Recorded here so the next reader
+does not trust a stale table.
+
+| Claim above | Reality |
+|-------------|---------|
+| "3 silent retries (500ms–3s delays)" for fetching | The fetch ladder had no shared notion of *which* errors are worth retrying, so an unavailable video was re-read three times. Permanent reasons now stop the ladder at once (`DownloadRetryPolicy.shouldStopReFetching`). |
+| "5 retries with exponential backoff (1s–16s)" for downloads | There were three copies of that ladder, and the one the service used bounded itself with a delay table. It is now one policy (`DownloadRetryPolicy`, 3 attempts) shared by all three call sites. |
+| "`--concurrent-fragments 8` flag for DASH streams" | The flag was added twice — once by the platform pass, once by the user's setting — and yt-dlp keeps the last occurrence, so the setting did nothing for five platforms. `EngineArgs.concurrentFragments` resolves one value. |
+| "`No video formats found` and `Usage:` patterns skip retries" | The matcher behind the "non-recoverable" branch also contained a bare `Regex("private")`, which ended recoverable failures whose text merely contained the word. The list is now specific and tested. |
+| "3-tier fallback (HTML→API→WebView) for image posts" | The third tier was detached from the fetch path, and the second tier (`?__a=1&__d=dis`) answers 404 today. What remains is a page read plus a scoped JSON payload parse; the dead tiers are gone. |
+| "Restored optional cookie usage for social domains" | `shouldUseOptionalCookies` returned `true` for every URL whatever Settings said. Cookies are now gated on the switch (`MediaUrlNormalizer.shouldAttachSavedCookies`) and the setting is persisted. |
+
+Two more, because a success that is not a file is worse than a failure:
+
+- **A download is verified before it is reported.** The engine exiting 0 and a path existing is not a
+  playable video — a CDN answering an expired signed URL with an error page writes HTML into
+  `video.mp4`. `MediaFileValidator` checks size, unfinished `.part` siblings and the container header
+  before the success state, and rejects an HTML body.
+- **Retry terminates.** The expired-format recovery used to reset the attempt counter, so a video whose
+  format URLs kept answering 403 retried forever: an engine run and a full re-extraction each lap, no
+  error in the UI, a notification that never cleared. The counter now only moves forward and the
+  recovery has its own budget of one.
+
+## What is new in this pass
+
+| Area | Change |
+|------|--------|
+| Engine freshness | `OtterApplication.keepEngineCurrent()` checks the stable yt-dlp channel once a day on an unmetered connection when the engine is idle. The bundled build was 11 months behind upstream, which is the single largest cause of "YouTube often fails". |
+| Cancellation | `FormatParser.cancelFetch(url)` destroys the engine child process; Cancel no longer leaves a fetch running. Every engine run gets a unique process id (`EngineArgs.processId`). |
+| Cost of a fetch | One `JSONObject` per response instead of three parses, `--quiet` with a single network retry, in-flight requests for the same URL joined, a complete Instagram read cached for 5 minutes, and a 30 s scrape budget. |
+| Instagram parsing | The requested post is scoped by shortcode, so suggested-post media can no longer be merged into a result; `complete()` counts slides instead of requiring two; slide order is preserved end to end. |
+| Carousel UI | One ordered list of slides with per-item badges and posters, `Pictures only` / `Videos only`, and a partial-read banner. Previews decode at card size. |
+| Failure wording | A failed slide or an unusable file reports the reason (expired link, rate limit, HTTP status, wrong container) rather than a count; a page with an unreadable video says so. |
+| Tests | `InstagramUrlTest`, `MediaClassifierTest`, `DownloadRetryPolicyTest`, `EngineArgsTest`, `MediaFileValidatorTest`, `VideoFormatTest`, plus carousel and generic-page video cases. |
+
+**Verification status.** Everything above is compiled and unit-tested by CI (`android-validation.yml`,
+which now publishes the failure excerpt as check annotations). No change in this section has been
+exercised on a physical device, so "works" here means "the rules are correct and the app builds", not
+"downloaded a reel on a phone". The engine-dependent paths (Instagram, YouTube) need a device pass
+before the release notes can claim more than that.
