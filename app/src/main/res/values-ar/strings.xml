@@ -84,6 +84,8 @@
     <string name="error_format_unavailable">الجودة المطلوبة غير متاحة. جرب صيغة أخرى.</string>
     <string name="error_codec_issue">مشكلة في ترميز الفيديو. جرب اختيار جودة مختلفة.</string>
     <string name="error_auth_required">يتطلب هذا المحتوى تسجيل الدخول. %1$s</string>
+    <string name="error_bot_challenge">الموقع يتحقق من أن هذا الطلب ليس من عميل آلي. هذا حد من الشبكة الحالية وليس مشكلة في الرابط. حاول لاحقًا أو من شبكة أخرى.</string>
+    <string name="error_source_restricted">رفض المصدر الاستجابة لهذا الطلب. قد يكون المنشور عامًا، لكن الموقع يحد من الوصول الآلي ولن يتجاوز OTTER ذلك. حاول لاحقًا.</string>
     <string name="cookie_hint_instagram">أضف ملفات تعريف الارتباط لـ Instagram من الإعدادات ← ملفات تعريف الارتباط للتنزيل.</string>
     <string name="cookie_hint_facebook">أضف ملفات تعريف الارتباط لـ Facebook من الإعدادات ← ملفات تعريف الارتباط للتنزيل.</string>
     <string name="cookie_hint_twitter">أضف ملفات تعريف الارتباط لـ X/Twitter من الإعدادات ← ملفات تعريف الارتباط للتنزيل.</string>

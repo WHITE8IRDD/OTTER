@@ -22,8 +22,8 @@ android {
         applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "26.2"
+        versionCode = 16
+        versionName = "26.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -127,4 +127,8 @@ dependencies {
     testImplementation("org.json:json:20231013")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // Compose UI tests for the on-device clipboard auto-fill behaviour. Test only:
+    // neither artifact reaches the release APK.
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

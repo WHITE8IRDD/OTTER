@@ -84,6 +84,8 @@
     <string name="error_format_unavailable">The requested quality isn\'t available. Try a different format.</string>
     <string name="error_codec_issue">Video codec issue. Try selecting a different quality.</string>
     <string name="error_auth_required">This content requires login. %1$s</string>
+    <string name="error_bot_challenge">The site is checking that this isn\'t an automated client. That\'s a limit of the current network, not a problem with the link. Try again later or from another connection.</string>
+    <string name="error_source_restricted">The source refused to answer this request. The post may be public, but the site limits automated access and OTTER won\'t work around that. Try again later.</string>
     <string name="cookie_hint_instagram">Add Instagram cookies in Settings → Cookies to download.</string>
     <string name="cookie_hint_facebook">Add Facebook cookies in Settings → Cookies to download.</string>
     <string name="cookie_hint_twitter">Add X/Twitter cookies in Settings → Cookies to download.</string>

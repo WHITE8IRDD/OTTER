@@ -84,6 +84,8 @@
     <string name="error_format_unavailable">La qualité demandée n\'est pas disponible. Essayez un autre format.</string>
     <string name="error_codec_issue">Problème de codec vidéo. Essayez une autre qualité.</string>
     <string name="error_auth_required">Ce contenu nécessite une connexion. %1$s</string>
+    <string name="error_bot_challenge">Le site vérifie que cette requête ne vient pas d\'un client automatisé. C\'est une limite du réseau actuel, pas un problème avec le lien. Réessayez plus tard ou depuis une autre connexion.</string>
+    <string name="error_source_restricted">La source a refusé de répondre à cette requête. La publication est peut-être publique, mais le site limite l\'accès automatisé et OTTER ne le contourne pas. Réessayez plus tard.</string>
     <string name="cookie_hint_instagram">Ajoutez les cookies Instagram dans Paramètres → Cookies pour télécharger.</string>
     <string name="cookie_hint_facebook">Ajoutez les cookies Facebook dans Paramètres → Cookies pour télécharger.</string>
     <string name="cookie_hint_twitter">Ajoutez les cookies X/Twitter dans Paramètres → Cookies pour télécharger.</string>
