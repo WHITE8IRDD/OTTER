@@ -683,14 +683,14 @@ class FormatParser(private val context: Context? = null) {
         val slides = buildList {
             discovery.videoUrls.forEachIndexed { index, url ->
                 add(
-                    InstagramMediaParser.Result.Slide(
+                    InstagramMediaParser.Slide(
                         url = url,
                         isVideo = true,
                         posterUrl = discovery.videoPosters.getOrNull(index).orEmpty()
                     )
                 )
             }
-            discovery.imageUrls.forEach { add(InstagramMediaParser.Result.Slide(it, isVideo = false)) }
+            discovery.imageUrls.forEach { add(InstagramMediaParser.Slide(it, isVideo = false)) }
         }
         return Result.success(
             createImageGalleryInfo(
@@ -713,7 +713,7 @@ class FormatParser(private val context: Context? = null) {
         images: List<String>,
         videos: List<String> = emptyList(),
         videoPosters: List<String> = emptyList(),
-        slides: List<InstagramMediaParser.Result.Slide> = emptyList(),
+        slides: List<InstagramMediaParser.Slide> = emptyList(),
         expectedCount: Int = 0,
         description: String = ""
     ): VideoInfo {

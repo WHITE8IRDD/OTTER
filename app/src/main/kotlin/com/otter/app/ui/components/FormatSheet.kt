@@ -1415,9 +1415,11 @@ private fun FormatItem(
                 style = MaterialTheme.typography.labelLarge,
                 color = onBackgroundColor
             )
-            if (!format.isAudioOnly && format.fps != null) {
+            // Frame size, codec and bitrate — the only way to choose between two rows that both
+            // read "1080p • MP4".
+            if (format.detailText.isNotBlank()) {
                 Text(
-                    text = "${format.fps.toInt()} fps",
+                    text = format.detailText,
                     style = MaterialTheme.typography.bodySmall,
                     color = onBackgroundColor.copy(alpha = 0.7f)
                 )

@@ -12,9 +12,11 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("../../release.keystore")
-            storePassword = "otter123"
+            // The CI secret is the real source; the fallback is the password this repository's key
+            // was created with, so a plain clone still produces an installable release build.
+            storePassword = System.getenv("OTTER_KEYSTORE_PASSWORD") ?: "otter123"
             keyAlias = "otter"
-            keyPassword = "otter123"
+            keyPassword = System.getenv("OTTER_KEYSTORE_PASSWORD") ?: "otter123"
         }
     }
 
@@ -22,8 +24,8 @@ android {
         applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "26-better-2"
+        versionCode = 18
+        versionName = "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

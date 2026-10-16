@@ -233,7 +233,7 @@ class InstagramImageScraper(private val context: Context) {
         /** Poster frame per entry of [videoUrls] (same indexes, blank when unknown). */
         val videoPosters: List<String> = emptyList(),
         /** The post's slides in payload order, typed photo or video (empty when unknown). */
-        val slides: List<InstagramMediaParser.Result.Slide> = emptyList(),
+        val slides: List<InstagramMediaParser.Slide> = emptyList(),
         /** Slides the payload declared (0 = unknown). */
         val expectedCount: Int,
         val shortcode: String,
@@ -254,11 +254,11 @@ class InstagramImageScraper(private val context: Context) {
             get() = slides.firstOrNull()?.isVideo ?: (imageUrls.isEmpty() && videoUrls.isNotEmpty())
 
         /** Ordered slides, falling back to photos-then-videos when the order was lost. */
-        fun orderedSlides(): List<InstagramMediaParser.Result.Slide> =
+        fun orderedSlides(): List<InstagramMediaParser.Slide> =
             if (slides.isNotEmpty()) slides else
-                imageUrls.map { InstagramMediaParser.Result.Slide(it, isVideo = false) } +
+                imageUrls.map { InstagramMediaParser.Slide(it, isVideo = false) } +
                     videoUrls.mapIndexed { index, url ->
-                        InstagramMediaParser.Result.Slide(
+                        InstagramMediaParser.Slide(
                             url,
                             isVideo = true,
                             posterUrl = videoPosters.getOrNull(index).orEmpty()
@@ -292,7 +292,7 @@ class InstagramImageScraper(private val context: Context) {
         var caption = ""
         var note: String? = null
         val sources = mutableListOf<String>()
-        val orderedSlides = LinkedHashMap<String, InstagramMediaParser.Result.Slide>()
+        val orderedSlides = LinkedHashMap<String, InstagramMediaParser.Slide>()
 
         fun total(): Int = merged.size + mergedVideos.size
 

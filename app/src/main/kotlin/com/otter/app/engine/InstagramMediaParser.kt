@@ -338,7 +338,7 @@ object InstagramMediaParser {
         /** Slide count the payload itself declared (0 = unknown). */
         val declaredCount: Int,
         /** Every slide in the order the payload listed them, typed photo or video. */
-        val slides: List<Result.Slide> = emptyList()
+        val slides: List<Slide> = emptyList()
     ) {
         val size: Int get() = photos.size + videos.size
     }
@@ -374,7 +374,7 @@ object InstagramMediaParser {
         return toSlides(ordered)
     }
 
-    private fun toSlides(ordered: List<Result.Slide>): Slides {
+    private fun toSlides(ordered: List<Slide>): Slides {
         val photos = MediaSet()
         val videos = MediaSet()
         ordered.forEach { slide ->
@@ -394,8 +394,8 @@ object InstagramMediaParser {
         array: JSONArray,
         shortcode: String,
         wrappedInNode: Boolean
-    ): List<Result.Slide> {
-        val slides = LinkedHashMap<String, Result.Slide>()
+    ): List<Slide> {
+        val slides = LinkedHashMap<String, Slide>()
         for (index in 0 until minOf(array.length(), MAX_SLIDES)) {
             val entry = array.optJSONObject(index) ?: continue
             if (isForeignPost(entry, shortcode)) continue
@@ -406,14 +406,14 @@ object InstagramMediaParser {
                 bestVideo(node)?.let { video ->
                     slides.putIfAbsent(
                         MediaClassifier.identityOf(video),
-                        Result.Slide(url = video, isVideo = true, posterUrl = poster)
+                        Slide(url = video, isVideo = true, posterUrl = poster)
                     )
                 }
             } else {
                 bestImage(node)?.let { image ->
                     slides.putIfAbsent(
                         MediaClassifier.identityOf(image),
-                        Result.Slide(url = image, isVideo = false)
+                        Slide(url = image, isVideo = false)
                     )
                 }
             }
@@ -491,7 +491,7 @@ object InstagramMediaParser {
     private fun collectMediaUrls(root: Any, shortcode: String = ""): Collected {
         val images = MediaSet()
         val videos = MediaSet()
-        val slides = mutableListOf<Result.Slide>()
+        val slides = mutableListOf<Slide>()
         val queue = ArrayDeque<Any>()
         queue.add(root)
         var visited = 0
@@ -524,7 +524,7 @@ object InstagramMediaParser {
                             consumed.add("video_versions")
                             pickLargest(versions, "url")?.let { url ->
                                 videos.add(url, preview)
-                                slides.add(Result.Slide(url, isVideo = true, posterUrl = preview))
+                                slides.add(Slide(url, isVideo = true, posterUrl = preview))
                             }
                         }
                         for (field in listOf("video_url", "playback_url")) {
@@ -533,7 +533,7 @@ object InstagramMediaParser {
                                 normalizeUrl(value)?.let { url ->
                                     if (!videos.contains(url)) {
                                         videos.add(url, preview)
-                                        slides.add(Result.Slide(url, isVideo = true, posterUrl = preview))
+                                        slides.add(Slide(url, isVideo = true, posterUrl = preview))
                                     }
                                 }
                             }
@@ -567,7 +567,7 @@ object InstagramMediaParser {
     private data class Collected(
         val images: MediaSet,
         val videos: MediaSet,
-        val slides: List<Result.Slide> = emptyList()
+        val slides: List<Slide> = emptyList()
     )
 
     /** First caption text of the post (GraphQL edge form and the plain forms). */
@@ -614,7 +614,7 @@ object InstagramMediaParser {
         val shortcode = pageUrl?.let(::shortcodeFromUrl).orEmpty()
         val photos = MediaSet()
         val videos = MediaSet()
-        val slides = mutableListOf<Result.Slide>()
+        val slides = mutableListOf<Slide>()
         var expected = 0
         var caption = ""
 
@@ -651,10 +651,10 @@ object InstagramMediaParser {
                 val url = normalizeUrl(match.value) ?: continue
                 if (hasImageExtension(url)) {
                     photos.add(url)
-                    slides.add(Result.Slide(url, isVideo = false))
+                    slides.add(Slide(url, isVideo = false))
                 } else if (hasVideoExtension(url)) {
                     videos.add(url)
-                    slides.add(Result.Slide(url, isVideo = true))
+                    slides.add(Slide(url, isVideo = true))
                 }
             }
         }
@@ -704,16 +704,16 @@ object InstagramMediaParser {
      * collected without order are appended so nothing read is dropped.
      */
     private fun orderSlides(
-        recorded: List<Result.Slide>,
+        recorded: List<Slide>,
         photos: List<String>,
         videos: List<Pair<String, String>>
-    ): List<Result.Slide> {
+    ): List<Slide> {
         if (recorded.isEmpty()) return emptyList()
-        val seen = recorded.mapTo(LinkedHashSet()) { mediaKey(it.url) }
+        val seen = LinkedHashSet(recorded.map { mediaKey(it.url) })
         val ordered = recorded.toMutableList()
-        photos.forEach { url -> if (seen.add(mediaKey(url))) ordered.add(Result.Slide(url, isVideo = false)) }
+        photos.forEach { url -> if (seen.add(mediaKey(url))) ordered.add(Slide(url, isVideo = false)) }
         videos.forEach { (url, poster) ->
-            if (seen.add(mediaKey(url))) ordered.add(Result.Slide(url, isVideo = true, posterUrl = poster))
+            if (seen.add(mediaKey(url))) ordered.add(Slide(url, isVideo = true, posterUrl = poster))
         }
         return ordered
     }

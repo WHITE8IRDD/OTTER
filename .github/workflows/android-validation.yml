@@ -58,11 +58,11 @@ jobs:
             echo
             echo '```'
             grep -hE '^e: |FAILED|expected:|Caused by:|error:|Unresolved reference|Execution failed' \
-              build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 60
+              build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 80
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           grep -hE '^e: |FAILED|expected:|Caused by:|error:|Unresolved reference|Execution failed' \
-            build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 12 |
+            build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 40 |
             while IFS= read -r line; do
               printf '::error::%s\n' "${line//%/%25}"
             done
