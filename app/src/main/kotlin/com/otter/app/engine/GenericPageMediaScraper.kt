@@ -11,10 +11,21 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
-/** A small, standards-based fallback for ordinary image links and static media pages. */
+/**
+ * What a plain page exposes.
+ *
+ * [videoUrls] is the point of this whole structure: a page that carries a video must answer with
+ * the video, and the pictures are the secondary result. [hasVideoSignals] says the page declared a
+ * video even when no usable URL could be read from it, which is reported as "this page advertises a
+ * video that could not be extracted" instead of quietly offering its thumbnails.
+ */
 data class PageImageDiscovery(
     val title: String,
-    val imageUrls: List<String>
+    val imageUrls: List<String>,
+    val videoUrls: List<String> = emptyList(),
+    /** Poster frame per entry of [videoUrls] (blank when the page carried none). */
+    val videoPosters: List<String> = emptyList(),
+    val hasVideoSignals: Boolean = false
 )
 
 /**
@@ -24,13 +35,21 @@ data class PageImageDiscovery(
  */
 object GenericPageMediaParser {
     private const val MAX_IMAGES = 40
+    private const val MAX_VIDEOS = 8
 
     private val titleTag = Regex("""(?is)<title\b[^>]*>(.*?)</title\s*>""")
-    private val mediaTag = Regex("""(?is)<(meta|img|source|link)\b[^>]*>""")
+    private val mediaTag = Regex("""(?is)<(meta|img|source|link|video|a)\b[^>]*>""")
     private val attribute = Regex("""(?is)([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
     private val jsonLdScript = Regex("""(?is)<script\b(?=[^>]*type\s*=\s*["']application/ld\+json["'])[^>]*>(.*?)</script\s*>""")
     private val jsonImageField = Regex("""(?is)"(?:image|thumbnailUrl|thumbnail_url)"\s*:\s*(?:"((?:\\.|[^"\\])*)"|\[(.*?)\])""")
+    private val jsonVideoField = Regex("""(?is)"(?:contentUrl|content_url|embedUrl|videoUrl|url)"\s*:\s*"((?:\\.|[^"\\])*\.(?:mp4|webm|m4v|mov|m3u8|mp3|m4a|ogg|opus))"""")
     private val jsonString = Regex("\"((?:\\\\.|[^\"\\\\])*)\"")
+
+    private val videoMetaNames = setOf(
+        "og:video", "og:video:url", "og:video:secure_url", "og:video:src",
+        "twitter:player:stream", "twitter:player", "video:other_url_secure",
+        "og:video:embed_url"
+    )
 
     private val imageMetaNames = setOf(
         "og:image", "og:image:url", "og:image:secure_url",
@@ -40,6 +59,22 @@ object GenericPageMediaParser {
     /** Parse a bounded set of likely image URLs while preserving their signed query strings. */
     fun parse(pageUrl: String, html: String): PageImageDiscovery {
         val images = LinkedHashSet<String>()
+        /** Media URLs of the page in the order they were declared, each with its poster. */
+        val videos = LinkedHashMap<String, String>()
+        val videoKeys = HashSet<String>()
+        var videoSignals = false
+        var pagePoster: String? = null
+
+        /** A declared video is the media of the page; a picture found in markup is not. */
+        fun addVideo(candidate: String?, poster: String = "", declared: Boolean = true) {
+            val resolved = candidate?.let { resolveHttpUrl(pageUrl, it) } ?: return
+            if (MediaClassifier.isDecorative(resolved)) return
+            if (!MediaClassifier.isDirectlyDownloadable(resolved) && !MediaClassifier.isManifestUrl(resolved)) return
+            if (videoKeys.add(MediaClassifier.identityOf(resolved)) && videos.size < MAX_VIDEOS) {
+                videos[resolved] = poster.ifBlank { pagePoster.orEmpty() }
+            }
+            if (declared) videoSignals = true
+        }
         val title = titleTag.find(html)?.groupValues?.getOrNull(1)
             ?.let(::decodeHtml)
             ?.replace(Regex("<[^>]*>"), " ")
@@ -63,7 +98,38 @@ object GenericPageMediaParser {
                     val name = (attributes["property"] ?: attributes["name"] ?: attributes["itemprop"])
                         ?.lowercase(Locale.ROOT)
                         .orEmpty()
-                    if (name in imageMetaNames) add(attributes["content"])
+                    if (name in imageMetaNames) {
+                        add(attributes["content"])
+                    }
+                    if (name in videoMetaNames) {
+                        val content = attributes["content"]
+                        // og:video may name an embed page rather than a file: it is still the page's
+                        // declared video, so it counts as a signal even when it is not downloadable.
+                        if (content != null) {
+                            addVideo(content, declared = true)
+                            if (!MediaClassifier.isDirectlyDownloadable(content) &&
+                                !MediaClassifier.isManifestUrl(content)
+                            ) videoSignals = true
+                        }
+                    }
+                    if (name == "og:image" || name == "og:image:secure_url" || name == "twitter:image") {
+                        // Kept as the poster of the declared video, which is what a picker shows for
+                        // a stream that cannot be previewed any other way.
+                        pagePoster = attributes["content"]?.let { resolveHttpUrl(pageUrl, it) } ?: pagePoster
+                    }
+                }
+                "video" -> {
+                    val src = attributes["src"] ?: attributes["data-src"]
+                    addVideo(src, poster = attributes["poster"].orEmpty(), declared = true)
+                    if (src == null) videoSignals = true
+                }
+                "a" -> {
+                    val href = attributes["href"]
+                    if (href != null && (MediaClassifier.isDirectlyDownloadable(href) ||
+                            MediaClassifier.isManifestUrl(href))
+                    ) {
+                        addVideo(href, declared = false)
+                    }
                 }
                 "img" -> {
                     val width = attributes["width"]?.toIntOrNull()
@@ -87,6 +153,9 @@ object GenericPageMediaParser {
                 "source" -> {
                     val type = attributes["type"]?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT).orEmpty()
                     val sourceSet = attributes["data-srcset"] ?: attributes["srcset"]
+                    if (type.startsWith("video/") || type.contains("mpegurl") || type.contains("dash+xml")) {
+                        addVideo(bestSrcset(sourceSet) ?: attributes["src"], declared = true)
+                    }
                     if (type.startsWith("image/") || looksLikeImageUrl(sourceSet.orEmpty())) {
                         add(bestSrcset(sourceSet))
                         add(attributes["src"])
@@ -99,11 +168,21 @@ object GenericPageMediaParser {
                         (rel == "preload" && asType == "image")) {
                         add(attributes["href"])
                     }
+                    // A manifest published as an alternate representation of the page is the video.
+                    val linkType = attributes["type"]?.lowercase(Locale.ROOT).orEmpty()
+                    if (rel.split(Regex("\\s+")).contains("alternate") &&
+                        (linkType.contains("mpegurl") || linkType.contains("dash+xml"))
+                    ) {
+                        addVideo(attributes["href"], declared = true)
+                    }
                 }
             }
         }
 
         for (script in jsonLdScript.findAll(html)) {
+            for (field in jsonVideoField.findAll(script.groupValues[1])) {
+                addVideo(decodeJsonString(field.groupValues[1]), declared = true)
+            }
             if (images.size >= MAX_IMAGES) break
             for (field in jsonImageField.findAll(script.groupValues[1])) {
                 val single = field.groupValues.getOrNull(1).orEmpty()
@@ -117,7 +196,47 @@ object GenericPageMediaParser {
             }
         }
 
-        return PageImageDiscovery(title = title, imageUrls = images.toList())
+        // Ranked so the media the page is about cannot be buried under its own pictures: a
+        // declared video first, then other videos, then the page's images, with thumbnails last.
+        val candidates = buildList {
+            videos.forEach { (url, poster) ->
+                add(
+                    MediaClassifier.Candidate(
+                        url = url,
+                        kind = MediaClassifier.kindOf(url, MediaClassifier.Source.DECLARED),
+                        source = MediaClassifier.Source.DECLARED,
+                        posterUrl = poster
+                    )
+                )
+            }
+            images.forEach { url ->
+                add(
+                    MediaClassifier.Candidate(
+                        url = url,
+                        kind = MediaClassifier.kindOf(url, MediaClassifier.Source.IMAGE_TAG),
+                        source = MediaClassifier.Source.IMAGE_TAG
+                    )
+                )
+            }
+        }
+        val ranked = MediaClassifier.rank(candidates, pageUrl)
+        val orderedVideos = ranked.filter {
+            it.kind == MediaClassifier.MediaKind.PRIMARY_VIDEO || it.kind == MediaClassifier.MediaKind.VIDEO ||
+                it.kind == MediaClassifier.MediaKind.MANIFEST
+        }.map { it.url }
+        val orderedImages = ranked.filter {
+            it.kind == MediaClassifier.MediaKind.GALLERY_IMAGE || it.kind == MediaClassifier.MediaKind.IMAGE ||
+                it.kind == MediaClassifier.MediaKind.PREVIEW
+        }.map { it.url }
+
+        val orderedVideoUrls = orderedVideos.ifEmpty { videos.keys.toList() }
+        return PageImageDiscovery(
+            title = title,
+            imageUrls = (orderedImages.ifEmpty { images.toList() }).take(MAX_IMAGES),
+            videoUrls = orderedVideoUrls,
+            videoPosters = orderedVideoUrls.map { videos[it].orEmpty() },
+            hasVideoSignals = videoSignals
+        )
     }
 
     fun isDirectImageUrl(url: String): Boolean = MediaUrlNormalizer.isDirectImageUrl(url)

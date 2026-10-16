@@ -182,38 +182,6 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             }
         }
 
-        private val formatExpiredPatterns = listOf(
-            Regex("HTTP Error 40[134]"),
-            Regex("HTTP Error 410"),
-            Regex("Forbidden", RegexOption.IGNORE_CASE),
-            Regex("expired", RegexOption.IGNORE_CASE),
-            Regex("Signature has expired", RegexOption.IGNORE_CASE),
-            Regex("token.*invalid", RegexOption.IGNORE_CASE)
-        )
-
-        private fun isFormatExpired(errorMessage: String): Boolean {
-            return formatExpiredPatterns.any { it.containsMatchIn(errorMessage) }
-        }
-
-        private fun isNonRecoverableDownloadError(errorMessage: String): Boolean {
-            return nonRecoverableDownloadPatterns.any { it.containsMatchIn(errorMessage) }
-        }
-
-        private val nonRecoverableDownloadPatterns = listOf(
-            Regex("video unavailable", RegexOption.IGNORE_CASE),
-            Regex("private video", RegexOption.IGNORE_CASE),
-            Regex("private", RegexOption.IGNORE_CASE),
-            Regex("requires login", RegexOption.IGNORE_CASE),
-            Regex("copyright", RegexOption.IGNORE_CASE),
-            Regex("takedown", RegexOption.IGNORE_CASE),
-            Regex("This video is not available", RegexOption.IGNORE_CASE),
-            Regex("removed by the uploader", RegexOption.IGNORE_CASE),
-            Regex("account terminated", RegexOption.IGNORE_CASE),
-            Regex("No video formats found", RegexOption.IGNORE_CASE),
-            Regex("Usage:", RegexOption.IGNORE_CASE)
-        )
-
-        private val retryWaitMs = listOf(0L, 2000L, 5000L)
 
         private suspend fun refreshFormatInfo(
             formatParser: FormatParser,
@@ -301,7 +269,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val rateLimit: Boolean,
         val maxRate: String,
         val concurrentFragments: Int,
-        val retries: Int
+        val retries: Int,
+        val cookiesEnabled: Boolean
     )
 
     private suspend fun readSettings(): DownloadSettings = DownloadSettings(
@@ -313,7 +282,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         rateLimit = preferences.rateLimit.first(),
         maxRate = preferences.maxRate.first(),
         concurrentFragments = preferences.concurrentFragments.first(),
-        retries = preferences.retries.first()
+        retries = preferences.retries.first(),
+        cookiesEnabled = preferences.cookiesEnabled.first()
     )
 
     private fun applySettings(request: YoutubeDLRequest, settings: DownloadSettings) {
@@ -338,7 +308,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         if (settings.rateLimit) {
             request.addOption("--limit-rate", settings.maxRate)
         }
-        request.addOption("--concurrent-fragments", settings.concurrentFragments.toString())
+        // Deliberately not added here: the number is resolved together with the platform default in
+        // the request builder, and adding it twice would make the earlier value meaningless.
     }
 
     private val recoverablePatterns = listOf(
@@ -379,6 +350,9 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         return recoverablePatterns.any { it.containsMatchIn(errorMessage) }
     }
 
+    /** A URL without its query string: signed CDN URLs and tokens do not belong in logcat. */
+    private fun redact(url: String): String = url.substringBefore('?')
+
     private fun getWorkingDir(): File {
         return File(context.cacheDir, "ytdlp").also { it.mkdirs() }
     }
@@ -418,8 +392,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         }
     }
 
-    private fun addCookies(request: YoutubeDLRequest, url: String) {
-        if (!MediaUrlNormalizer.shouldUseOptionalCookies(url)) return
+    private fun addCookies(request: YoutubeDLRequest, url: String, enabled: Boolean = false) {
+        if (!MediaUrlNormalizer.shouldAttachSavedCookies(url, enabled)) return
         val cookieFile = File(context.filesDir, "cookies.txt")
         if (cookieFile.exists() && cookieFile.length() > 0) {
             request.addOption("--cookies", cookieFile.absolutePath)
@@ -472,21 +446,24 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         // Live streams are excluded and stage in the cache as before.
         val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(url)
         val writesDirectly = youtubeVideoId.isNotEmpty() && !isLive
-        val maxAttempts = retryWaitMs.size
+        val maxAttempts = DownloadRetryPolicy.MAX_ATTEMPTS
         var attempt = 0
-        var formatAlreadyRefreshed = false
-        Log.i(TAG, "download START url=$url formatId=$currentFormatId outputDir=$outputDir title=$title live=$isLive platform=$platform")
+        var formatRefreshes = 0
+        Log.i(TAG, "download START url=${redact(url)} formatId=$currentFormatId outputDir=$outputDir title=$title live=$isLive platform=$platform")
 
+        // `attempt` only ever grows. The recovery below used to push it back down, which is how a
+        // video whose format URLs kept answering 403 ended up retrying forever: an engine run plus a
+        // full re-extraction each lap, no error shown, and a foreground service that never stopped.
         while (attempt < maxAttempts) {
-            val waitMs = retryWaitMs.getOrElse(attempt) { 5000L }
-            if (attempt > 0 && !formatAlreadyRefreshed) {
+            val waitMs = DownloadRetryPolicy.waitBefore(attempt + 1)
+            if (attempt > 0 && waitMs > 0L) {
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
-                Log.i(TAG, "[DL-RETRY] attempt=${attempt + 1}/$maxAttempts for $url (waiting ${waitMs}ms)")
+                Log.i(TAG, "[DL-RETRY] attempt=${attempt + 1}/$maxAttempts for ${redact(url)} (waiting ${waitMs}ms)")
                 delay(waitMs)
             }
             val localFormatId = currentFormatId
             attempt++
-            formatAlreadyRefreshed = false
+            val usedCachedExtraction = writesDirectly && attempt == 1
 
             try {
                 val outputFile = File(outputDir)
@@ -496,7 +473,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
-                    addCookies(this, url)
+                    addCookies(this, url, settings.cookiesEnabled)
                     addOption("-f", localFormatId)
                     addOption("-P", workingDir.absolutePath)
                     addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
@@ -515,12 +492,17 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         }
                     }
 
-                    val platform = detectPlatform(url)
-                    val cf = concurrentFragments(platform, isLive)
+                    // Emitted once, here, from both the user's setting and the platform default:
+                    // both used to add the option and yt-dlp kept the last one, so the number in
+                    // Settings did nothing on the platforms that have a platform default.
+                    val cf = EngineArgs.concurrentFragments(
+                        userValue = settings.concurrentFragments,
+                        platformValue = concurrentFragments(platform, isLive)
+                    )
                     addOption("--concurrent-fragments", cf.toString())
                 }
 
-                val processId = url.hashCode().toUInt().toString()
+                val processId = EngineArgs.processId(url)
                 activeDownloads[url] = processId
                 val activeInfo = ActiveDownload(processId, url, localFormatId, outputDir, title)
                 activeDownloadInfo[url] = activeInfo
@@ -569,6 +551,31 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 activeDownloadInfo.remove(url)
 
                 val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
+                if (downloadedFile != null) {
+                    val expectedKind = when {
+                        settings.extractAudio || currentFormatId.contains("audio") ||
+                            localFormatId.contains("audio") || localFormatId.startsWith("bestaudio") ->
+                            MediaFileValidator.Kind.AUDIO
+                        else -> MediaFileValidator.Kind.VIDEO
+                    }
+                    when (val check = MediaFileValidator.validate(File(downloadedFile), expectedKind)) {
+                        is MediaFileValidator.Outcome.Valid ->
+                            Log.i(TAG, "download VALIDATED ${check.container} ${check.sizeBytes}B")
+                        is MediaFileValidator.Outcome.Invalid -> {
+                            // A file that is not what was asked for is a failure, not a success with
+                            // a bad name: reporting it here is the difference between "downloaded" and
+                            // "there is nothing to open".
+                            Log.e(TAG, "download produced an invalid file: ${check.reason} ($downloadedFile)")
+                            activeDownloads.remove(url)
+                            onProgress(
+                                DownloadState.Error(
+                                    context.getString(R.string.download_file_invalid, check.reason)
+                                )
+                            )
+                            return@withContext
+                        }
+                    }
+                }
                 if (subtitleLangs.isNotBlank() && !writesDirectly) {
                     copySubtitleFiles(workingDir.absolutePath, outputDir, subtitleLangs)
                 }
@@ -601,34 +608,59 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 }
                 activeDownloads.remove(url)
 
-                if (isNonRecoverableDownloadError(msg)) {
-                    Log.e(TAG, "Non-recoverable error for $url: $msg")
-                    onProgress(DownloadState.Error(msg))
-                    return@withContext
+                // A cached extraction that produced this failure must not be tried again: it is the
+                // expired format list, and reusing it is what just failed.
+                if (usedCachedExtraction && youtubeVideoId.isNotEmpty()) {
+                    YoutubeInfoCache.invalidate(YoutubeInfoCache.file(context, youtubeVideoId))
                 }
 
-                if (isFormatExpired(msg) && formatParser != null && !formatAlreadyRefreshed) {
-                    val newFmtId = refreshFormatInfo(formatParser, url, localFormatId)
-                    if (newFmtId != null) {
-                        currentFormatId = newFmtId
-                        formatAlreadyRefreshed = true
-                        attempt = (attempt - 1).coerceAtLeast(1)
-                        cleanup()
-                        Log.i(TAG, "[DL-RETRY] retrying with refreshed format $currentFormatId")
-                        continue
+                val decision = DownloadRetryPolicy.decide(
+                    attempt = attempt,
+                    formatRefreshes = formatRefreshes,
+                    message = msg,
+                    canReExtract = formatParser != null
+                )
+                when (decision.action) {
+                    DownloadRetryPolicy.Action.FAIL -> {
+                        Log.e(TAG, "download failed for $url after attempt $attempt: $msg")
+                        val shown = when {
+                            // A permanent answer is reported as it is: retrying will not change it.
+                            DownloadRetryPolicy.isPermanent(msg) -> msg
+                            attempt >= maxAttempts ->
+                                context.getString(R.string.failed_after_retries, maxAttempts, msg)
+                            else -> decision.reason.ifBlank { msg }
+                        }
+                        onProgress(DownloadState.Error(shown.ifBlank {
+                            context.getString(R.string.failed_after_retries, maxAttempts, msg)
+                        }))
+                        return@withContext
                     }
-                }
 
-                if (attempt >= maxAttempts) {
-                    Log.e(TAG, "Max retries reached for $url: $msg")
-                    onProgress(DownloadState.Error(
-                        context.getString(R.string.failed_after_retries, maxAttempts, msg)
-                    ))
-                    return@withContext
-                }
+                    DownloadRetryPolicy.Action.REFRESH_FORMAT -> {
+                        formatRefreshes++
+                        val newFmtId = refreshFormatInfo(formatParser!!, url, localFormatId)
+                        if (newFmtId != null) {
+                            currentFormatId = newFmtId
+                            cleanup()
+                            Log.i(TAG, "[DL-RETRY] retrying with a refreshed format $currentFormatId")
+                            continue
+                        }
+                        // Nothing to refresh to: fall through to the ordinary failure path.
+                        onProgress(
+                            DownloadState.Error(
+                                context.getString(R.string.failed_after_retries, maxAttempts, msg)
+                            )
+                        )
+                        return@withContext
+                    }
 
-                Log.w(TAG, "[DL-RETRY] attempt $attempt/$maxAttempts failed for $url, will retry. Error: $msg")
-                cleanup()
+                    DownloadRetryPolicy.Action.RETRY -> {
+                        Log.w(TAG, "[DL-RETRY] attempt $attempt/$maxAttempts failed for ${redact(url)}, will retry. Error: $msg")
+                        cleanup()
+                    }
+
+                    DownloadRetryPolicy.Action.SUCCEED -> return@withContext
+                }
             }
         }
 
@@ -704,21 +736,21 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val settings = readSettings()
         val youtubeVideoId = MediaUrlNormalizer.youtubeVideoId(url)
         val writesDirectly = youtubeVideoId.isNotEmpty() && !isLive
-        val maxAttempts = retryWaitMs.size
+        val maxAttempts = DownloadRetryPolicy.MAX_ATTEMPTS
         var attempt = 0
-        var formatAlreadyRefreshed = false
-        Log.i(TAG, "downloadWithThumbnail START url=$url formatId=$currentFormatId outputDir=$outputDir title=$title live=$isLive platform=$platform")
+        var formatRefreshes = 0
+        Log.i(TAG, "downloadWithThumbnail START url=${redact(url)} formatId=$currentFormatId outputDir=$outputDir title=$title live=$isLive platform=$platform")
 
         while (attempt < maxAttempts) {
-            val waitMs = retryWaitMs.getOrElse(attempt) { 5000L }
-            if (attempt > 0 && !formatAlreadyRefreshed) {
+            val waitMs = DownloadRetryPolicy.waitBefore(attempt + 1)
+            if (attempt > 0 && waitMs > 0L) {
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
-                Log.i(TAG, "[DL-RETRY] downloadWithThumbnail attempt=${attempt + 1}/$maxAttempts for $url (waiting ${waitMs}ms)")
+                Log.i(TAG, "[DL-RETRY] downloadWithThumbnail attempt=${attempt + 1}/$maxAttempts for ${redact(url)} (waiting ${waitMs}ms)")
                 delay(waitMs)
             }
             val localFormatId = currentFormatId
             attempt++
-            formatAlreadyRefreshed = false
+            val usedCachedExtraction = writesDirectly && attempt == 1
 
             try {
                 val outputFile = File(outputDir)
@@ -728,7 +760,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
-                    addCookies(this, url)
+                    addCookies(this, url, settings.cookiesEnabled)
                     addOption("--no-mtime")
                     addOption("-f", localFormatId)
                     addOption("--merge-output-format", "mp4")
@@ -755,7 +787,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     addOption("--concurrent-fragments", cf.toString())
                 }
 
-                val processId = url.hashCode().toUInt().toString()
+                val processId = EngineArgs.processId(url)
                 activeDownloads[url] = processId
                 val activeInfo = ActiveDownload(processId, url, localFormatId, outputDir, title)
                 activeDownloadInfo[url] = activeInfo
@@ -808,8 +840,18 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     copySubtitleFiles(workingDir.absolutePath, outputDir, subtitleLangs)
                 }
                 if (downloadedFile != null) {
+                    val check = MediaFileValidator.validate(
+                        File(downloadedFile),
+                        if (settings.extractAudio) MediaFileValidator.Kind.AUDIO else MediaFileValidator.Kind.VIDEO
+                    )
+                    if (check is MediaFileValidator.Outcome.Invalid) {
+                        Log.e(TAG, "downloadWithThumbnail produced an invalid file: ${check.reason}")
+                        activeDownloads.remove(url)
+                        onProgress(DownloadState.Error(context.getString(R.string.download_file_invalid, check.reason)))
+                        return@withContext
+                    }
                     val fileSize = File(downloadedFile).length()
-                    Log.i(TAG, "downloadWithThumbnail VERIFIED file=$downloadedFile size=${fileSize} bytes")
+                    Log.i(TAG, "downloadWithThumbnail VERIFIED ${(check as MediaFileValidator.Outcome.Valid).container} size=${fileSize} bytes")
                     val externalPath = if (writesDirectly) {
                         com.otter.app.util.FileHelper.scanFile(context, downloadedFile)
                         downloadedFile
@@ -841,123 +883,51 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 }
                 activeDownloads.remove(url)
 
-                if (isNonRecoverableDownloadError(msg)) {
-                    Log.e(TAG, "Non-recoverable error for $url: $msg")
-                    onProgress(DownloadState.Error(msg))
-                    return@withContext
+                if (usedCachedExtraction && youtubeVideoId.isNotEmpty()) {
+                    YoutubeInfoCache.invalidate(YoutubeInfoCache.file(context, youtubeVideoId))
                 }
 
-                if (isFormatExpired(msg) && formatParser != null && !formatAlreadyRefreshed) {
-                    val newFmtId = refreshFormatInfo(formatParser, url, localFormatId)
-                    if (newFmtId != null) {
-                        currentFormatId = newFmtId
-                        formatAlreadyRefreshed = true
-                        attempt = (attempt - 1).coerceAtLeast(1)
+                when (
+                    DownloadRetryPolicy.decide(
+                        attempt = attempt,
+                        formatRefreshes = formatRefreshes,
+                        message = msg,
+                        canReExtract = formatParser != null
+                    ).action
+                ) {
+                    DownloadRetryPolicy.Action.REFRESH_FORMAT -> {
+                        formatRefreshes++
+                        val newFmtId = formatParser?.let { refreshFormatInfo(it, url, localFormatId) }
+                        if (newFmtId != null) {
+                            currentFormatId = newFmtId
+                            cleanup()
+                            Log.i(TAG, "[DL-RETRY] downloadWithThumbnail retrying with refreshed format $currentFormatId")
+                            continue
+                        }
+                        onProgress(
+                            DownloadState.Error(context.getString(R.string.failed_after_retries, maxAttempts, msg))
+                        )
+                        return@withContext
+                    }
+
+                    DownloadRetryPolicy.Action.RETRY -> {
+                        Log.w(TAG, "[DL-RETRY] downloadWithThumbnail attempt $attempt/$maxAttempts failed for ${redact(url)}, will retry. Error: $msg")
                         cleanup()
-                        Log.i(TAG, "[DL-RETRY] downloadWithThumbnail retrying with refreshed format $currentFormatId")
-                        continue
+                    }
+
+                    else -> {
+                        Log.e(TAG, "downloadWithThumbnail failed for $url after attempt $attempt: $msg")
+                        onProgress(
+                            DownloadState.Error(context.getString(R.string.failed_after_retries, maxAttempts, msg))
+                        )
+                        return@withContext
                     }
                 }
-
-                if (attempt >= maxAttempts) {
-                    Log.e(TAG, "Max retries reached for $url: $msg")
-                    onProgress(DownloadState.Error(
-                        context.getString(R.string.failed_after_retries, maxAttempts, msg)
-                    ))
-                    return@withContext
-                }
-
-                Log.w(TAG, "[DL-RETRY] downloadWithThumbnail attempt $attempt/$maxAttempts failed for $url, will retry. Error: $msg")
-                cleanup()
             }
         }
 
     }
 
-    suspend fun downloadWithOptions(
-        url: String,
-        formatId: String,
-        outputDir: String,
-        options: Map<String, String>,
-        onProgress: (DownloadState) -> Unit
-    ) = withContext(Dispatchers.IO) {
-        val isLive = isLiveStream(url)
-        val platform = detectPlatform(url)
-        val settings = readSettings()
-        try {
-            val workingDir = getWorkingDir()
-
-            val outputFile = File(outputDir)
-            if (!outputFile.exists()) outputFile.mkdirs()
-
-            val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
-                addCookies(this, url)
-                addOption("-f", formatId)
-                addOption("--merge-output-format", "mp4")
-                addOption("--audio-quality", "0")
-                addOption("-P", workingDir.absolutePath)
-                addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
-                addOption("--no-mtime")
-                addOption("--socket-timeout", if (isLive) "30" else "15")
-                applySettings(this, settings)
-                applyPlatformArgs(this, url, isLive)
-                val cf = concurrentFragments(platform, isLive)
-                addOption("--concurrent-fragments", cf.toString())
-                for ((key, value) in options) {
-                    addOption(key, value)
-                }
-            }
-
-            val processId = url.hashCode().toString()
-            activeDownloads[url] = processId
-            resetSmoothing()
-            onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
-
-            YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
-                val now = System.currentTimeMillis()
-                if (now - lastEmitTime < emitIntervalMs) return@execute
-                lastEmitTime = now
-
-                val monoProgress = monotonicProgress(progress / 100f)
-                val parsed = parseProgressLine(line ?: "")
-                val rawBytes = if (parsed != null && parsed.totalBytes > 0) (parsed.totalBytes * monoProgress).toLong() else 0L
-                val rawSpeed = parsed?.speedBytesPerSec ?: 0L
-                val smoothSpeed = smoothedSpeed(rawSpeed)
-                val totalBytes = parsed?.totalBytes ?: 0L
-                val etaSec = if (smoothSpeed > 0 && totalBytes > 0) ((totalBytes - rawBytes) / smoothSpeed) else etaInSeconds
-
-                onProgress(
-                    DownloadState.Downloading(
-                        progress = monoProgress,
-                        downloadedBytes = rawBytes,
-                        totalBytes = totalBytes,
-                        speedBytesPerSec = smoothSpeed,
-                        etaSeconds = etaSec,
-                        phase = DownloadPhase.DOWNLOADING
-                    )
-                )
-            }
-
-            activeDownloads.remove(url)
-            val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
-            if (downloadedFile != null) {
-                val fileSize = File(downloadedFile).length()
-                Log.i(TAG, "downloadWithOptions VERIFIED file=$downloadedFile size=${fileSize} bytes")
-                val externalPath = copyToExternal(downloadedFile, outputDir)
-                cleanup()
-                onProgress(DownloadState.Success(externalPath))
-            } else {
-                Log.e(TAG, "downloadWithOptions claimed success but no file found in $outputDir")
-                onProgress(DownloadState.Error(context.getString(R.string.download_file_missing)))
-            }
-
-        } catch (e: Exception) {
-            activeDownloads.remove(url)
-            onProgress(DownloadState.Error(e.message ?: context.getString(R.string.download_failed_text)))
-        }
-    }
-
-    /** Photos only, for callers that already hold a plain list of image URLs. */
     suspend fun downloadImages(
         imageUrls: List<String>,
         baseName: String,
@@ -1008,6 +978,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val savedByIndex = ConcurrentHashMap<Int, String>()
         val failedCount = java.util.concurrent.atomic.AtomicInteger(0)
         val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val firstFailure = java.util.concurrent.atomic.AtomicReference<String>("")
         val semaphore = Semaphore(minOf(4, items.size))
 
         items.mapIndexed { index, slide ->
@@ -1028,6 +999,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     } catch (e: Exception) {
                         Log.w(TAG, "Slide ${index + 1}/${items.size} failed: ${e.message}")
                         failedCount.incrementAndGet()
+                        firstFailure.compareAndSet("", describeSlideFailure(e, slide))
                     } finally {
                         val completed = completedCount.incrementAndGet()
                         onProgress(
@@ -1043,9 +1015,19 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
         val savedPaths = savedByIndex.toSortedMap().values.toList()
         val failed = failedCount.get()
-        val summary = ImageDownloadSummary(savedPaths = savedPaths, failedCount = failed)
+        val summary = ImageDownloadSummary(
+            savedPaths = savedPaths,
+            failedCount = failed,
+            firstFailure = firstFailure.get()
+        )
         if (savedPaths.isEmpty()) {
-            onProgress(DownloadState.Error(context.getString(R.string.failed_all_images)))
+            val reason = firstFailure.get()
+            onProgress(
+                DownloadState.Error(
+                    if (reason.isBlank()) context.getString(R.string.failed_all_images)
+                    else context.getString(R.string.failed_all_images_with_reason, reason)
+                )
+            )
         } else {
             onProgress(DownloadState.Success(savedPaths.joinToString("\n")))
         }
@@ -1139,6 +1121,25 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             }
         }
         throw IOException(if (isVideo) "Video download failed" else "Image download failed")
+    }
+
+    /**
+     * A one-line explanation of why one slide could not be saved. HTTP statuses and the media kind
+     * are the two things that tell a user whether to retry, to sign in, or to leave it.
+     */
+    private fun describeSlideFailure(error: Exception, slide: MediaSlide): String {
+        val word = if (slide.isVideo) "video" else "picture"
+        return when (error) {
+            is ImageHttpException -> when (error.statusCode) {
+                403, 401 -> "the $word link had expired or needs a login (HTTP ${error.statusCode})"
+                404 -> "the $word is no longer there (HTTP 404)"
+                429 -> "the site is rate-limiting this download (HTTP 429)"
+                else -> "the site answered HTTP ${error.statusCode}"
+            }
+            is java.net.SocketTimeoutException -> "the site took too long to answer"
+            is java.net.UnknownHostException -> "the host could not be resolved"
+            else -> error.message?.take(120).orEmpty().ifBlank { "the $word could not be read" }
+        }
     }
 
     private fun isRetryableImageError(error: Exception): Boolean {

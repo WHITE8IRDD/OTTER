@@ -33,6 +33,16 @@ object YoutubeInfoCache {
     fun isFresh(file: File, now: Long = System.currentTimeMillis()): Boolean =
         file.isFile && now - file.lastModified() in 0..FRESHNESS_MS
 
+    /**
+     * Drops a saved extraction so the next attempt reads the video again.
+     *
+     * A download that failed with a cached format list has proven that list stale; leaving it in
+     * place would make the retry fail the same way.
+     */
+    fun invalidate(file: File) {
+        runCatching { if (file.isFile) file.delete() }
+    }
+
     /** Saves an extraction and drops the oldest ones beyond [KEEP]. */
     fun keep(context: Context, videoId: String, json: String) {
         if (videoId.isBlank() || json.isBlank()) return
