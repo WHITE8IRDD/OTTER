@@ -1,7 +1,7 @@
 name: Android Release (official)
 
 # Official sideload release: signed, minified release builds (AAB + APKs).
-# Runs on workflow_dispatch ONLY — no push trigger, so it never fires by accident.
+# Fires on a version tag push or a manual dispatch, never on an ordinary branch push.
 # Publishes a NEW tag (v<versionName>) and never deletes anything.
 
 on:
@@ -9,6 +9,11 @@ on:
   push:
     branches:
       - release/v26.2
+    # Pushing a tag is the normal way to cut a release: `git tag v0.2 && git push origin v0.2`.
+    # A release can therefore be published from any branch, which is why the work-branch entry the
+    # previous release used is gone: it made every push to that branch publish a release.
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
