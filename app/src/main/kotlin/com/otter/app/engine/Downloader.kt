@@ -479,7 +479,14 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
                     addOption("--no-mtime")
                     addOption("--continue")
-                    addOption("--socket-timeout", if (isLive) "30" else "15")
+                    addOption(
+                        "--socket-timeout",
+                        EngineArgs.socketTimeoutSeconds(
+                            baseSeconds = if (isLive) 30 else 15,
+                            attempt = attempt,
+                            isLive = isLive
+                        ).toString()
+                    )
                     applySettings(this, settings)
                     applyPlatformArgs(this, url, isLive)
                     addSubtitleFlags(this, subtitleLangs, autoCaptionLangs, embedSubtitles, subtitleFormat)
@@ -783,7 +790,13 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         }
                     }
 
-                    val cf = concurrentFragments(platform, isLive)
+                    // Emitted once, from the user's setting and the platform default together — the
+                    // duplicate that used to follow it is what made the number in Settings do nothing,
+                    // and this is the path the download service actually uses.
+                    val cf = EngineArgs.concurrentFragments(
+                        userValue = settings.concurrentFragments,
+                        platformValue = concurrentFragments(platform, isLive)
+                    )
                     addOption("--concurrent-fragments", cf.toString())
                 }
 
