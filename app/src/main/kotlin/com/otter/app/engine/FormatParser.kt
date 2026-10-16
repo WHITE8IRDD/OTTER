@@ -529,7 +529,9 @@ class FormatParser(private val context: Context? = null) {
                     val detail = "$instagramDiagnostic · $ytSummary"
                     val message = context?.getString(R.string.error_instagram_no_slides, detail)
                         ?: "Instagram returned no readable slides for this post ($detail)"
-                    return@withContext Result.failure(IllegalStateException(message))
+                    // Already written for the user, detail included: it must not be flattened into
+                    // a generic hint by the classifier on the way to the screen.
+                    return@withContext Result.failure(FetchUserMessage(message))
                 }
                 val isPlaylist = responseType == "playlist" || isCarousel ||
                         (videoInfo.extractor?.lowercase()?.contains("playlist") == true) ||
@@ -671,7 +673,7 @@ class FormatParser(private val context: Context? = null) {
             // pictures as the result is what made this look like a success that downloaded nothing.
             if (discovery.hasVideoSignals) {
                 return Result.failure(
-                    IllegalStateException(
+                    FetchUserMessage(
                         context?.getString(R.string.error_page_video_unavailable)
                             ?: "This page declares a video that OTTER could not open. " +
                             "It may need a login, may be DRM protected, or may only play in a browser."

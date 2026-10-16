@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.otter.app.engine.FormatSpec
+import com.otter.app.engine.FetchUserMessage
 import com.otter.app.data.datastore.UserPreferences
 import com.otter.app.data.model.DownloadItem
 import com.otter.app.data.model.DownloadPhase
@@ -408,7 +409,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 onFailure = { error ->
                     _showFormatSheet.value = false
                     val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
-                    val friendly = friendlyErrorMessage(msg, url)
+                    // A message this app composed after diagnosing the failure is already the
+                    // explanation; classifying it would replace a specific reason with a hint.
+                    val friendly = if (error is FetchUserMessage && !msg.isBlank()) msg
+                    else friendlyErrorMessage(msg, url)
                     Log.w("HomeViewModel", "[ERROR-STATE] error shown to user: $friendly")
                     _downloadState.value = DownloadState.Error(friendly)
                     onConsumed()
@@ -469,7 +473,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 onFailure = { error ->
                     val msg = error.message ?: getApplication<Application>().getString(R.string.failed_fetch_video)
-                    _downloadState.value = DownloadState.Error(friendlyErrorMessage(msg, url))
+                    _downloadState.value = DownloadState.Error(
+                        if (error is FetchUserMessage && !msg.isBlank()) msg
+                        else friendlyErrorMessage(msg, url)
+                    )
                 }
             )
         }
@@ -666,6 +673,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val app = getApplication<Application>()
 
         return when (FetchErrorClassifier.classify(rawError, platform)) {
+            FetchErrorClassifier.Kind.NO_DOWNLOADABLE_MEDIA ->
+                app.getString(R.string.error_no_downloadable_media)
+
+            FetchErrorClassifier.Kind.EXTRACTION_FAILED ->
+                app.getString(R.string.error_extraction_failed)
+
+            FetchErrorClassifier.Kind.INSUFFICIENT_STORAGE ->
+                app.getString(R.string.error_storage_full)
+
             FetchErrorClassifier.Kind.NETWORK_TIMEOUT ->
                 app.getString(R.string.error_network_timeout)
 

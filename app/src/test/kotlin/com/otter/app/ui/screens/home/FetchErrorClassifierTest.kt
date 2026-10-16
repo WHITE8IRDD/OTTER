@@ -148,6 +148,48 @@ class FetchErrorClassifierTest {
         )
     }
 
+    /**
+     * Three causes that used to be reported as a generic "couldn't process this link", each of which
+     * has a different fix: free space, an engine that is older than the site, or a page with nothing
+     * in it to save.
+     */
+    @Test
+    fun `a full device is named as the cause`() {
+        listOf(
+            "ERROR: unable to write data: [Errno 28] No space left on device",
+            "java.io.IOException: not enough free space",
+            "enospc while writing to /storage/emulated/0/Download"
+        ).forEach { message ->
+            assertEquals(
+                "for: $message",
+                FetchErrorClassifier.Kind.INSUFFICIENT_STORAGE,
+                FetchErrorClassifier.classify(message, "https://www.youtube.com/watch?v=x")
+            )
+        }
+    }
+
+    @Test
+    fun `a page with nothing downloadable is not a network problem`() {
+        assertEquals(
+            FetchErrorClassifier.Kind.NO_DOWNLOADABLE_MEDIA,
+            FetchErrorClassifier.classify(
+                "ERROR: [Instagram] ABCd1234: no video formats found; the post is an image",
+                FetchErrorClassifier.PLATFORM_INSTAGRAM
+            )
+        )
+    }
+
+    @Test
+    fun `an extractor that cannot read the page is reported as such`() {
+        assertEquals(
+            FetchErrorClassifier.Kind.EXTRACTION_FAILED,
+            FetchErrorClassifier.classify(
+                "ERROR: [facebook] Unable to extract video url; please report this issue",
+                FetchErrorClassifier.PLATFORM_FACEBOOK
+            )
+        )
+    }
+
     @Test
     fun `unknown failures stay generic`() {
         assertEquals(
