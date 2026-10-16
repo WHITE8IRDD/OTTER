@@ -352,17 +352,17 @@
     <string name="error_instagram_no_slides">Instagram n\'a renvoyé aucune diapositive lisible pour cette publication. Détails : %1$s</string>
     <!-- Fenêtre de sélection du partage et intégrité du moteur (v2). -->
     <string name="quick_download_close">Fermer</string>
-    <string name="quick_download_back">Revenir à l'application</string>
+    <string name="quick_download_back">Revenir à l\'application</string>
     <string name="quick_download_reading_post">Lecture de la publication…</string>
     <string name="quick_download_saving">Enregistrement %1$d%%</string>
-    <string name="quick_download_nothing_to_pick">Ce lien ne contient pas de galerie à choisir — c'est une seule vidéo, il n'y a rien à sélectionner.</string>
-    <string name="quick_download_failed_save">L'enregistrement n'a pas pu être terminé.</string>
+    <string name="quick_download_nothing_to_pick">Ce lien ne contient pas de galerie à choisir — c\'est une seule vidéo, il n\'y a rien à sélectionner.</string>
+    <string name="quick_download_failed_save">L\'enregistrement n\'a pas pu être terminé.</string>
     <string name="update_busy">Le moteur est déjà en cours de mise à jour ou de vérification.</string>
-    <string name="update_release_lookup_failed">Impossible d'atteindre la liste des versions du moteur. Vérifiez la connexion et réessayez.</string>
+    <string name="update_release_lookup_failed">Impossible d\'atteindre la liste des versions du moteur. Vérifiez la connexion et réessayez.</string>
     <string name="update_no_asset">La dernière version du moteur ne fournit pas de build pour cette application.</string>
-    <string name="update_bad_download">Le fichier téléchargé n'était pas un moteur utilisable ; le moteur actuel a été conservé.</string>
-    <string name="update_solver_unknown">Cette version du moteur n'indique pas de solveur de défi nécessaire ; elle n'a pas été installée.</string>
-    <string name="update_solver_missing">Impossible d'obtenir le solveur de défi %1$s. Installer le moteur sans lui casserait YouTube ; il n'a donc pas été installé.</string>
-    <string name="update_smoke_failed">Le nouveau moteur ne démarrera pas au test ; l'ancien a été restauré.</string>
-    <string name="update_restore_failed">Le moteur n'a pas pu être réparé ; réessayez sur une autre connexion.</string>
+    <string name="update_bad_download">Le fichier téléchargé n\'était pas un moteur utilisable ; le moteur actuel a été conservé.</string>
+    <string name="update_solver_unknown">Cette version du moteur n\'indique pas de solveur de défi nécessaire ; elle n\'a pas été installée.</string>
+    <string name="update_solver_missing">Impossible d\'obtenir le solveur de défi %1$s. Installer le moteur sans lui casserait YouTube ; il n\'a donc pas été installé.</string>
+    <string name="update_smoke_failed">Le nouveau moteur ne démarrera pas au test ; l\'ancien a été restauré.</string>
+    <string name="update_restore_failed">Le moteur n\'a pas pu être réparé ; réessayez sur une autre connexion.</string>
 </resources>
