@@ -566,9 +566,12 @@ private fun ThumbnailOptionsSection(
  * Pictures and clips used to be two grids with two selection sets, which meant a mixed post had no
  * honest numbering and "take the third picture and the video" needed two gestures. One grid, one
  * selection, and a filter that picks a whole kind in one tap.
+ *
+ * Visible outside this file because the share-sheet selection window hosts the very same picker: a
+ * second copy of this grid is how two paths start disagreeing about what "choose the slides" means.
  */
 @Composable
-private fun CarouselGalleryContent(
+internal fun CarouselGalleryContent(
     videoInfo: VideoInfo,
     selectedIndices: Set<Int>,
     onToggleIndex: (Int) -> Unit,

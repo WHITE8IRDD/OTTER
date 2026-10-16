@@ -361,4 +361,19 @@
     <string name="media_saved_none">Nothing could be saved from those slides.</string>
     <string name="media_saved_none_reason">Nothing could be saved: %1$s.</string>
     <string name="error_instagram_no_slides">Instagram didn\'t return any readable slides for this post. Details: %1$s</string>
+    <!-- Share-sheet selection window and the engine integrity pass (v2). -->
+    <string name="quick_download_close">Close</string>
+    <string name="quick_download_back">Back to where you were</string>
+    <string name="quick_download_reading_post">Reading the post…</string>
+    <string name="quick_download_saving">Saving %1$d%%</string>
+    <string name="quick_download_nothing_to_pick">This link has no gallery to choose from — it is one video, so there is nothing to select.</string>
+    <string name="quick_download_failed_save">The save could not be completed.</string>
+    <string name="update_busy">The engine is already being updated or checked.</string>
+    <string name="update_release_lookup_failed">Could not reach the engine release list. Check the connection and try again.</string>
+    <string name="update_no_asset">The newest engine release has no build for this app.</string>
+    <string name="update_bad_download">The engine download was not a usable engine build; the current engine was kept.</string>
+    <string name="update_solver_unknown">This engine build does not say which challenge solver it needs, so it was not installed.</string>
+    <string name="update_solver_missing">No challenge solver release %1$s could be obtained. Installing the engine without it would break YouTube, so it was not installed.</string>
+    <string name="update_smoke_failed">The new engine did not start when tested; the previous engine was restored.</string>
+    <string name="update_restore_failed">The engine could not be repaired; try again on another connection.</string>
 </resources>

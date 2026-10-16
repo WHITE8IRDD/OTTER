@@ -105,7 +105,13 @@ object TikTokPhotoParser {
             !MediaUrlNormalizer.hostMatches(url, "tiktokv.com")
         ) return false
         val path = runCatching { URL(url).path }.getOrNull() ?: return false
-        return Regex("""(?:^|/)@[^/]+/photo/\d+(?:/|$)""", RegexOption.IGNORE_CASE).containsMatchIn(path)
+        // The forwarded form (`/share/photo/<id>/`) names the same post and is what the share sheet
+        // actually produces, so a photo gallery read through a share link used to fall past this
+        // check to the video extractor and come back with "no formats".
+        return Regex(
+            """(?:^|/)(?:share/)?(?:@[^/]+/)?photo/\d+(?:[/?#]|$)""",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(path)
     }
 
     private fun findImagePostOwner(root: Any, targetId: String): JSONObject? {

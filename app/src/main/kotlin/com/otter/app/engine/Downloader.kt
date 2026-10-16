@@ -133,6 +133,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 Log.i(TAG, "[LIVE-STREAM] detected live stream, sequential fragments + HLS + native downloader")
             }
 
+            // TikTok is absent as well, for the same reason as its own branch below.
             if (platform != Platform.YOUTUBE && platform != Platform.UNKNOWN
                 && platform != Platform.TIKTOK && platform != Platform.FACEBOOK && platform != Platform.INSTAGRAM
                 && platform != Platform.REDDIT
@@ -142,11 +143,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
             when (platform) {
                 Platform.TIKTOK -> {
-                    // Match the public web extractor used by FormatParser. A hard-coded
-                    // mobile IID made metadata and downloads use different format lists.
-                    request.addOption("--user-agent", MediaUrlNormalizer.TIKTOK_USER_AGENT)
+                    // Referer only, and the same rule FormatParser applies: the engine picks its own
+                    // user-agent per endpoint now, and forcing a pinned mobile one is how TikTok
+                    // started answering with its "open in the app" shell instead of a post.
                     request.addOption("--add-header", "Referer:https://www.tiktok.com/")
-                    request.addOption("--extractor-retries", "5")
+                    request.addOption("--extractor-retries", "3")
                 }
                 Platform.FACEBOOK -> {
                     request.addOption("--add-header", "Referer:https://www.facebook.com")
@@ -182,6 +183,19 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             }
         }
 
+
+        /**
+         * The URL to hand the engine for a link the user pasted.
+         *
+         * Two rewrites, both harmless when they do not apply: a Shorts link becomes its `watch` URL,
+         * and a TikTok share or short link becomes the form the extractor matches. The second one has
+         * to happen here as well as in the fetch because a download is often started by the
+         * foreground service from the raw link - Quick Download never fetches at all, and a download
+         * resumed after the process was reclaimed only has what was persisted, which is what the
+         * user copied.
+         */
+        private suspend fun engineRequestUrl(url: String): String =
+            MediaUrlNormalizer.normalizeYouTubeShortsUrl(TikTokLinkResolver.resolve(url))
 
         private suspend fun refreshFormatInfo(
             formatParser: FormatParser,
@@ -434,6 +448,13 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         title: String = ""
     ) = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
+        // The wrapper refuses to run until `init` has laid the engine out, and a download is very
+        // often the first engine user of the process: a Quick Download from the share sheet starts
+        // the service a heartbeat after the app was created, and a download restored after the
+        // system reclaimed the process starts with nothing initialised at all. Both used to fail
+        // with "instance not initialized" - the error the UI showed as a plain failure.
+        FormatParser.ensureEngineReady(context)
+        val engineUrl = engineRequestUrl(url)
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -472,7 +493,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 }
                 val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
-                val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
+                val request = YoutubeDLRequest(engineUrl).apply {
                     addCookies(this, url, settings.cookiesEnabled)
                     addOption("-f", localFormatId)
                     addOption("-P", workingDir.absolutePath)
@@ -557,7 +578,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 activeDownloads.remove(url)
                 activeDownloadInfo.remove(url)
 
-                val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
+                val downloadedFile = findDownloadedFile(workingDir.absolutePath, url, engineUrl)
                 if (downloadedFile != null) {
                     val expectedKind = when {
                         settings.extractAudio || currentFormatId.contains("audio") ||
@@ -737,6 +758,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         title: String = ""
     ) = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
+        FormatParser.ensureEngineReady(context)
+        val engineUrl = engineRequestUrl(url)
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -766,7 +789,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 }
                 val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
-                val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
+                val request = YoutubeDLRequest(engineUrl).apply {
                     addCookies(this, url, settings.cookiesEnabled)
                     addOption("--no-mtime")
                     addOption("-f", localFormatId)
@@ -848,7 +871,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 activeDownloads.remove(url)
                 activeDownloadInfo.remove(url)
 
-                val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
+                val downloadedFile = findDownloadedFile(workingDir.absolutePath, url, engineUrl)
                 if (subtitleLangs.isNotBlank()) {
                     copySubtitleFiles(workingDir.absolutePath, outputDir, subtitleLangs)
                 }
@@ -1409,12 +1432,17 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         }
     }
 
-    private fun findDownloadedFile(outputDir: String, url: String): String? {
+    /**
+     * @param url the link as the caller gave it to this download (may be a TikTok share/short link
+     *   with no id of its own).
+     * @param resolvedUrl the canonical link the engine actually ran against; it names the post even
+     *   when [url] does not, which is what keeps the file identifiable when the pasted link was a
+     *   short one.
+     */
+    private fun findDownloadedFile(outputDir: String, url: String, resolvedUrl: String = url): String? {
         return try {
-            val found = MediaFileLocator.findDownloaded(
-                File(outputDir),
-                MediaUrlNormalizer.youtubeVideoId(url)
-            )
+            val id = MediaUrlNormalizer.mediaId(url).ifBlank { MediaUrlNormalizer.mediaId(resolvedUrl) }
+            val found = MediaFileLocator.findDownloaded(File(outputDir), id)
             if (found == null) Log.w(TAG, "findDownloadedFile: no media files in $outputDir")
             else Log.i(TAG, "findDownloadedFile: ${found.name}")
             found?.absolutePath

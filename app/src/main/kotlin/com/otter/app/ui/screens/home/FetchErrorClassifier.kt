@@ -134,9 +134,16 @@ object FetchErrorClassifier {
                 (lower.contains("page") && lower.contains("video") && lower.contains("could not")) ->
                 Kind.NO_DOWNLOADABLE_MEDIA
 
-            // The extractor itself failed, which is a stale-engine problem rather than the user's.
+            // The extractor itself failed, or the engine could not solve the site's playback
+            // challenge, which is a stale- or mis-installed-engine problem rather than the user's.
+            // The wording matters here: the failure an engine without its `yt_dlp_ejs` challenge
+            // solver produces ("No usable challenge solver … script available") reads nothing like
+            // a missing video, and the advice that goes with a missing video would be useless.
+            // "update it in Settings" is something the user can actually act on.
             lower.contains("unable to extract") || lower.contains("extractor failed") ||
-                lower.contains("not a valid json") || lower.contains("regex json") ->
+                lower.contains("not a valid json") || lower.contains("regex json") ||
+                lower.contains("challenge solver") || lower.contains("js runtime") ||
+                lower.contains("nsig") ->
                 Kind.EXTRACTION_FAILED
 
             platform == PLATFORM_INSTAGRAM && lower.contains("login") ->

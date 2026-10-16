@@ -350,4 +350,19 @@
     <string name="history_copied_all">تم نسخ العنوان والوصف والوسوم</string>
     <string name="media_saved_none">لم يمكن حفظ أي شيء من هذه الشرائح.</string>
     <string name="error_instagram_no_slides">لم يُرجع إنستغرام أي شرائح قابلة للقراءة لهذا المنشور. التفاصيل: %1$s</string>
+    <!-- نافذة الاختيار من المشاركة وسلامة المحرك (v2). -->
+    <string name="quick_download_close">إغلاق</string>
+    <string name="quick_download_back">الرجوع إلى التطبيق</string>
+    <string name="quick_download_reading_post">جارٍ قراءة المنشور…</string>
+    <string name="quick_download_saving">جارٍ الحفظ %1$d%%</string>
+    <string name="quick_download_nothing_to_pick">هذا الرابط لا يحتوي على معرض للاختيار منه — إنه فيديو واحد، لذا لا يوجد ما يُختار.</string>
+    <string name="quick_download_failed_save">لم يكتمل الحفظ.</string>
+    <string name="update_busy">المحرك قيد التحديث أو الفحص بالفعل.</string>
+    <string name="update_release_lookup_failed">تعذّل الوصول إلى قائمة إصدارات المحرك. تحقق من الاتصال ثم أعد المحاولة.</string>
+    <string name="update_no_asset">أحدث إصدار من المحرك لا يحتوي على نسخة لهذا التطبيق.</string>
+    <string name="update_bad_download">الملف المنزّل ليس محركًا صالحًا، لذا تم الإبقاء على المحرك الحالي.</string>
+    <string name="update_solver_unknown">إصدار المحرك هذا لا يحدد حلّوي التحدي المطلوب، لذلك لم يتم تثبيته.</string>
+    <string name="update_solver_missing">تعذّل الحصول على حلّوي التحدي %1$s. تثبيت المحرك بدونه يكسر يوتيوب، لذلك لم يتم تثبيته.</string>
+    <string name="update_smoke_failed">المحرك الجديد لم يعمل عند الاختبار؛ تمت استعادة المحرك السابق.</string>
+    <string name="update_restore_failed">تعذّر إصلاح المحرك؛ أعد المحاولة على اتصال آخر.</string>
 </resources>

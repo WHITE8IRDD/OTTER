@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
@@ -58,8 +57,9 @@ class FormatParser(private val context: Context? = null) {
         private fun applyPlatformArgs(request: YoutubeDLRequest, url: String) {
             fun hostMatches(vararg domains: String) = domains.any { MediaUrlNormalizer.hostMatches(url, it) }
 
+            // TikTok deliberately absent: see the TikTok branch below, where the engine keeps its
+            // own user-agent because that is what its current endpoints are written against.
             val needsUA = hostMatches(
-                "tiktok.com", "tiktokv.com",
                 "twitter.com", "x.com", "t.co",
                 "reddit.com", "redd.it", "twitch.tv", "vimeo.com",
                 "soundcloud.com", "bilibili.com", "dailymotion.com", "dai.ly",
@@ -69,9 +69,15 @@ class FormatParser(private val context: Context? = null) {
 
             when {
                 hostMatches("tiktok.com", "tiktokv.com") -> {
+                    // Only the Referer here. The engine used to be forced onto a pinned Android
+                    // Chrome user-agent on top of the app's own stale one, and TikTok answers that
+                    // pair with its "open in the app" shell — a page with no post data in it. Every
+                    // current yt-dlp TikTok code path (web page, oEmbed, API) works out its own
+                    // header set for the endpoint it is calling, which is the only thing that stays
+                    // true as the site changes.
                     request.addOption("--add-header", "Referer:https://www.tiktok.com/")
-                    request.addOption("--extractor-retries", "5")
-                    Log.i(TAG, "[PLATFORM-FLAGS] TikTok detected, using public web extraction with browser headers + retry=5")
+                    request.addOption("--extractor-retries", "3")
+                    Log.i(TAG, "[PLATFORM-FLAGS] TikTok detected: referer set, engine default UA (no override)")
                 }
                 hostMatches("twitter.com", "x.com", "t.co") -> {
                     request.addOption("--add-header", "Accept-Language:en-US,en;q=0.9")
@@ -126,53 +132,6 @@ class FormatParser(private val context: Context? = null) {
                     }
                     .onFailure { Log.w(TAG, "[PREFLIGHT] engine init failed (non-blocking): ${it.message}") }
             }
-        }
-
-        fun resolveTikTokShortUrl(url: String): String {
-            val original = url.trim()
-            val parsed = runCatching { URL(original) }.getOrNull() ?: return url
-            if (!MediaUrlNormalizer.hostMatches(original, "tiktok.com") &&
-                !MediaUrlNormalizer.hostMatches(original, "tiktokv.com")
-            ) return url
-            val host = parsed.host.lowercase()
-            val isShortHost = host == "vm.tiktok.com" || host == "vt.tiktok.com"
-            val isShortPath = parsed.path.startsWith("/t/", ignoreCase = true)
-            if (!isShortHost && !isShortPath) return url
-
-            var current = original
-            repeat(5) {
-                val connection = runCatching { URL(current).openConnection() as HttpURLConnection }
-                    .getOrNull() ?: return current
-                try {
-                    connection.instanceFollowRedirects = false
-                    connection.connectTimeout = 3_500
-                    connection.readTimeout = 3_500
-                    connection.requestMethod = "GET"
-                    connection.setRequestProperty(
-                        "User-Agent",
-                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
-                            "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-                    )
-                    connection.setRequestProperty("Range", "bytes=0-0")
-                    val status = connection.responseCode
-                    val location = connection.getHeaderField("Location")
-                    if (status !in 300..399 || location.isNullOrBlank()) return current
-                    val next = runCatching { URL(URL(current), location).toExternalForm() }.getOrNull()
-                        ?: return current
-                    val isTiktokRedirect = MediaUrlNormalizer.hostMatches(next, "tiktok.com") ||
-                        MediaUrlNormalizer.hostMatches(next, "tiktokv.com")
-                    if (!isTiktokRedirect) return current
-                    current = next
-                    val path = runCatching { URL(current).path }.getOrDefault("")
-                    if (path.contains("/video/") || path.contains("/photo/")) return current
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to resolve TikTok short URL: ${e.message}")
-                    return current
-                } finally {
-                    connection.disconnect()
-                }
-            }
-            return current
         }
 
         suspend fun warmUpEngine(context: Context) {
@@ -270,7 +229,12 @@ class FormatParser(private val context: Context? = null) {
     ): Result<VideoInfo> = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
         Log.i(TAG, "fetchVideoInfo START url=${redact(url)}")
-        val resolvedUrl = MediaUrlNormalizer.normalizeYouTubeShortsUrl(resolveTikTokShortUrl(url))
+        // TikTok links are canonicalised before anything else (see TikTokLinkResolver): a share link
+        // carries no author and a short link carries no id, and the pinned extractor matches
+        // neither, so the old code handed it a URL no extractor owned. Resolving here also caches
+        // the mapping for the download, which is often issued later by the foreground service with
+        // the link the user actually pasted rather than this one.
+        val resolvedUrl = MediaUrlNormalizer.normalizeYouTubeShortsUrl(TikTokLinkResolver.resolve(url))
         // Reels and /tv/ links belong here too: they are how Instagram shares a one-video post,
         // and excluding them is what sent those links to an extractor that needs a login.
         val isInstaPost = InstagramMediaParser.isPostUrl(resolvedUrl)

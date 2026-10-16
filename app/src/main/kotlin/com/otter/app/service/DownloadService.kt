@@ -66,6 +66,15 @@ class DownloadService : Service() {
         const val EXTRA_HAS_SUBTITLES = "extra_has_subtitles"
         /** Set when the caller does not want this download recorded in History. */
         const val EXTRA_SKIP_HISTORY = "extra_skip_history"
+        /**
+         * Set by the share-sheet target. It says two things: read the user's own settings here, and
+         * use the best available format. A quick download cannot wait for a datastore read inside the
+         * activity - starting a foreground service has to happen while that window is still up - so
+         * the settings that activity used to fetch are fetched here instead.
+         */
+        const val EXTRA_QUICK_DOWNLOAD = "extra_quick_download"
+        /** The format a quick download asks for when it has no format list to choose from. */
+        const val QUICK_DOWNLOAD_FORMAT = "bestvideo+bestaudio/best"
         private const val NOTIFICATION_THROTTLE_MS = 500L
         private const val PREFS_ACTIVE_DOWNLOAD = "active_download_service"
         private const val PREF_ACTIVE_URL = "active_url"
@@ -202,6 +211,25 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val autoCaptionLangs = intent.getStringExtra(EXTRA_AUTO_CAPTION_LANGS) ?: ""
         val embedSubtitles = intent.getBooleanExtra(EXTRA_EMBED_SUBTITLES, false)
         val subtitleFormat = intent.getStringExtra(EXTRA_SUBTITLE_FORMAT) ?: "srt"
+        val isQuick = intent.getBooleanExtra(EXTRA_QUICK_DOWNLOAD, false)
+        // A quick download arrives with no metadata and no settings attached, because its caller had
+        // no business awaiting either - starting a foreground service has to happen while the share
+        // sheet's window is still up. Subtitles are a user setting, so (only for this one case) it is
+        // read here instead; every other download path passes its own values and this costs it
+        // nothing, since the two reads below never run unless isQuick is true.
+        val (quickSubtitles, quickSubtitleLang) = if (isQuick) {
+            runCatching {
+                runBlocking(Dispatchers.IO) {
+                    val prefs = com.otter.app.data.datastore.UserPreferences(this@DownloadService)
+                    val enabled = prefs.getDownloadSubtitlesOnce()
+                    enabled to if (enabled) prefs.getSubtitleLangOnce() else ""
+                }
+            }.getOrDefault(false to "")
+        } else {
+            false to ""
+        }
+        val effectiveSubtitleLangs = subtitleLangs.ifBlank { quickSubtitleLang }
+        val effectiveEmbedSubtitles = embedSubtitles || quickSubtitles
 
         // History metadata: description and hashtags travel with the download so the
         // finished entry can show (and copy) them.
@@ -216,7 +244,8 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         pendingDuration = intent.getLongExtra(EXTRA_DURATION, 0L)
         pendingFormatId = formatId
         pendingIsAudioOnly = intent.getBooleanExtra(EXTRA_IS_AUDIO_ONLY, false)
-        pendingHasSubtitles = intent.getBooleanExtra(EXTRA_HAS_SUBTITLES, false)
+        pendingHasSubtitles = intent.getBooleanExtra(EXTRA_HAS_SUBTITLES, false) ||
+            effectiveSubtitleLangs.isNotBlank()
         pendingSkipHistory = intent.getBooleanExtra(EXTRA_SKIP_HISTORY, false)
 
         if (!thumbUrl.isNullOrEmpty()) {
@@ -243,9 +272,9 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                     { u, f, progress ->
                         try {
                             if (saveThumbnail) {
-                                repository.downloadWithThumbnail(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title)
+                                repository.downloadWithThumbnail(u, f, outputDir, progress, effectiveSubtitleLangs, effectiveEmbedSubtitles, subtitleFormat, autoCaptionLangs, title)
                             } else {
-                                repository.startDownload(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title)
+                                repository.startDownload(u, f, outputDir, progress, effectiveSubtitleLangs, effectiveEmbedSubtitles, subtitleFormat, autoCaptionLangs, title)
                             }
                         } catch (e: Throwable) {
                             Log.e(TAG, "[START-3] download function threw for $u", e)

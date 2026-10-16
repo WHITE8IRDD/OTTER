@@ -61,6 +61,19 @@ object MediaUrlNormalizer {
         return value?.takeIf { youtubeVideoId.matches(it) }.orEmpty()
     }
 
+    /**
+     * The id the engine puts in a downloaded file's name, for any link this app recognises.
+     *
+     * A download that writes into a shared folder cannot identify its output by "the newest media
+     * file in here": a TikTok post's id is as good a marker as a YouTube video's, so both are used.
+     */
+    fun mediaId(url: String?): String {
+        val trimmed = url?.trim().orEmpty()
+        if (trimmed.isEmpty()) return ""
+        youtubeVideoId(trimmed).takeIf { it.isNotEmpty() }?.let { return it }
+        return TikTokUrl.itemId(trimmed)
+    }
+
     /** True for a direct image URL, including URLs with signed/query parameters. */
     fun isDirectImageUrl(url: String): Boolean {
         val parsed = runCatching { URL(url) }.getOrNull() ?: return false

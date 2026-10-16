@@ -30,10 +30,32 @@ class OtterApplication : Application() {
         NotificationHelper.createChannels(this)
         applicationScope.launch {
             val initJob = async { initAVEngine() }
-            val warmJob = async { FormatParser.warmUpEngine(this@OtterApplication) }
             initJob.await()
+            // Before anything else asks the engine for a page: an engine file that lost its
+            // challenge solver answers every YouTube request with a failure, and the only way to
+            // tell that apart from a network problem is to look at the file. This is also what
+            // repairs an install the previous release's automatic update had already broken.
+            healEngineIfNeeded()
+            val warmJob = async { FormatParser.warmUpEngine(this@OtterApplication) }
             warmJob.await()
             keepEngineCurrent()
+        }
+    }
+
+    /** Repairs a solver-less engine; logs what it found. Never lets startup fail. */
+    private suspend fun healEngineIfNeeded() {
+        val result = runCatching { YtDlpUpdater(this).ensureSolver() }
+            .onFailure { Log.w(TAG, "Engine integrity check failed", it) }
+            .getOrNull() ?: return
+        when (result) {
+            is YtDlpUpdater.HealResult.NotNeeded, is YtDlpUpdater.HealResult.NoInstalledEngine ->
+                Log.i(TAG, "Engine integrity: nothing to do ($result)")
+            is YtDlpUpdater.HealResult.Repaired ->
+                Log.w(TAG, "Engine integrity: the challenge solver was missing and has been restored (${result.version})")
+            is YtDlpUpdater.HealResult.RestoredBundled ->
+                Log.w(TAG, "Engine integrity: the installed engine was unusable and the build the APK ships was restored (${result.version})")
+            is YtDlpUpdater.HealResult.Unrepaired ->
+                Log.w(TAG, "Engine integrity: could not be repaired (${result.reason})")
         }
     }
 
