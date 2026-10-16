@@ -207,6 +207,6 @@ jobs:
           } > release-notes.md
           gh release create "$TAG" build-artifacts/* \
             --target "$GITHUB_SHA" \
-            --title "OTTER — New Perspective 0.1" \
+            --title "outter 10 16 update" \
             --notes-file release-notes.md
           echo "Published $TAG"
