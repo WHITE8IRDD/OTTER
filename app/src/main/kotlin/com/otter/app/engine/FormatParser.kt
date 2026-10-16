@@ -637,7 +637,8 @@ class FormatParser(private val context: Context? = null) {
      */
     private suspend fun useSavedCookies(url: String): Boolean {
         val context = context ?: return false
-        if (!MediaUrlNormalizer.canUseSavedCookies(url)) return false
+        // The scheme check only: `settingEnabled = true` because the preference is read next.
+        if (!MediaUrlNormalizer.shouldAttachSavedCookies(url, settingEnabled = true)) return false
         return runCatching { UserPreferences(context).getCookiesEnabledOnce() }.getOrDefault(false)
     }
 

@@ -262,7 +262,11 @@ object InstagramMediaParser {
     fun parseJson(json: String, source: Source = Source.JSON_API, shortcode: String = ""): Result {
         val root = runCatching { JSONObject(json) }.getOrNull()
             ?: runCatching { JSONArray(json) }.getOrNull()
-            ?: return Result(emptyList(), emptyList(), emptyList(), 0, 0, source, note = "payload was not JSON")
+            ?: return Result(
+                imageUrls = emptyList(),
+                source = source,
+                note = "payload was not JSON"
+            )
         return parseJsonNode(root, source, shortcode)
     }
 
