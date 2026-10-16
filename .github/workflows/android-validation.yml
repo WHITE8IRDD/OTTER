@@ -3,7 +3,9 @@ name: Android validation
 on:
   push:
     branches:
-      - arena/b4348471-otter
+      # Any arena/* work branch, so a change is validated before it reaches master
+      # instead of only on the branch that happened to add this workflow.
+      - 'arena/**'
   workflow_dispatch:
 
 permissions:
