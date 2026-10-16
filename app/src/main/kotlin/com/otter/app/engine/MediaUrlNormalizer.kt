@@ -5,8 +5,20 @@ import java.util.Locale
 
 /** URL helpers shared by extraction and download code. */
 object MediaUrlNormalizer {
+    const val TIKTOK_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/120.0.6099.144 Mobile Safari/537.36"
+
     private val youtubeVideoId = Regex("^[A-Za-z0-9_-]{11}$")
     private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "bmp", "tif", "tiff", "svg")
+    private val publicExtractorDomains = setOf(
+        "youtube.com", "youtu.be", "youtube-nocookie.com",
+        "instagram.com", "instagr.am", "tiktok.com", "tiktokv.com",
+        "facebook.com", "fb.com", "fb.watch", "twitter.com", "x.com", "t.co",
+        "reddit.com", "redd.it", "twitch.tv", "vimeo.com", "dailymotion.com", "dai.ly",
+        "soundcloud.com", "bilibili.com", "pinterest.com", "pin.it", "snapchat.com",
+        "streamable.com", "bandcamp.com"
+    )
 
     /**
      * Shorts are ordinary YouTube videos, but the watch URL is more consistently
@@ -76,4 +88,12 @@ object MediaUrlNormalizer {
         val expected = domain.lowercase(Locale.ROOT).trimStart('.')
         return host == expected || host.endsWith(".$expected")
     }
+
+    /**
+     * Stored cookies remain available for less common sites that explicitly need
+     * user-provided authentication. Public social extractors run without the file,
+     * so a saved login is never silently sent to the major public platforms.
+     */
+    fun shouldUseOptionalCookies(url: String): Boolean =
+        publicExtractorDomains.none { hostMatches(url, it) }
 }

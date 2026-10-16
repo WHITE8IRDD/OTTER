@@ -2,6 +2,7 @@ package com.otter.app.service
 
 import android.annotation.SuppressLint
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
@@ -66,6 +67,8 @@ class DownloadService : Service() {
         /** Set when the caller does not want this download recorded in History. */
         const val EXTRA_SKIP_HISTORY = "extra_skip_history"
         private const val NOTIFICATION_THROTTLE_MS = 500L
+        private const val PREFS_ACTIVE_DOWNLOAD = "active_download_service"
+        private const val PREF_ACTIVE_URL = "active_url"
     }
 
     override fun onCreate() {
@@ -87,13 +90,37 @@ class DownloadService : Service() {
 @SuppressLint("MissingPermission")
 override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onStartCommand: action=${intent?.action} url=${intent?.getStringExtra(EXTRA_URL)}")
-        when (intent?.action) {
-            ACTION_START_DOWNLOAD -> handleStart(intent)
-            ACTION_PAUSE_DOWNLOAD -> handlePause(intent)
-            ACTION_RESUME_DOWNLOAD -> handleResume(intent)
-            ACTION_CANCEL_DOWNLOAD -> handleCancel(intent)
+        if (intent == null) {
+            val pending = restorePendingDownloadIntent()
+            if (pending == null) {
+                Log.i(TAG, "No active download to restore after service restart")
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
+            Log.i(TAG, "Restoring interrupted foreground download from its saved request")
+            handleStart(pending)
+            return START_STICKY
         }
-        return START_NOT_STICKY
+
+        return when (intent.action) {
+            ACTION_START_DOWNLOAD -> {
+                handleStart(intent)
+                START_STICKY
+            }
+            ACTION_PAUSE_DOWNLOAD -> {
+                handlePause(intent)
+                START_NOT_STICKY
+            }
+            ACTION_RESUME_DOWNLOAD -> {
+                handleResume(intent)
+                START_STICKY
+            }
+            ACTION_CANCEL_DOWNLOAD -> {
+                handleCancel(intent)
+                START_NOT_STICKY
+            }
+            else -> START_NOT_STICKY
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -103,10 +130,64 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onDestroy()
     }
 
+    /** Save enough of an active request to restart it if Android reclaims this process. */
+    private fun persistPendingDownload(intent: Intent) {
+        val preferences = getSharedPreferences(PREFS_ACTIVE_DOWNLOAD, Context.MODE_PRIVATE)
+        val editor = preferences.edit()
+        val stringExtras = listOf(
+            EXTRA_URL, EXTRA_FORMAT_ID, EXTRA_OUTPUT_DIR, EXTRA_TITLE, EXTRA_THUMBNAIL_URL,
+            EXTRA_SUBTITLE_LANGS, EXTRA_AUTO_CAPTION_LANGS, EXTRA_SUBTITLE_FORMAT,
+            EXTRA_UPLOADER, EXTRA_DESCRIPTION, EXTRA_HASHTAGS
+        )
+        stringExtras.forEach { key ->
+            if (intent.hasExtra(key)) editor.putString(key, intent.getStringExtra(key))
+            else editor.remove(key)
+        }
+        listOf(
+            EXTRA_SAVE_THUMBNAIL, EXTRA_EMBED_SUBTITLES, EXTRA_IS_AUDIO_ONLY,
+            EXTRA_HAS_SUBTITLES, EXTRA_SKIP_HISTORY
+        ).forEach { key -> editor.putBoolean(key, intent.getBooleanExtra(key, false)) }
+        editor.putLong(EXTRA_DURATION, intent.getLongExtra(EXTRA_DURATION, 0L))
+        editor.putString(PREF_ACTIVE_URL, intent.getStringExtra(EXTRA_URL))
+        // The small request record is committed before yt-dlp starts. If Android
+        // kills the process, --continue can resume the partial file on service restart.
+        editor.commit()
+    }
+
+    private fun restorePendingDownloadIntent(): Intent? {
+        val preferences = getSharedPreferences(PREFS_ACTIVE_DOWNLOAD, Context.MODE_PRIVATE)
+        val url = preferences.getString(PREF_ACTIVE_URL, null)?.takeIf { it.isNotBlank() } ?: return null
+        return Intent(this, DownloadService::class.java).apply {
+            action = ACTION_START_DOWNLOAD
+            listOf(
+                EXTRA_URL, EXTRA_FORMAT_ID, EXTRA_OUTPUT_DIR, EXTRA_TITLE, EXTRA_THUMBNAIL_URL,
+                EXTRA_SUBTITLE_LANGS, EXTRA_AUTO_CAPTION_LANGS, EXTRA_SUBTITLE_FORMAT,
+                EXTRA_UPLOADER, EXTRA_DESCRIPTION, EXTRA_HASHTAGS
+            ).forEach { key ->
+                if (preferences.contains(key)) {
+                    preferences.getString(key, null)?.let { putExtra(key, it) }
+                }
+            }
+            listOf(
+                EXTRA_SAVE_THUMBNAIL, EXTRA_EMBED_SUBTITLES, EXTRA_IS_AUDIO_ONLY,
+                EXTRA_HAS_SUBTITLES, EXTRA_SKIP_HISTORY
+            ).forEach { key -> putExtra(key, preferences.getBoolean(key, false)) }
+            putExtra(EXTRA_DURATION, preferences.getLong(EXTRA_DURATION, 0L))
+            putExtra(EXTRA_URL, url)
+        }
+    }
+
+    private fun clearPendingDownload(url: String? = null) {
+        val preferences = getSharedPreferences(PREFS_ACTIVE_DOWNLOAD, Context.MODE_PRIVATE)
+        if (url != null && preferences.getString(PREF_ACTIVE_URL, null) != url) return
+        preferences.edit().clear().commit()
+    }
+
     // ─── START ────────────────────────────────────────────────────────────────
 
     private fun handleStart(intent: Intent) {
         val url = intent.getStringExtra(EXTRA_URL) ?: return
+        persistPendingDownload(intent)
         val formatId = intent.getStringExtra(EXTRA_FORMAT_ID) ?: "best"
         var outputDir = intent.getStringExtra(EXTRA_OUTPUT_DIR) ?: ""
         if (outputDir.isBlank()) {
@@ -192,6 +273,7 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
             } catch (e: Throwable) {
                 Log.e(TAG, "[START-6] unexpected error", e)
             } finally {
+                clearPendingDownload(url)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 ActiveDownloadStateHolder.clear()
@@ -226,6 +308,7 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                         downloadedBytes = activeInfo.lastDownloadedBytes, totalBytes = activeInfo.lastTotalBytes
                     )
                     repository.savePausedDownload(pausedItem)
+                    clearPendingDownload(url)
                     Log.i(TAG, "[PAUSE-4] PausedDownload saved to DB")
                 } catch (e: Throwable) {
                     Log.e(TAG, "[PAUSE-5] DB save failed", e)
@@ -295,6 +378,22 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                     return@launch
                 }
                 Log.i(TAG, "[RESUME-3] Fetched paused record: progress=${pausedItem.progress} bytes=${pausedItem.downloadedBytes}/${pausedItem.totalBytes}")
+                // Treat a resumed download like a durable start request before removing
+                // its paused DB row. A process restart then retries with yt-dlp --continue.
+                persistPendingDownload(Intent(this@DownloadService, DownloadService::class.java).apply {
+                    action = ACTION_START_DOWNLOAD
+                    putExtra(EXTRA_URL, pausedItem.url)
+                    putExtra(EXTRA_FORMAT_ID, pausedItem.formatId)
+                    putExtra(EXTRA_OUTPUT_DIR, pausedItem.outputDir)
+                    putExtra(EXTRA_TITLE, pausedItem.title)
+                    putExtra(EXTRA_THUMBNAIL_URL, pausedItem.thumbnailUrl)
+                    putExtra(EXTRA_UPLOADER, pausedItem.uploader)
+                    putExtra(EXTRA_SUBTITLE_LANGS, pausedItem.subtitleLangs)
+                    putExtra(EXTRA_AUTO_CAPTION_LANGS, pausedItem.autoCaptionLangs)
+                    putExtra(EXTRA_EMBED_SUBTITLES, pausedItem.embedSubtitles)
+                    putExtra(EXTRA_SUBTITLE_FORMAT, pausedItem.subtitleFormat)
+                    putExtra(EXTRA_HAS_SUBTITLES, pausedItem.hasSubtitles)
+                })
 
                 // Cancel stale error notification
                 NotificationHelper.cancelErrorNotification(this@DownloadService)
@@ -360,6 +459,7 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                 Log.e(TAG, "[RESUME-13] unexpected error", e)
                 showSoftResumeError(url, e.message)
             } finally {
+                clearPendingDownload(url)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 ActiveDownloadStateHolder.clear()
@@ -466,6 +566,7 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         } catch (e: Throwable) {
             Log.e(TAG, "[STOP-9] cleanup failed", e)
         }
+        clearPendingDownload(url)
         Log.i(TAG, "[STOP-10] STOP COMPLETE")
         stopSelf()
     }

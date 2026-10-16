@@ -31,6 +31,21 @@ class MediaUrlNormalizerTest {
     }
 
     @Test
+    fun publicSocialExtractorsDoNotReceiveSavedCookies() {
+        val publicUrls = listOf(
+            "https://www.youtube.com/watch?v=AbCdEf12345",
+            "https://www.instagram.com/p/AbCdEf/",
+            "https://www.tiktok.com/@user/video/123456",
+            "https://www.facebook.com/watch/?v=123456",
+            "https://x.com/user/status/123",
+            "https://www.reddit.com/r/example/comments/123"
+        )
+
+        publicUrls.forEach { assertFalse(MediaUrlNormalizer.shouldUseOptionalCookies(it)) }
+        assertTrue(MediaUrlNormalizer.shouldUseOptionalCookies("https://example.org/video"))
+    }
+
+    @Test
     fun directImageDetectionUsesPathAndIgnoresSignedQuery() {
         assertTrue(MediaUrlNormalizer.isDirectImageUrl("https://cdn.example.org/photo.webp?token=a%2Fb&expires=123"))
         assertFalse(MediaUrlNormalizer.isDirectImageUrl("https://cdn.example.org/video.mp4?preview=photo.jpg"))

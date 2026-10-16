@@ -74,6 +74,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -106,6 +107,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -122,6 +126,7 @@ import com.otter.app.ui.theme.ACCENT_PRESETS
 import com.otter.app.ui.theme.ThemeViewModel
 import com.otter.app.ui.theme.OtterDimens
 import com.otter.app.R
+import com.otter.app.util.extractUrlFromText
 import com.otter.app.util.getClipboardText
 import com.otter.app.util.isValidUrl
 import com.otter.app.util.LocaleManager
@@ -166,7 +171,8 @@ fun HomeScreen(
     var showPaletteSheet by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showLanguageSheet by remember { mutableStateOf(false) }
-    var clipboardDetectedUrl by remember { mutableStateOf<String?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lastClipboardUrl = remember { mutableStateOf("") }
 
     val logoTint = when {
         tintLogo -> MaterialTheme.colorScheme.primary
@@ -179,17 +185,79 @@ fun HomeScreen(
         notificationPermission?.let {
             if (!it.status.isGranted) it.launchPermissionRequest()
         }
-        val clip = context.getSystemService(ClipboardManager::class.java)
-        val clipText = clip?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
-        if (clipText.isValidUrl() && clipText != urlInput) {
-            clipboardDetectedUrl = clipText
+    }
+
+    // Auto-fill and fetch links copied while OTTER is in the foreground or was
+    // backgrounded. Clipboard access is scoped to the resumed screen; a shared URL
+    // always wins, and an unchanged old clipboard value will not overwrite a link
+    // the user has already entered.
+    DisposableEffect(lifecycleOwner, sharedUrl, context, viewModel) {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        if (clipboard == null) {
+            onDispose { }
+        } else {
+            var listening = false
+            fun checkClipboard() {
+                val raw = clipboard.primaryClip
+                    ?.takeIf { it.itemCount > 0 }
+                    ?.getItemAt(0)
+                    ?.coerceToText(context)
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+                val candidate = raw.extractUrlFromText()?.trim()
+                    ?: raw.takeIf { it.isValidUrl() }
+                    ?: return
+
+                if (!sharedUrl.isNullOrBlank()) {
+                    lastClipboardUrl.value = candidate
+                    return
+                }
+                val currentInput = viewModel.urlInput.value.trim()
+                if (candidate == currentInput) {
+                    lastClipboardUrl.value = candidate
+                    return
+                }
+                if (candidate == lastClipboardUrl.value && currentInput.isNotBlank()) return
+
+                lastClipboardUrl.value = candidate
+                viewModel.onPasteClicked(candidate)
+            }
+            val listener = ClipboardManager.OnPrimaryClipChangedListener(::checkClipboard)
+            fun startListening() {
+                if (!listening) {
+                    clipboard.addPrimaryClipChangedListener(listener)
+                    listening = true
+                }
+                checkClipboard()
+            }
+            fun stopListening() {
+                if (listening) {
+                    clipboard.removePrimaryClipChangedListener(listener)
+                    listening = false
+                }
+            }
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> startListening()
+                    Lifecycle.Event.ON_PAUSE -> stopListening()
+                    else -> Unit
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                startListening()
+            }
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                stopListening()
+            }
         }
     }
 
     LaunchedEffect(sharedUrl) {
         if (!sharedUrl.isNullOrEmpty()) {
             viewModel.setSharedUrl(sharedUrl, onConsumed = onSharedUrlConsumed)
-            clipboardDetectedUrl = null
         }
     }
 
@@ -233,65 +301,6 @@ fun HomeScreen(
                 onToggleDarkMode = { themeViewModel.toggleDarkMode() },
                 onLanguageClick = { showLanguageSheet = true }
             )
-
-            clipboardDetectedUrl?.let { url ->
-                if (urlInput.isEmpty()) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 0.dp)
-                            .shadow(
-                                elevation = 6.dp,
-                                shape = RoundedCornerShape(16.dp),
-                                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                            ),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.ContentPaste,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                "Link detected",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = {
-                                viewModel.onPasteClicked(url)
-                                clipboardDetectedUrl = null
-                            }) {
-                                Text(
-                                    "USE",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    letterSpacing = 1.sp
-                                )
-                            }
-                            IconButton(onClick = { clipboardDetectedUrl = null }, modifier = Modifier.size(40.dp)) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = stringResource(R.string.content_desc_dismiss),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
 
             OtterCard(modifier = Modifier.fillMaxWidth()) {
                 Column(

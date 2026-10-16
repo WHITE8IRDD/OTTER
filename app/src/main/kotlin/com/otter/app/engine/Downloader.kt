@@ -82,7 +82,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             fun matches(vararg domains: String) = domains.any { MediaUrlNormalizer.hostMatches(url, it) }
             return when {
                 matches("youtube.com", "youtu.be", "youtube-nocookie.com") -> Platform.YOUTUBE
-                matches("tiktok.com") -> Platform.TIKTOK
+                matches("tiktok.com", "tiktokv.com") -> Platform.TIKTOK
                 matches("facebook.com", "fb.watch", "fb.com") -> Platform.FACEBOOK
                 matches("instagram.com", "instagr.am") -> Platform.INSTAGRAM
                 matches("twitter.com", "x.com", "t.co") -> Platform.TWITTER
@@ -139,8 +139,10 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
             when (platform) {
                 Platform.TIKTOK -> {
-                    request.addOption("--extractor-args", "tiktok:app_info=7355728856979392262")
-                    request.addOption("--add-header", "Referer:https://www.tiktok.com")
+                    // Match the public web extractor used by FormatParser. A hard-coded
+                    // mobile IID made metadata and downloads use different format lists.
+                    request.addOption("--user-agent", MediaUrlNormalizer.TIKTOK_USER_AGENT)
+                    request.addOption("--add-header", "Referer:https://www.tiktok.com/")
                     request.addOption("--extractor-retries", "5")
                 }
                 Platform.FACEBOOK -> {
@@ -413,7 +415,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         }
     }
 
-    private fun addCookies(request: YoutubeDLRequest) {
+    private fun addCookies(request: YoutubeDLRequest, url: String) {
+        if (!MediaUrlNormalizer.shouldUseOptionalCookies(url)) return
         val cookieFile = File(context.filesDir, "cookies.txt")
         if (cookieFile.exists() && cookieFile.length() > 0) {
             request.addOption("--cookies", cookieFile.absolutePath)
@@ -490,7 +493,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
-                    addCookies(this)
+                    addCookies(this, url)
                     addOption("-f", localFormatId)
                     addOption("-P", workingDir.absolutePath)
                     addOption("-o", OUTPUT_TEMPLATE_DEFAULT)
@@ -628,7 +631,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             }
 
             val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
-                addCookies(this)
+                addCookies(this, url)
                 addOption("--skip-download")
                 addOption("--write-thumbnail")
                 addOption("--convert-thumbnails", "jpg")
@@ -706,7 +709,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 val workingDir = if (writesDirectly) outputFile else getWorkingDir()
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
-                    addCookies(this)
+                    addCookies(this, url)
                     addOption("--no-mtime")
                     addOption("-f", localFormatId)
                     addOption("--merge-output-format", "mp4")
@@ -853,7 +856,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             if (!outputFile.exists()) outputFile.mkdirs()
 
             val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
-                addCookies(this)
+                addCookies(this, url)
                 addOption("-f", formatId)
                 addOption("--merge-output-format", "mp4")
                 addOption("--audio-quality", "0")

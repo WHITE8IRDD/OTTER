@@ -16,11 +16,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import com.otter.app.data.cookies.CookieManager as AppCookieManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -28,7 +29,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 
 /**
@@ -172,6 +173,13 @@ class InstagramImageScraper(private val context: Context) {
 """
     }
 
+    private data class FetchRequest(
+        val label: String,
+        val url: String,
+        val userAgent: String,
+        val headers: Map<String, String> = emptyMap()
+    )
+
     data class ScrapeResult(
         /** Photo slides, in payload order. */
         val imageUrls: List<String>,
@@ -212,9 +220,6 @@ class InstagramImageScraper(private val context: Context) {
             postUrl
         }
         val mediaId = InstagramMediaParser.mediaIdFromShortcode(shortcode)
-        val cookies = loadCookiesForDomain("instagram.com")
-        val csrf = extractCookieValue(cookies, "csrftoken")
-
         val merged = LinkedHashMap<String, String>()
         val mergedVideos = LinkedHashMap<String, String>()
         val mergedPosters = LinkedHashMap<String, String>()
@@ -263,61 +268,58 @@ class InstagramImageScraper(private val context: Context) {
             "Referer" to "https://www.instagram.com/",
             "X-Requested-With" to "XMLHttpRequest"
         )
-        if (csrf.isNotEmpty()) apiHeaders["X-CSRFToken"] = csrf
         val apiUrl = if (mediaId > 0) "https://www.instagram.com/api/v1/media/$mediaId/info/" else null
         val embedUrl = if (shortcode.isNotEmpty()) {
             "https://www.instagram.com/p/$shortcode/embed/captioned/"
         } else null
 
         // 1-3. Post page (desktop + mobile) and the public web API.
+        // Read responses as they arrive: a complete API payload should not wait for a
+        // slower browser-UA page request to hit its timeout.
         if (!complete()) {
-            var page: String? = null
-            var mobile: String? = null
-            var api: String? = null
-            coroutineScope {
-                val pageJob = async(Dispatchers.IO) { fetchText(canonical, cookies, DESKTOP_UA) }
-                val mobileJob = async(Dispatchers.IO) { fetchText(canonical, cookies, MOBILE_UA) }
-                val apiJob = apiUrl?.let { url ->
-                    async(Dispatchers.IO) { fetchText(url, cookies, MOBILE_UA, apiHeaders) }
-                }
-                page = pageJob.await()
-                mobile = mobileJob.await()
-                api = apiJob?.await()
+            val firstRound = buildList {
+                add(FetchRequest("page", canonical, DESKTOP_UA))
+                add(FetchRequest("page-mobile", canonical, MOBILE_UA))
+                apiUrl?.let { add(FetchRequest("web-api", it, MOBILE_UA, apiHeaders)) }
             }
-            if (page != null) {
-                val parsed = InstagramMediaParser.parseHtml(page, canonical)
-                absorb(parsed, "page")
-                if (parsed.imageUrls.isEmpty() && parsed.videoUrls.isEmpty() &&
-                    InstagramMediaParser.looksLikeLoginWall(page)
-                ) {
-                    note = "Instagram showed a login wall"
+            fetchInParallel(firstRound, shouldStop = { complete() }) { label, body ->
+                if (body == null) {
+                    sources += "$label(http-error)"
+                } else {
+                    val parsed = if (label == "web-api") {
+                        InstagramMediaParser.parseJson(body)
+                    } else {
+                        InstagramMediaParser.parseHtml(body, canonical)
+                    }
+                    absorb(parsed, label)
+                    if (label == "page" && parsed.imageUrls.isEmpty() &&
+                        parsed.videoUrls.isEmpty() && InstagramMediaParser.looksLikeLoginWall(body)
+                    ) {
+                        note = "Instagram showed a login wall"
+                    }
                 }
-            } else {
-                sources += "page(http-error)"
             }
-            if (mobile != null) absorb(InstagramMediaParser.parseHtml(mobile, canonical), "page-mobile")
-            if (api != null) absorb(InstagramMediaParser.parseJson(api), "web-api")
         }
 
-        // 4-5. Embed page and the legacy `?__a=1` JSON. Merging costs one more
-        // parallel round and is worth it whenever the first round left the post
-        // unfinished or found a single slide: Instagram regularly splits a post
-        // across several payloads.
-        if ((!complete() || total() < 2) && budgetLeft()) {
-            var embed: String? = null
-            var legacy: String? = null
-            coroutineScope {
-                val embedJob = embedUrl?.let { url ->
-                    async(Dispatchers.IO) { fetchText(url, cookies, DESKTOP_UA) }
-                }
-                val legacyJob = async(Dispatchers.IO) {
-                    fetchText("$canonical?__a=1&__d=dis", cookies, MOBILE_UA)
-                }
-                embed = embedJob?.await()
-                legacy = legacyJob.await()
+        // 4-5. Embed page and legacy JSON, in parallel, only if the first round did
+        // not yield a complete post (or a carousel with at least two slides).
+        if (!complete() && budgetLeft()) {
+            val secondRound = buildList {
+                embedUrl?.let { add(FetchRequest("embed", it, DESKTOP_UA)) }
+                add(FetchRequest("a1", "$canonical?__a=1&__d=dis", MOBILE_UA))
             }
-            if (embed != null) absorb(InstagramMediaParser.parseHtml(embed, canonical), "embed")
-            if (legacy != null) absorb(InstagramMediaParser.parseJson(legacy), "a1")
+            fetchInParallel(secondRound, shouldStop = { complete() }) { label, body ->
+                if (body == null) {
+                    sources += "$label(http-error)"
+                } else {
+                    val parsed = if (label == "a1") {
+                        InstagramMediaParser.parseJson(body)
+                    } else {
+                        InstagramMediaParser.parseHtml(body, canonical)
+                    }
+                    absorb(parsed, label)
+                }
+            }
         }
 
 
@@ -365,46 +367,88 @@ class InstagramImageScraper(private val context: Context) {
         )
     }
 
-    private fun fetchText(
+    /** Consume completed endpoint responses as soon as they arrive and cancel the rest once enough is known. */
+    private suspend fun fetchInParallel(
+        requests: List<FetchRequest>,
+        shouldStop: () -> Boolean,
+        onResponse: (String, String?) -> Unit
+    ) = coroutineScope {
+        if (requests.isEmpty()) return@coroutineScope
+        val responses = Channel<Pair<String, String?>>(capacity = requests.size)
+        val jobs = requests.map { request ->
+            launch(Dispatchers.IO) {
+                val body = try {
+                    fetchText(request.url, request.userAgent, request.headers)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "${request.label} request failed: ${e.message}")
+                    null
+                }
+                responses.send(request.label to body)
+            }
+        }
+
+        try {
+            var remaining = jobs.size
+            while (remaining > 0 && !shouldStop()) {
+                val (label, body) = responses.receive()
+                remaining--
+                onResponse(label, body)
+            }
+        } finally {
+            jobs.forEach { it.cancel() }
+            responses.close()
+        }
+    }
+
+    private suspend fun fetchText(
         url: String,
-        cookies: String,
         userAgent: String,
         extraHeaders: Map<String, String> = emptyMap()
-    ): String? {
-        val connection = try {
-            URL(url).openConnection() as HttpURLConnection
-        } catch (e: Exception) {
-            Log.w(TAG, "Bad URL $url: ${e.message}")
-            return null
+    ): String? = suspendCancellableCoroutine { continuation ->
+        val activeConnection = AtomicReference<HttpURLConnection?>(null)
+        val requestJob = CoroutineScope(Dispatchers.IO).launch {
+            var connection: HttpURLConnection? = null
+            try {
+                val openedConnection = URL(url).openConnection() as HttpURLConnection
+                connection = openedConnection
+                activeConnection.set(openedConnection)
+                if (!continuation.isActive) return@launch
+
+                openedConnection.apply {
+                    setRequestProperty("User-Agent", userAgent)
+                    setRequestProperty(
+                        "Accept",
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    )
+                    setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                    extraHeaders.forEach { (key, value) -> setRequestProperty(key, value) }
+                    instanceFollowRedirects = true
+                    connectTimeout = HTTP_TIMEOUT_MS
+                    readTimeout = HTTP_TIMEOUT_MS
+                }
+                val code = openedConnection.responseCode
+                if (code !in 200..299) {
+                    Log.i(TAG, "GET $url -> $code")
+                    if (continuation.isActive) continuation.resume(null)
+                } else {
+                    val body = BufferedReader(InputStreamReader(openedConnection.inputStream, Charsets.UTF_8)).use { it.readText() }
+                    if (continuation.isActive) continuation.resume(body)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "GET $url failed: ${e.message}")
+                if (continuation.isActive) continuation.resume(null)
+            } finally {
+                connection?.disconnect()
+                activeConnection.set(null)
+            }
         }
-        return try {
-            connection.apply {
-                setRequestProperty("User-Agent", userAgent)
-                setRequestProperty(
-                    "Accept",
-                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                )
-                setRequestProperty("Accept-Language", "en-US,en;q=0.9")
-                if (cookies.isNotEmpty()) setRequestProperty("Cookie", cookies)
-                extraHeaders.forEach { (key, value) -> setRequestProperty(key, value) }
-                instanceFollowRedirects = true
-                connectTimeout = HTTP_TIMEOUT_MS
-                readTimeout = HTTP_TIMEOUT_MS
-            }
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                Log.i(TAG, "GET $url -> $code")
-                null
-            } else {
-                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "GET $url failed: ${e.message}")
-            null
-        } finally {
-            connection.disconnect()
+        continuation.invokeOnCancellation {
+            activeConnection.getAndSet(null)?.disconnect()
+            requestJob.cancel()
         }
     }
 
@@ -438,8 +482,9 @@ class InstagramImageScraper(private val context: Context) {
                             settings.userAgentString = MOBILE_UA
                             alpha = 0.01f
 
-                            CookieManager.getInstance().setAcceptCookie(true)
-                            injectWebViewCookies()
+                            // This scraper only handles public posts. Do not reuse a
+                            // WebView login session while probing the logged-out page.
+                            CookieManager.getInstance().setAcceptCookie(false)
 
                             addJavascriptInterface(object {
                                 @JavascriptInterface
@@ -497,6 +542,7 @@ class InstagramImageScraper(private val context: Context) {
                     (wv.parent as? ViewGroup)?.removeView(wv)
                     wv.destroy()
                 }
+                CookieManager.getInstance().setAcceptCookie(true)
                 Log.i(TAG, "WebView cleaned up")
             }
             result
@@ -532,61 +578,6 @@ class InstagramImageScraper(private val context: Context) {
             }
         }
         return images to videos
-    }
-
-    private fun injectWebViewCookies() {
-        try {
-            val content = AppCookieManager(context).load() ?: return
-            val manager = CookieManager.getInstance()
-            val domain = "https://www.instagram.com"
-            var count = 0
-            for (line in content.lines()) {
-                val trimmed = line.trim()
-                if (trimmed.startsWith("#") || trimmed.isEmpty()) continue
-                val parts = trimmed.split("\t")
-                if (parts.size >= 7) {
-                    val name = parts[5]
-                    val value = parts.getOrElse(6) { "" }
-                    if (name.isNotEmpty()) {
-                        manager.setCookie(domain, "$name=$value; Domain=${parts[0]}; Path=${parts[2]}")
-                        count++
-                    }
-                }
-            }
-            manager.flush()
-            Log.i(TAG, "Injected $count cookies into WebView")
-        } catch (e: Exception) {
-            Log.w(TAG, "Cookie injection failed: ${e.message}")
-        }
-    }
-
-    private fun extractCookieValue(cookies: String, name: String): String {
-        val pattern = Regex("""(?:^|;\s*)${Regex.escape(name)}=([^;]+)""")
-        return pattern.find(cookies)?.groupValues?.getOrNull(1) ?: ""
-    }
-
-    private fun loadCookiesForDomain(domain: String): String {
-        return try {
-            val content = AppCookieManager(context).load() ?: return ""
-            val pairs = mutableListOf<String>()
-            for (line in content.lines()) {
-                val trimmed = line.trim()
-                if (trimmed.startsWith("#") || trimmed.isEmpty()) continue
-                val parts = trimmed.split("\t")
-                if (parts.size >= 7) {
-                    val cookieDomain = parts[0].lowercase(Locale.ROOT)
-                    if (cookieDomain.endsWith(domain) || cookieDomain == ".$domain") {
-                        val name = parts[5]
-                        val value = parts.getOrElse(6) { "" }
-                        if (name.isNotEmpty()) pairs.add("$name=$value")
-                    }
-                }
-            }
-            pairs.joinToString("; ")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to load cookies: ${e.message}")
-            ""
-        }
     }
 
     fun canExtract(url: String): Boolean =
