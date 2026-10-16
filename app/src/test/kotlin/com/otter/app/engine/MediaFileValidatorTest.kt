@@ -54,8 +54,13 @@ class MediaFileValidatorTest {
             MediaFileValidator.Kind.VIDEO
         )
 
-        assertTrue("120 bytes cannot be a video: ${(outcome as MediaFileValidator.Outcome.Invalid).reason}")
-        assertTrue(outcome.reason.contains("bytes"))
+        assertTrue(
+            "120 bytes cannot be a video",
+            outcome is MediaFileValidator.Outcome.Invalid
+        )
+        assertTrue(
+            (outcome as MediaFileValidator.Outcome.Invalid).reason.contains("bytes")
+        )
     }
 
     @Test
