@@ -105,6 +105,15 @@ class FormatParser(private val context: Context? = null) {
                     request.addOption("--add-header", "Referer:https://www.snapchat.com")
                     Log.i(TAG, "[PLATFORM-FLAGS] Snapchat detected, applying user-agent + referer")
                 }
+                hostMatches("youtube.com", "youtu.be", "youtube-nocookie.com") -> {
+                    // YouTube's web client now serves SABR-only streams (no plain CDN URL) for
+                    // many regular/long videos, which yt-dlp cannot download. Exclude the
+                    // client that is being killed (android_sdkless) and keep the rest of the
+                    // default chain so a plain HTTPS format is still offered. Shorts are
+                    // unaffected (single muxed stream) but the same arg is harmless there.
+                    request.addOption("--extractor-args", "youtube:player_client=default,-android_sdkless")
+                    Log.i(TAG, "[PLATFORM-FLAGS] YouTube detected, excluding broken android_sdkless client (SABR/403 workaround)")
+                }
             }
         }
 

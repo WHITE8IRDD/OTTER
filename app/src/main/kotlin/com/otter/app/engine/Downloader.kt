@@ -177,6 +177,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 Platform.YOUTUBE -> {
                     // Let yt-dlp use its current client headers (important for Shorts and EJS challenges).
                     request.addOption("--extractor-retries", "5")
+                    // Work around YouTube's SABR-only web client for regular/long videos: the
+                    // android_sdkless client is being killed and returns 403/no URL, so drop it
+                    // from the default chain and keep the clients that still hand out plain
+                    // HTTPS streams. Shorts are unaffected (single muxed stream).
+                    request.addOption("--extractor-args", "youtube:player_client=default,-android_sdkless")
                 }
                 else -> {}
             }
@@ -619,6 +624,12 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 // expired format list, and reusing it is what just failed.
                 if (usedCachedExtraction && youtubeVideoId.isNotEmpty()) {
                     YoutubeInfoCache.invalidate(YoutubeInfoCache.file(context, youtubeVideoId))
+                    // A failure that came from a stale cached extraction (which can look permanent,
+                    // e.g. "requested format is not available") must not end the download: drop the
+                    // cache and re-extract on the next attempt instead.
+                    Log.w(TAG, "[DL] cached extraction failed, re-extracting on next attempt")
+                    cleanup()
+                    continue
                 }
 
                 val decision = DownloadRetryPolicy.decide(
@@ -898,6 +909,9 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                 if (usedCachedExtraction && youtubeVideoId.isNotEmpty()) {
                     YoutubeInfoCache.invalidate(YoutubeInfoCache.file(context, youtubeVideoId))
+                    Log.w(TAG, "[DL] cached extraction failed, re-extracting on next attempt")
+                    cleanup()
+                    continue
                 }
 
                 when (
