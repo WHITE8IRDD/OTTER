@@ -47,6 +47,9 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon --stacktrace :app:assembleDebug 2>&1 | tee build/assemble.log
 
+      # The excerpt is published as check annotations (and to the step summary) on purpose: runner
+      # logs and artifacts are not always reachable from outside the web UI, and a red tick with no
+      # readable reason costs a whole round trip to fix.
       - name: Report what broke
         if: failure()
         run: |
@@ -55,9 +58,14 @@ jobs:
             echo
             echo '```'
             grep -hE '^e: |FAILED|expected:|Caused by:|error:|Unresolved reference|Execution failed' \
-              build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 100
+              build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 60
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          grep -hE '^e: |FAILED|expected:|Caused by:|error:|Unresolved reference|Execution failed' \
+            build/unit-tests.log build/assemble.log 2>/dev/null | tail -n 12 |
+            while IFS= read -r line; do
+              printf '::error::%s\n' "${line//%/%25}"
+            done
 
       - name: Upload build logs
         if: always()

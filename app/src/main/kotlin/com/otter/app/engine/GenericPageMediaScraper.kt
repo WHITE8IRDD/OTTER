@@ -71,7 +71,12 @@ object GenericPageMediaParser {
             if (MediaClassifier.isDecorative(resolved)) return
             if (!MediaClassifier.isDirectlyDownloadable(resolved) && !MediaClassifier.isManifestUrl(resolved)) return
             if (videoKeys.add(MediaClassifier.identityOf(resolved)) && videos.size < MAX_VIDEOS) {
-                videos[resolved] = poster.ifBlank { pagePoster.orEmpty() }
+                // Resolved like the media URL itself: a page may name its poster "/p.jpg", and a
+                // relative poster handed to the image loader is a card that never fills in.
+                val resolvedPoster = poster.takeIf { it.isNotBlank() }
+                    ?.let { resolveHttpUrl(pageUrl, it) }
+                    .orEmpty()
+                videos[resolved] = resolvedPoster.ifBlank { pagePoster.orEmpty() }
             }
             if (declared) videoSignals = true
         }
