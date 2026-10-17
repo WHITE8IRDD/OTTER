@@ -54,6 +54,7 @@ class YtDlpUpdater(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Update failed", e)
             UpdateResult.Failed(e.message ?: context.getString(R.string.update_unknown_error))
         }
@@ -74,7 +75,7 @@ class YtDlpUpdater(private val context: Context) {
 
     fun getVersion(): String {
         return try {
-            YoutubeDL.getInstance().version(context) ?: "Unknown"
+            YoutubeDL.getInstance().version(context) ?: com.otter.app.BuildConfig.BUNDLED_YTDLP_VERSION
         } catch (e: Exception) {
             "Unknown"
         }

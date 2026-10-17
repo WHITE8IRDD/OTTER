@@ -9,11 +9,7 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-/**
- * Release signing password: the CI secret when one is set, otherwise the password this
- * repository's committed key was generated with, so a plain clone still builds a signed release.
- * A set-but-empty variable must not win over the fallback.
- */
+/** Keep the established signing identity; CI restores the existing private key from its secret. */
 val keystorePassword: String
     get() = System.getenv("OTTER_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "otter123"
 
@@ -24,8 +20,7 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("../../release.keystore")
-            // The CI secret is the real source; the fallback is the password this repository's key
-            // was created with, so a plain clone still produces an installable release build.
+            // The keystore is supplied externally. Never generate a replacement key for release.
             storePassword = keystorePassword
             keyAlias = "otter"
             keyPassword = keystorePassword

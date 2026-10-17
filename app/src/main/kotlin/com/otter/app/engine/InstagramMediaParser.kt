@@ -303,7 +303,7 @@ object InstagramMediaParser {
                     if (isMediaNode(node)) {
                         if (listOf("code", "shortcode").any { node.optString(it) == shortcode && shortcode.isNotEmpty() }) return node
                         // API items are authoritative; don't walk into their renditions or owner.
-                        if (fallback == null) fallback = node
+                        if (fallback == null && node === root) fallback = node
                         continue
                     }
                     node.optJSONArray("items")?.optJSONObject(0)?.let {
@@ -355,7 +355,8 @@ object InstagramMediaParser {
         }
         for (field in listOf("video_url", "playback_url", "url")) {
             val value = node.optString(field, "")
-            if (value.isNotEmpty() && hasVideoExtension(value)) {
+            if (value.isNotEmpty() && (hasVideoExtension(value) ||
+                    (field != "url" && !hasImageExtension(value) && !MediaClassifier.isManifestUrl(value)))) {
                 normalizeUrl(value)?.let { return it }
             }
         }

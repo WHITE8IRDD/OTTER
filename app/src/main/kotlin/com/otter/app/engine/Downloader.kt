@@ -1009,7 +1009,18 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val safeBase = sanitizeBaseName(baseName)
         val savedByIndex = ConcurrentHashMap<Int, String>()
         val failedCount = java.util.concurrent.atomic.AtomicInteger(0)
-        val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val progressLock = Any()
+        val fractions = FloatArray(items.size)
+        var lastBatchEmit = 0L
+        fun report(index: Int, fraction: Float, finished: Boolean = false) = synchronized(progressLock) {
+            fractions[index] = maxOf(fractions[index], fraction)
+            val now = System.nanoTime()
+            if (finished || now - lastBatchEmit > 150_000_000L) {
+                lastBatchEmit = now
+                onProgress(DownloadState.Downloading(fractions.sum() / items.size, phase = DownloadPhase.DOWNLOADING))
+            }
+        }
+        onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
         val firstFailure = java.util.concurrent.atomic.AtomicReference<String>("")
         val semaphore = Semaphore(minOf(4, items.size))
 
@@ -1023,7 +1034,10 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                             baseName = safeBase,
                             outputDir = directory,
                             refererUrl = refererUrl,
-                            isVideo = slide.isVideo
+                            isVideo = slide.isVideo,
+                            onBytes = { received, expected ->
+                                if (expected > 0) report(index, (received.toFloat() / expected).coerceAtMost(0.99f))
+                            }
                         )
                         savedByIndex[index] = path
                     } catch (e: CancellationException) {
@@ -1033,13 +1047,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         failedCount.incrementAndGet()
                         firstFailure.compareAndSet("", describeSlideFailure(e, slide))
                     } finally {
-                        val completed = completedCount.incrementAndGet()
-                        onProgress(
-                            DownloadState.Downloading(
-                                progress = completed.toFloat() / items.size.toFloat(),
-                                phase = DownloadPhase.DOWNLOADING
-                            )
-                        )
+                        report(index, 1f, finished = true)
                     }
                 }
             }
@@ -1081,7 +1089,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         baseName: String,
         outputDir: File,
         refererUrl: String?,
-        isVideo: Boolean
+        isVideo: Boolean,
+        onBytes: (Long, Long) -> Unit
     ): String {
         val transferContext = currentCoroutineContext()
         val sourceUrl = URL(mediaUrl)
@@ -1122,7 +1131,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 MediaTransfer.copyResponse(
                     httpConnection, partialFile,
                     if (isVideo) MediaFileValidator.Kind.VIDEO else MediaFileValidator.Kind.IMAGE,
-                    checkCancelled = { transferContext.ensureActive() }
+                    checkCancelled = { transferContext.ensureActive() },
+                    onBytes = onBytes
                 )
                 if (isVideo) requireVideoTrack(partialFile)
 
@@ -1193,6 +1203,9 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         file: File,
         isVideo: Boolean
     ): String {
+        MediaFileValidator.containerOf(file)?.let { detected ->
+            MediaFileValidator.extensionFor(detected)?.let { return it }
+        }
         if (!isVideo) return imageExtension(contentType, sourceUrl, file)
         val mimeExtension = when (contentType.substringBefore(';').lowercase(java.util.Locale.ROOT)) {
             "video/mp4" -> "mp4"

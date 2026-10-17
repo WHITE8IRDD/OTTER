@@ -27,8 +27,9 @@ object EngineRuntime {
         // fresh install. Preserve newer user-installed stable/nightly versions.
         val installed = engine.version(app).orEmpty()
         val date = installed.removePrefix("v").take(10)
-        if (prefs.getString("baseline", "") != baseline && (date.isBlank() || date < baseline)) {
-            val dir = File(File(app.noBackupFilesDir, YoutubeDL.baseName), YoutubeDL.ytdlpDirName)
+        val dir = File(File(app.noBackupFilesDir, YoutubeDL.baseName), YoutubeDL.ytdlpDirName)
+        if (!File(dir, YoutubeDL.ytdlpBin).isFile ||
+            (prefs.getString("baseline", "") != baseline && (date.isBlank() || date < baseline))) {
             check(dir.isDirectory || dir.mkdirs()) { "Cannot create engine directory" }
             val temporary = File(dir, "yt-dlp.new")
             try {
