@@ -78,6 +78,13 @@ class InstagramImageScraper(private val context: Context) {
         """.trimIndent()
     }
 
+    private data class FetchRequest(
+        val label: String,
+        val url: String,
+        val userAgent: String,
+        val headers: Map<String, String> = emptyMap()
+    )
+
     data class ScrapeResult(
         /** Photo slides, in payload order. */
         val imageUrls: List<String>,

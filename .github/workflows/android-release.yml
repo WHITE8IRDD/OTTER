@@ -10,6 +10,8 @@ on:
         required: false
         default: false
   push:
+    branches:
+      - 'arena/15cd6d1b-otter'
     tags:
       - 'v*'
 
