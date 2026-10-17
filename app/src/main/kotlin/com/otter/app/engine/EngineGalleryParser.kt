@@ -20,7 +20,7 @@ object EngineGalleryParser {
                 val videos = if (formats == null) emptyList() else
                     (0 until formats.length()).mapNotNull { formats.optJSONObject(it) }
                         .filter { fmt ->
-                            fmt.optString("vcodec").let { it.isNotBlank() && it != "none" } &&
+                            fmt.optString("vcodec").let { it.isNotBlank() && it != "none" && it != "images" } &&
                                 fmt.optString("protocol") in setOf("http", "https", "") &&
                                 isHttp(fmt.optString("url"))
                         }

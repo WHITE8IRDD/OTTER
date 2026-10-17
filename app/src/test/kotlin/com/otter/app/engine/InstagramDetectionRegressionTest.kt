@@ -72,6 +72,13 @@ class InstagramDetectionRegressionTest {
         assertEquals(0, result.mediaCount)
     }
 
+    @Test fun engineStoryboardsAreNotVideoItems() {
+        val gallery = EngineGalleryParser.parse(JSONObject("""{"entries":[{
+            "formats":[{"vcodec":"images","url":"${cdn}storyboard.jpg","protocol":"https"}]
+        }]}"""))
+        assertTrue(gallery.slides.isEmpty())
+    }
+
     @Test fun lookalikeCdnHostIsRejected() {
         assertNull(InstagramMediaParser.normalizeUrl("https://evilcdninstagram.com/a.jpg"))
     }

@@ -16,28 +16,38 @@ import org.junit.runner.RunWith
 class MediaPickerDeviceTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun show(items: List<CarouselItem>, onToggle: (Int) -> Unit = {}) {
+    private fun show(items: List<CarouselItem>, onDismiss: () -> Unit = {}, onToggle: (Int) -> Unit = {}) {
         compose.setContent {
             MaterialTheme {
                 QuickDownloadWindow(
                     QuickDownloadUiState.Ready("Synthetic post", "Instagram", items, items.indices.toSet(), false, items.size, false),
-                    onToggle, {}, {}, {}, {}, {}, {}
+                    onToggle, {}, {}, {}, {}, {}, onDismiss
                 )
             }
         }
     }
 
     @Test fun mixedPostHasTwoSectionsAndDownloadAction() {
-        show(listOf(CarouselItem("", true), CarouselItem("", false)))
-        compose.onNodeWithText("Pictures (1)").assertExists()
-        compose.onNodeWithText("Videos (1)").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Download Selected (2)").assertIsDisplayed().assertIsEnabled()
+        show(listOf(CarouselItem("", false), CarouselItem("", true), CarouselItem("", false), CarouselItem("", true), CarouselItem("", false)))
+        compose.onNodeWithText("Pictures (3)").assertExists()
+        compose.onNodeWithTag("quick-media-grid").performScrollToNode(hasText("Videos (2)"))
+        compose.onNodeWithText("Videos (2)").assertIsDisplayed()
+        compose.onNodeWithText("Download Selected (5)").assertIsDisplayed().assertIsEnabled()
     }
 
     @Test fun picturesOnlyDoesNotShowEmptyVideosSection() {
         show(listOf(CarouselItem("", false)))
         compose.onNodeWithText("Pictures (1)").assertIsDisplayed()
         compose.onNodeWithText("Videos (0)").assertDoesNotExist()
+    }
+
+    @Test fun tappingInsideCardDoesNotDismissButBackdropDoes() {
+        var dismissed = 0
+        show(listOf(CarouselItem("", false)), onDismiss = { dismissed++ })
+        compose.onNodeWithText("Synthetic post").performTouchInput { click() }
+        compose.runOnIdle { assertEquals(0, dismissed) }
+        compose.onNodeWithTag("quick-download-backdrop").performTouchInput { click(androidx.compose.ui.geometry.Offset(4f, 4f)) }
+        compose.runOnIdle { assertEquals(1, dismissed) }
     }
 
     @Test fun groupingKeepsOriginalSlideIndexWhenToggling() {

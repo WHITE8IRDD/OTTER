@@ -69,6 +69,8 @@ jobs:
           done
           cp app/build/outputs/bundle/release/app-release.aab build-artifacts/OTTER-28-release.aab
           (cd build-artifacts && sha256sum *.apk *.aab > SHA256SUMS.txt)
+          HASH=$(sha256sum "build-artifacts/Outter 28.apk" | cut -d' ' -f1)
+          echo "::notice title=Signed universal APK SHA-256::$HASH"
       - uses: actions/upload-artifact@v7
         with:
           name: Outter-28-signed-candidate

@@ -41,6 +41,11 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest 2>&1 | tee build/unit-tests.log
 
+      - name: Report unit test totals
+        run: |
+          python3 .github/scripts/report_tests.py app/build/test-results/testDebugUnitTest
+          python3 .github/scripts/test_release_evidence.py
+
       - name: Build debug APKs
         run: |
           mkdir -p build
@@ -142,6 +147,8 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.otter.app.engine
+      - name: Report device test totals
+        run: python3 .github/scripts/report_tests.py app/build/outputs/androidTest-results
       - name: Report device failures
         if: failure()
         run: |

@@ -3,6 +3,7 @@ package com.otter.app.share
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -79,24 +82,24 @@ fun QuickDownloadWindow(
     val scrimInteraction = androidx.compose.runtime.remember {
         androidx.compose.foundation.interaction.MutableInteractionSource()
     }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            // The dimmed backdrop is part of the window: tapping outside cancels it,
-            // and the user lands exactly where they were.
-            .background(Color.Black.copy(alpha = 0.45f))
-            .clickable(
-                indication = null,
-                interactionSource = scrimInteraction
-            ) { onDismiss() }
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Keep the backdrop separate: a clickable ancestor merged the whole window's
+        // labels into its dismiss action and could dismiss taps inside the card.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .testTag("quick-download-backdrop")
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable(indication = null, interactionSource = scrimInteraction) { onDismiss() }
+        )
         Card(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxWidth()
                 .padding(16.dp)
                 // A dialog, not a page: bounded height, the file list scrolls inside it.
-                .heightIn(max = 580.dp),
+                .heightIn(max = 580.dp)
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) },
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -346,6 +349,7 @@ private fun ReadyBody(
                 .fillMaxWidth()
                 .weight(1f, fill = false)
                 .heightIn(max = 300.dp)
+                .testTag("quick-media-grid")
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
