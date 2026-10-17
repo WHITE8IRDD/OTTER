@@ -10,6 +10,8 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
@@ -144,8 +146,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 Platform.TIKTOK -> {
                     // Match the public web extractor used by FormatParser. A hard-coded
                     // mobile IID made metadata and downloads use different format lists.
-                    request.addOption("--user-agent", MediaUrlNormalizer.TIKTOK_USER_AGENT)
-                    request.addOption("--add-header", "Referer:https://www.tiktok.com/")
+                    PlatformExtractionPolicy.options(url).forEach { (flag, value) -> request.addOption(flag, value) }
                     request.addOption("--extractor-retries", "5")
                 }
                 Platform.FACEBOOK -> {
@@ -177,11 +178,6 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 Platform.YOUTUBE -> {
                     // Let yt-dlp use its current client headers (important for Shorts and EJS challenges).
                     request.addOption("--extractor-retries", "5")
-                    // Work around YouTube's SABR-only web client for regular/long videos: the
-                    // android_sdkless client is being killed and returns 403/no URL, so drop it
-                    // from the default chain and keep the clients that still hand out plain
-                    // HTTPS streams. Shorts are unaffected (single muxed stream).
-                    request.addOption("--extractor-args", "youtube:player_client=default,-android_sdkless")
                     // A merged video+audio of a long-form video or a Short lands in MP4 (a
                     // remux, never a re-encode) instead of MKV, which every Android gallery
                     // and player opens. Same reasoning as YTDLnis' "compatible" output mode.
@@ -443,6 +439,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         title: String = ""
     ) = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
+        FormatParser.ensureEngineReady(context)
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -526,7 +523,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
-                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                EngineRuntime.execute(request, processId) { progress, etaInSeconds, line ->
                     val now = System.currentTimeMillis()
                     if (now - lastEmitTime < emitIntervalMs) return@execute
                     lastEmitTime = now
@@ -569,14 +566,15 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
                 if (downloadedFile != null) {
                     val expectedKind = when {
-                        settings.extractAudio || currentFormatId.contains("audio") ||
-                            localFormatId.contains("audio") || localFormatId.startsWith("bestaudio") ->
+                        settings.extractAudio || localFormatId.startsWith("bestaudio") ->
                             MediaFileValidator.Kind.AUDIO
                         else -> MediaFileValidator.Kind.VIDEO
                     }
                     when (val check = MediaFileValidator.validate(File(downloadedFile), expectedKind)) {
-                        is MediaFileValidator.Outcome.Valid ->
+                        is MediaFileValidator.Outcome.Valid -> {
+                            if (expectedKind == MediaFileValidator.Kind.VIDEO) requireVideoTrack(File(downloadedFile))
                             Log.i(TAG, "download VALIDATED ${check.container} ${check.sizeBytes}B")
+                        }
                         is MediaFileValidator.Outcome.Invalid -> {
                             // A file that is not what was asked for is a failure, not a success with
                             // a bad name: reporting it here is the difference between "downloaded" and
@@ -596,6 +594,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     copySubtitleFiles(workingDir.absolutePath, outputDir, subtitleLangs)
                 }
                 if (downloadedFile != null) {
+                    if (!settings.extractAudio && !localFormatId.startsWith("bestaudio")) requireVideoTrack(File(downloadedFile))
                     val fileSize = File(downloadedFile).length()
                     Log.i(TAG, "download VERIFIED file=$downloadedFile size=${fileSize} bytes")
                     val externalPath = if (writesDirectly) {
@@ -721,7 +720,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
             onProgress(DownloadState.Downloading(0.5f, phase = DownloadPhase.DOWNLOADING))
 
-            YoutubeDL.getInstance().execute(request, processId) { _, _, _ -> }
+            EngineRuntime.execute(request, processId) { _, _, _ -> }
 
             activeDownloads.remove(url)
 
@@ -752,6 +751,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         title: String = ""
     ) = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
+        FormatParser.ensureEngineReady(context)
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -823,7 +823,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
-                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                EngineRuntime.execute(request, processId) { progress, etaInSeconds, line ->
                     val now = System.currentTimeMillis()
                     if (now - lastEmitTime < emitIntervalMs) return@execute
                     lastEmitTime = now
@@ -878,6 +878,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         onProgress(DownloadState.Error(context.getString(R.string.download_file_invalid, check.reason)))
                         return@withContext
                     }
+                    if (!settings.extractAudio && !localFormatId.startsWith("bestaudio")) requireVideoTrack(File(downloadedFile))
                     val fileSize = File(downloadedFile).length()
                     Log.i(TAG, "downloadWithThumbnail VERIFIED ${(check as MediaFileValidator.Outcome.Valid).container} size=${fileSize} bytes")
                     val externalPath = if (writesDirectly) {
@@ -993,7 +994,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val items = slides
             .map { MediaSlide(it.url.trim(), it.isVideo) }
             .filter { it.url.isNotBlank() }
-            .distinctBy { it.url }
+            .distinctBy { MediaClassifier.identityOf(it.url) }
         if (items.isEmpty()) {
             onProgress(DownloadState.Error(context.getString(R.string.failed_all_images)))
             return@withContext ImageDownloadSummary(emptyList(), 0)
@@ -1082,6 +1083,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         refererUrl: String?,
         isVideo: Boolean
     ): String {
+        val transferContext = currentCoroutineContext()
         val sourceUrl = URL(mediaUrl)
         if (sourceUrl.protocol != "http" && sourceUrl.protocol != "https") {
             throw IOException("Unsupported media URL scheme")
@@ -1117,24 +1119,12 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 val contentType = httpConnection.contentType?.substringBefore(';')
                     ?.trim()?.lowercase(java.util.Locale.ROOT).orEmpty()
 
-                httpConnection.inputStream.use { input ->
-                    FileOutputStream(partialFile).use { output ->
-                        val buffer = ByteArray(65_536)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            if (count == 0) continue
-                            output.write(buffer, 0, count)
-                        }
-                        output.flush()
-                    }
-                }
-
-                if (partialFile.length() == 0L ||
-                    !isLikelyMediaFile(partialFile, contentType, mediaUrl, isVideo)
-                ) {
-                    throw IOException("The server response was not a ${if (isVideo) "video" else "picture"}")
-                }
+                MediaTransfer.copyResponse(
+                    httpConnection, partialFile,
+                    if (isVideo) MediaFileValidator.Kind.VIDEO else MediaFileValidator.Kind.IMAGE,
+                    checkCancelled = { transferContext.ensureActive() }
+                )
+                if (isVideo) requireVideoTrack(partialFile)
 
                 val extension = mediaExtension(contentType, mediaUrl, partialFile, isVideo)
                 val destination = saveMediaWithUniqueName(partialFile, outputDir, baseName, index, extension)
@@ -1183,55 +1173,18 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             error is java.io.EOFException
     }
 
-    /** Accepts an image or, for a video slide, an actual video payload. */
-    private fun isLikelyMediaFile(
-        file: File,
-        contentType: String,
-        sourceUrl: String,
-        isVideo: Boolean
-    ): Boolean {
-        if (!isVideo) return isLikelyImageFile(file, contentType, sourceUrl)
-        if (contentType.startsWith("video/")) return true
-        if (sniffVideoExtension(file) != null) return true
-        if (contentType.contains("html") || contentType.contains("json") ||
-            contentType.startsWith("text/")
-        ) return false
-        return looksLikeVideoUrl(sourceUrl) && (
-            contentType.isBlank() ||
-                contentType == "application/octet-stream" ||
-                contentType == "binary/octet-stream"
-            )
-    }
-
-    /** mp4/m4v/webm/mov in the path, ignoring the signed query string. */
-    private fun videoExtensionFromUrl(url: String): String? {
-        val path = runCatching { URL(url).path }.getOrNull() ?: return null
-        val extension = path.substringAfterLast('/', "").substringAfterLast('.', "")
-            .lowercase(java.util.Locale.ROOT)
-        return extension.takeIf { it in setOf("mp4", "m4v", "mov", "webm") }
-    }
-
-    private fun looksLikeVideoUrl(url: String): Boolean = videoExtensionFromUrl(url) != null
-
-    /** Reads the container magic: an ISO base media file ("....ftyp") or a Matroska stream. */
-    private fun sniffVideoExtension(file: File): String? {
-        return runCatching {
-            val header = ByteArray(16)
-            val count = file.inputStream().use { it.read(header) }
-            if (count >= 8 && String(header, 4, 4, Charsets.US_ASCII) == "ftyp") return@runCatching "mp4"
-            if (count >= 4 && header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() &&
-                header[2] == 0xDF.toByte() && header[3] == 0xA3.toByte()
-            ) return@runCatching "webm"
-            null
-        }.getOrNull()
-    }
-
-    private fun isLikelyImageFile(file: File, contentType: String, sourceUrl: String): Boolean {
-        if (sniffImageExtension(file) != null) return true
-        if (contentType.startsWith("image/")) return true
-        if (contentType.contains("html") || contentType.contains("json") || contentType.startsWith("text/")) return false
-        return MediaUrlNormalizer.isDirectImageUrl(sourceUrl) &&
-            (contentType.isBlank() || contentType == "application/octet-stream" || contentType == "binary/octet-stream")
+    /** A valid ISO container could still be audio-only; require an actual video track. */
+    private fun requireVideoTrack(file: File) {
+        val extractor = android.media.MediaExtractor()
+        try {
+            extractor.setDataSource(file.absolutePath)
+            val hasVideo = (0 until extractor.trackCount).any {
+                extractor.getTrackFormat(it).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            }
+            if (!hasVideo) throw IOException("The downloaded file has no playable video track")
+        } finally {
+            extractor.release()
+        }
     }
 
     private fun mediaExtension(
@@ -1248,10 +1201,12 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             "video/x-m4v", "video/m4v" -> "m4v"
             else -> null
         }
-        return mimeExtension
-            ?: sniffVideoExtension(file)
-            ?: videoExtensionFromUrl(sourceUrl)
-            ?: "mp4"
+        val container = file.inputStream().use { MediaFileValidator.sniffContainer(ByteArray(512).let { bytes -> bytes.copyOf(it.read(bytes).coerceAtLeast(0)) }) }
+        return when (container) {
+            "mp4" -> "mp4"
+            "matroska" -> if (mimeExtension == "webm") "webm" else "mkv"
+            else -> mimeExtension ?: "mp4"
+        }
     }
 
     private fun imageExtension(contentType: String, sourceUrl: String, file: File): String {
@@ -1266,8 +1221,8 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             "image/svg+xml" -> "svg"
             else -> null
         }
-        return mimeExtension
-            ?: sniffImageExtension(file)
+        return sniffImageExtension(file)
+            ?: mimeExtension
             ?: MediaUrlNormalizer.imageExtensionFromUrl(sourceUrl)?.let {
                 if (it == "jpeg") "jpg" else it
             }

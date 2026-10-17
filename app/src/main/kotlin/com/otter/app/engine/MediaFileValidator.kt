@@ -11,9 +11,8 @@ import java.io.File
  * success, so a green "Download complete" means the bytes are there, the container is the kind that
  * was asked for, and no `.part` sibling says the write stopped early.
  *
- * Deliberately permissive about what it does not recognise: an unknown header is accepted when the
- * size looks right, because rejecting a real exotic file would turn a working download into a
- * reported failure.
+ * Typed downloads fail closed on unknown contents. This checks container identity, not
+ * decodability; Android track inspection and device playback tests provide stronger checks.
  */
 object MediaFileValidator {
 
@@ -24,7 +23,7 @@ object MediaFileValidator {
         data class Invalid(val reason: String) : Outcome
     }
 
-    private val imageContainers = setOf("jpeg", "png", "gif", "webp", "bmp", "avif", "heif")
+    private val imageContainers = setOf("jpeg", "png", "gif", "webp", "bmp", "avif", "heif", "tiff", "svg")
     private val videoContainers = setOf("mp4", "matroska", "webm", "mpegts", "avi", "flv")
     /** A video container also holds an extracted soundtrack, so it is accepted for audio. */
     private val audioContainers = setOf("mp3", "id3", "adts", "ogg", "flac", "wav", "m4a", "aiff") +
@@ -37,8 +36,18 @@ object MediaFileValidator {
             String(header, offset, length, Charsets.ISO_8859_1)
 
         return when {
-            ascii(0, 1).let { it == "<" || it == "!" } -> "text"
-            ascii(4, 4) == "ftyp" -> if (ascii(8, 4).startsWith("M4A ")) "m4a" else "mp4"
+            String(header, Charsets.UTF_8).trimStart('﻿', ' ', '\n', '\r', '\t').let {
+                it.startsWith("<svg", true)
+            } -> "svg"
+            String(header, Charsets.UTF_8).trimStart('﻿', ' ', '\n', '\r', '\t').let {
+                it.startsWith("<") || it.startsWith("{") || it.startsWith("[")
+            } -> "text"
+            ascii(4, 4) == "ftyp" -> when (ascii(8, 4)) {
+                "avif", "avis" -> "avif"
+                "heic", "heix", "hevc", "hevx", "mif1", "msf1" -> "heif"
+                "M4A ", "M4B " -> "m4a"
+                else -> "mp4"
+            }
             ascii(0, 3) == "GIF" -> "gif"
             ascii(0, 5) == "%FLAC" || ascii(0, 4) == "fLaC" -> "flac"
             ascii(0, 4) == "OggS" -> "ogg"
@@ -49,9 +58,11 @@ object MediaFileValidator {
             header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() -> "jpeg"
             header[0] == 0x89.toByte() && ascii(1, 3) == "PNG" -> "png"
             header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() -> "matroska"
-            header.size > 18 && header[0] == 0x47.toByte() && header[18] == 0x47.toByte() -> "mpegts"
+            header.size > 188 && header[0] == 0x47.toByte() && header[188] == 0x47.toByte() -> "mpegts"
             header[0] == 0xFF.toByte() && (header[1].toInt() and 0xF6) == 0xF2 -> "mp3"
-            header[0] == 0x30.toByte() && header[1] == 0x26.toByte() -> "avi"
+            ascii(0, 4) == "RIFF" && ascii(8, 4) == "AVI " -> "avi"
+            ascii(0, 2) == "BM" -> "bmp"
+            ascii(0, 4) == "II*\u0000" || ascii(0, 4) == "MM\u0000*" -> "tiff"
             ascii(0, 3) == "FLV" -> "flv"
             else -> null
         }
@@ -89,7 +100,8 @@ object MediaFileValidator {
         }
         if (unfinished != null) return Outcome.Invalid("the download did not finish (${unfinished.name})")
 
-        val container = sniffContainer(firstBytes(file, 24)) ?: return Outcome.Valid(size, "unknown")
+        val container = sniffContainer(firstBytes(file, 512)) ?: return if (kind == Kind.ANY) Outcome.Valid(size, "unknown")
+            else Outcome.Invalid("unrecognised media contents")
         if (container == "text") return Outcome.Invalid("the file is a text response, not media")
 
         val accepted = when (kind) {

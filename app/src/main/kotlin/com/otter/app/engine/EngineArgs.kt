@@ -58,7 +58,6 @@ object EngineArgs {
     val FETCH_QUIET_ARGS = listOf(
         "--skip-download",
         "--no-warnings",
-        "--ignore-errors",
         "--no-write-info-json",
         "--no-write-description",
         "--no-write-thumbnail"

@@ -1,3 +1,6 @@
+import java.security.MessageDigest
+import java.net.URL
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -32,8 +35,9 @@ android {
         applicationId = "com.otter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "27"
+        versionCode = 22
+        versionName = "28"
+        buildConfigField("String", "BUNDLED_YTDLP_VERSION", "\"2026.08.19\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -141,3 +145,33 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+// The wrapper's native Python/QuickJS/FFmpeg remains unchanged. Bundle a verified stable
+// extractor rather than relying on a startup update that is skipped on metered/active sessions.
+val bundledEngineRes = layout.buildDirectory.dir("generated/engineRes")
+val prepareBundledEngine by tasks.registering {
+    val version = "2026.08.19"
+    val expected = "1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6"
+    inputs.property("version", version)
+    inputs.property("sha256", expected)
+    outputs.dir(bundledEngineRes)
+    doLast {
+        val output = bundledEngineRes.get().file("raw/outter_ytdlp").asFile
+        output.parentFile.mkdirs()
+        val temporary = File(output.parentFile, "engine.tmp")
+        try {
+            val connection = URL("https://github.com/yt-dlp/yt-dlp/releases/download/$version/yt-dlp").openConnection()
+            connection.connectTimeout = 30_000
+            connection.readTimeout = 60_000
+            connection.getInputStream().use { input -> temporary.outputStream().use { input.copyTo(it) } }
+            val actual = MessageDigest.getInstance("SHA-256").digest(temporary.readBytes()).joinToString("") { "%02x".format(it) }
+            check(actual == expected) { "Bundled yt-dlp checksum mismatch" }
+            java.util.zip.ZipFile(temporary).use { zip ->
+                check(zip.getEntry("yt_dlp_ejs/yt/solver/lib.min.js") != null) { "Bundled engine is missing the YouTube EJS solver" }
+            }
+            check(temporary.renameTo(output)) { "Cannot stage bundled yt-dlp" }
+        } finally { temporary.delete() }
+    }
+}
+android.sourceSets["main"].res.srcDir(bundledEngineRes)
+tasks.named("preBuild").configure { dependsOn(prepareBundledEngine) }

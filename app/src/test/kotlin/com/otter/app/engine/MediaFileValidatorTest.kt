@@ -108,7 +108,7 @@ class MediaFileValidatorTest {
     }
 
     @Test
-    fun anUnknownHeaderOfAPlausibleSizeIsAccepted() {
+    fun anUnknownHeaderIsNotProofOfVideo() {
         // A container the sniffer does not know (aavi, a real .divx, an exotic caption stream) must
         // not turn a working download into a reported failure.
         val outcome = MediaFileValidator.validate(
@@ -116,7 +116,7 @@ class MediaFileValidatorTest {
             MediaFileValidator.Kind.VIDEO
         )
 
-        assertEquals(MediaFileValidator.Outcome.Valid(4096L, "unknown"), outcome)
+        assertTrue(outcome is MediaFileValidator.Outcome.Invalid)
     }
 
     @Test

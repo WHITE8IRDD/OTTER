@@ -34,7 +34,7 @@ class YtDlpUpdater(private val context: Context) {
     ): UpdateResult = withContext(Dispatchers.IO) {
         try {
             onProgress(context.getString(R.string.update_checking))
-            val result = YoutubeDL.getInstance().updateYoutubeDL(context, channel)
+            val result = EngineRuntime.update(context, channel)
             when (result) {
                 YoutubeDL.UpdateStatus.DONE -> {
                     val version = getVersion()

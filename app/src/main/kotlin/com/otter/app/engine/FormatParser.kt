@@ -65,11 +65,11 @@ class FormatParser(private val context: Context? = null) {
                 "soundcloud.com", "bilibili.com", "dailymotion.com", "dai.ly",
                 "pinterest.com", "pin.it", "streamable.com", "bandcamp.com", "snapchat.com"
             )
-            if (needsUA) request.addOption("--user-agent", UA)
+            if (needsUA && !hostMatches("tiktok.com", "tiktokv.com")) request.addOption("--user-agent", UA)
+            PlatformExtractionPolicy.options(url).forEach { (flag, value) -> request.addOption(flag, value) }
 
             when {
                 hostMatches("tiktok.com", "tiktokv.com") -> {
-                    request.addOption("--add-header", "Referer:https://www.tiktok.com/")
                     request.addOption("--extractor-retries", "5")
                     Log.i(TAG, "[PLATFORM-FLAGS] TikTok detected, using public web extraction with browser headers + retry=5")
                 }
@@ -106,13 +106,8 @@ class FormatParser(private val context: Context? = null) {
                     Log.i(TAG, "[PLATFORM-FLAGS] Snapchat detected, applying user-agent + referer")
                 }
                 hostMatches("youtube.com", "youtu.be", "youtube-nocookie.com") -> {
-                    // YouTube's web client now serves SABR-only streams (no plain CDN URL) for
-                    // many regular/long videos, which yt-dlp cannot download. Exclude the
-                    // client that is being killed (android_sdkless) and keep the rest of the
-                    // default chain so a plain HTTPS format is still offered. Shorts are
-                    // unaffected (single muxed stream) but the same arg is harmless there.
-                    request.addOption("--extractor-args", "youtube:player_client=default,-android_sdkless")
-                    Log.i(TAG, "[PLATFORM-FLAGS] YouTube detected, excluding broken android_sdkless client (SABR/403 workaround)")
+                    // Client defaults and challenge solving belong to the maintained engine.
+
                 }
             }
         }
@@ -128,7 +123,7 @@ class FormatParser(private val context: Context? = null) {
         suspend fun ensureEngineReady(context: Context?) {
             if (engineReady.value || context == null) return
             withContext(Dispatchers.IO) {
-                runCatching { YoutubeDL.getInstance().init(context) }
+                runCatching { EngineRuntime.initialize(context) }
                     .onSuccess {
                         engineReady.value = true
                         Log.i(TAG, "[PREFLIGHT] engine initialised without a version subprocess")
@@ -189,11 +184,11 @@ class FormatParser(private val context: Context? = null) {
             val startTime = System.currentTimeMillis()
             try {
                 Log.i(TAG, "[WARMUP] Pre-warming engine start...")
-                YoutubeDL.getInstance().init(context)
+                EngineRuntime.initialize(context)
 
                 // Quick version check to load binary into memory
                 val versionRequest = YoutubeDLRequest("").apply { addOption("--version") }
-                YoutubeDL.getInstance().execute(versionRequest)
+                EngineRuntime.execute(versionRequest)
                 Log.i(TAG, "[WARMUP] yt-dlp binary loaded")
 
                 engineReady.value = true
@@ -232,8 +227,12 @@ class FormatParser(private val context: Context? = null) {
             return@coroutineScope running.await()
         }
         val startedAt = System.currentTimeMillis()
-        val job = async { fetchVideoInfoInner(key, onRetryMessage, onRetryStatus, startedAt) }
-        inFlight[key] = job
+        val job = async(start = kotlinx.coroutines.CoroutineStart.LAZY) { fetchVideoInfoInner(key, onRetryMessage, onRetryStatus, startedAt) }
+        val existing = inFlight.putIfAbsent(key, job)
+        if (existing != null) {
+            job.cancel()
+            return@coroutineScope existing.await()
+        }
         try {
             job.await()
         } finally {
@@ -277,6 +276,9 @@ class FormatParser(private val context: Context? = null) {
         onRetryStatus: ((Int, Int) -> Unit)?,
         startedAt: Long
     ): Result<VideoInfo> = withContext(Dispatchers.IO) {
+        if (MediaUrlNormalizer.host(url) == null || runCatching { URL(url).userInfo != null }.getOrDefault(true)) {
+            return@withContext Result.failure(IllegalArgumentException("Enter a valid HTTP or HTTPS media link"))
+        }
         EngineLock.markUsed()
         Log.i(TAG, "fetchVideoInfo START url=${redact(url)}")
         val resolvedUrl = MediaUrlNormalizer.normalizeYouTubeShortsUrl(resolveTikTokShortUrl(url))
@@ -393,13 +395,12 @@ class FormatParser(private val context: Context? = null) {
             try {
                 val targetUrl = resolvedUrl
                 val request = YoutubeDLRequest(targetUrl).apply {
-                    addOption("--dump-json")
+                    addOption("--dump-single-json")
                     addOption("-o", OUTPUT_BASENAME)
                     if (!isInstagramUrl(url)) {
                         addOption("--no-playlist")
                     }
                     addOption("--no-warnings")
-                    addOption("--no-check-certificate")
                     // The app owns the retry ladder, so the engine is not allowed to run a private
                     // one underneath it: -R 1 is what stops a two-second connect failure from
                     // turning into a two-minute wait before the user sees anything.
@@ -409,8 +410,6 @@ class FormatParser(private val context: Context? = null) {
                     // format reports no size at all.
                     addOption("--compat-options", "manifest-filesize-approx")
                     addOption("--extractor-retries", "3")
-                    addOption("--flat-playlist")
-                    addOption("--ignore-errors")
 
                     // Progressive socket timeout per attempt
                     val baseTimeout = when {
@@ -440,7 +439,7 @@ class FormatParser(private val context: Context? = null) {
                 val fetchProcessId = EngineArgs.processId(url)
                 registerFetchProcess(url, fetchProcessId)
                 val ytResponse = try {
-                    YoutubeDL.getInstance().execute(request, fetchProcessId)
+                    EngineRuntime.execute(request, fetchProcessId)
                 } finally {
                     unregisterFetchProcess(url, fetchProcessId)
                 }
@@ -509,7 +508,8 @@ class FormatParser(private val context: Context? = null) {
                                 photos = carouselImages,
                                 videos = carouselVideos,
                                 posters = scraped.videoPosters,
-                                expectedCount = scraped.expectedCount
+                                expectedCount = scraped.expectedCount,
+                                slides = scraped.orderedSlides()
                             )
                             Log.i(TAG, "Scraper found ${scraped.imageUrls.size} photo(s) and " +
                                 "${scraped.videoUrls.size} video(s) for Instagram carousel")
@@ -566,6 +566,7 @@ class FormatParser(private val context: Context? = null) {
                     carouselImages = carouselImages,
                     carouselVideos = carouselVideos,
                     carouselVideoPosters = carouselMedia.posters,
+                    carouselItems = carouselMedia.slides.map { CarouselItem(it.url, it.isVideo, it.posterUrl) },
                     carouselExpectedCount = if (carouselExpected > 0) carouselExpected
                         else carouselImages.size + carouselVideos.size,
                     isCarousel = isCarousel,
@@ -821,7 +822,8 @@ class FormatParser(private val context: Context? = null) {
         val photos: List<String>,
         val videos: List<String> = emptyList(),
         val posters: List<String> = emptyList(),
-        val expectedCount: Int = 0
+        val expectedCount: Int = 0,
+        val slides: List<InstagramMediaParser.Slide> = emptyList()
     )
 
     private fun extractCarouselMedia(
@@ -841,58 +843,19 @@ class FormatParser(private val context: Context? = null) {
         val json = parsedJson ?: try { JSONObject(rawJson) } catch (e: Exception) { null }
             ?: return CarouselMedia(emptyList())
 
-        val responseType = json.optString("_type", "")
-        val entries = json.optJSONArray("entries")
-
-        if (responseType != "playlist") {
-            // One picture, no playlist: only Instagram ever answers that shape.
-            if (!isTikTok) {
-                val isVideo = json.optBoolean("is_video", false) || json.has("formats")
-                if (isVideo) return CarouselMedia(emptyList())
-                val singleUrl = videoInfo.url?.takeIf { it.isNotEmpty() }
-                val singleThumb = videoInfo.thumbnail?.takeIf { it.isNotEmpty() }
-                return CarouselMedia(listOfNotNull(singleUrl, singleThumb).take(1))
-            }
+        // Single engine videos retain their quality/audio format sheet. Only resolved
+        // Instagram galleries and TikTok photo playlists become direct-download items.
+        if (json.optString("_type") != "playlist" && !MediaUrlNormalizer.isDirectImageUrl(json.optString("url"))) {
             return CarouselMedia(emptyList())
         }
-
-        if (entries == null || entries.length() == 0) {
-            return CarouselMedia(emptyList())
-        }
-
-        val photos = mutableListOf<String>()
-        val videos = mutableListOf<String>()
-        for (i in 0 until minOf(entries.length(), MAX_CAROUSEL_SLIDES)) {
-            val entry = entries.optJSONObject(i) ?: continue
-            val entryIsVideo = entry.optBoolean("is_video", false) || entry.has("formats") ||
-                entry.has("requested_formats")
-            if (entryIsVideo) {
-                // Video slides go through the video path: any URL yt-dlp can extract works.
-                val candidate = entry.optString("url").takeIf { it.isNotEmpty() }
-                    ?: entry.optString("webpage_url").takeIf { it.isNotEmpty() }
-                if (candidate != null && candidate != url) videos.add(candidate)
-                continue
-            }
-            val photo = entry.optString("url").takeIf { it.isNotEmpty() }
-                ?: entry.optString("thumbnail").takeIf { it.isNotEmpty() }
-                ?: continue
-            // A TikTok entry is a slide only when it IS a file: a flat playlist can
-            // list video page links, and those are not pictures of a post.
-            if (isTikTok && !isTikTokCdnMedia(photo)) continue
-            photos.add(photo)
-        }
+        val gallery = EngineGalleryParser.parse(json)
         return CarouselMedia(
-            photos = photos.distinct().take(MAX_CAROUSEL_SLIDES),
-            videos = videos.distinct().take(MAX_CAROUSEL_SLIDES),
-            expectedCount = entries.length()
+            photos = gallery.slides.filterNot { it.isVideo }.map { it.url },
+            videos = gallery.slides.filter { it.isVideo }.map { it.url },
+            posters = gallery.slides.filter { it.isVideo }.map { it.posterUrl },
+            expectedCount = gallery.expectedCount,
+            slides = gallery.slides
         )
-    }
-
-    /** A file on TikTok's CDN (or any URL that names an image file outright). */
-    private fun isTikTokCdnMedia(url: String): Boolean {
-        if (MediaUrlNormalizer.isDirectImageUrl(url)) return true
-        val host = runCatching { URL(url).host.lowercase() }.getOrNull() ?: return false
-        return host.contains("tiktokcdn") || host.contains("byteoversea") || host.contains("ibytedtos")
     }
 
     private fun parseSubtitleTracks(json: JSONObject): List<SubtitleTrack> {

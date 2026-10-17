@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -348,13 +349,21 @@ private fun ReadyBody(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(items) { index, item ->
-                QuickSlideCard(
-                    index = index,
-                    item = item,
-                    isSelected = state.selection.contains(index),
-                    onToggle = onToggle
-                )
+            for (isVideo in listOf(false, true)) {
+                val indices = items.indices.filter { items[it].isVideo == isVideo }
+                if (indices.isNotEmpty()) {
+                    item(key = "section-$isVideo", span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            text = stringResource(if (isVideo) R.string.carousel_videos else R.string.carousel_photos) + " (${indices.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                    items(indices.size, key = { "slide-${indices[it]}" }) { position ->
+                        val index = indices[position]
+                        QuickSlideCard(index, items[index], state.selection.contains(index), onToggle)
+                    }
+                }
             }
         }
 

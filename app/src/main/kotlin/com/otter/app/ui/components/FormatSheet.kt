@@ -711,11 +711,17 @@ private fun CarouselGalleryContent(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SlideGrid(
-                    items = items,
-                    selectedIndices = selectedIndices,
-                    onToggle = onToggleIndex
-                )
+                for (isVideo in listOf(false, true)) {
+                    val indices = items.indices.filter { items[it].isVideo == isVideo }
+                    if (indices.isNotEmpty()) {
+                        Text(
+                            text = stringResource(if (isVideo) R.string.carousel_videos else R.string.carousel_photos) + " (${indices.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black
+                        )
+                        SlideGrid(items, selectedIndices, onToggleIndex, indices)
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -739,10 +745,11 @@ private fun CarouselGalleryContent(
 private fun SlideGrid(
     items: List<CarouselItem>,
     selectedIndices: Set<Int>,
-    onToggle: (Int) -> Unit
+    onToggle: (Int) -> Unit,
+    indices: List<Int> = items.indices.toList()
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (rowIndices in items.indices.toList().chunked(2)) {
+        for (rowIndices in indices.chunked(2)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
