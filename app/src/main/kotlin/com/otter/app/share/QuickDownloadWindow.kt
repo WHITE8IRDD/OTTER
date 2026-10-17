@@ -344,6 +344,7 @@ private fun ReadyBody(
             columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f, fill = false)
                 .heightIn(max = 300.dp)
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

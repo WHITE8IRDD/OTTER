@@ -123,12 +123,9 @@ class FormatParser(private val context: Context? = null) {
         suspend fun ensureEngineReady(context: Context?) {
             if (engineReady.value || context == null) return
             withContext(Dispatchers.IO) {
-                runCatching { EngineRuntime.initialize(context) }
-                    .onSuccess {
-                        engineReady.value = true
-                        Log.i(TAG, "[PREFLIGHT] engine initialised without a version subprocess")
-                    }
-                    .onFailure { Log.w(TAG, "[PREFLIGHT] engine init failed (non-blocking): ${it.message}") }
+                EngineRuntime.initialize(context)
+                engineReady.value = true
+                Log.i(TAG, "[PREFLIGHT] engine initialized")
             }
         }
 
@@ -319,7 +316,7 @@ class FormatParser(private val context: Context? = null) {
                 withTimeoutOrNull(TIKTOK_PHOTO_SCRAPE_BUDGET_MS) {
                     TikTokPhotoScraper().scrape(resolvedUrl)
                 }
-            }.onFailure { Log.w(TAG, "TikTok photo-mode page scrape failed", it) }.getOrNull()
+            }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; Log.w(TAG, "TikTok photo-mode page scrape failed", it) }.getOrNull()
             if (photoPost != null && photoPost.imageUrls.isNotEmpty()) {
                 val info = createImageGalleryInfo(
                     sourceUrl = url,
@@ -346,6 +343,7 @@ class FormatParser(private val context: Context? = null) {
                     InstagramImageScraper(context).scrapeDetailed(url)
                 }
             }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
                 Log.w(TAG, "Instagram scrape failed", it)
             }.getOrNull()
             val scraped = instagramScrape
@@ -377,7 +375,9 @@ class FormatParser(private val context: Context? = null) {
         // Pre-flight: only a file-layout check now; a broken binary shows up on the first run.
         if (!engineReady.value) {
             Log.i(TAG, "[PREFLIGHT] Engine not ready yet, running warmup check")
-            ensureEngineReady(context)
+            try { ensureEngineReady(context) } catch (e: Exception) {
+                return@withContext Result.failure(e)
+            }
         }
 
         val delays = listOf(1500L, 5000L)
@@ -583,6 +583,7 @@ class FormatParser(private val context: Context? = null) {
                 Log.i(TAG, "fetchVideoInfo COMPLETE title=${info.title} formats=${info.formats.size} extractor=${info.extractor}")
                 return@withContext Result.success(info)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 val isInstaNoVideo = isInstagramPostUrl(url) &&
                         e.message?.contains("No video formats found") == true
                 if (isInstaNoVideo && context != null) {

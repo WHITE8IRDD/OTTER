@@ -1,5 +1,6 @@
 import java.security.MessageDigest
 import java.net.URL
+import java.util.zip.ZipFile
 
 plugins {
     id("com.android.application")
@@ -166,7 +167,7 @@ val prepareBundledEngine by tasks.registering {
             connection.getInputStream().use { input -> temporary.outputStream().use { input.copyTo(it) } }
             val actual = MessageDigest.getInstance("SHA-256").digest(temporary.readBytes()).joinToString("") { "%02x".format(it) }
             check(actual == expected) { "Bundled yt-dlp checksum mismatch" }
-            java.util.zip.ZipFile(temporary).use { zip ->
+            ZipFile(temporary).use { zip ->
                 check(zip.getEntry("yt_dlp_ejs/yt/solver/lib.min.js") != null) { "Bundled engine is missing the YouTube EJS solver" }
             }
             check(temporary.renameTo(output)) { "Cannot stage bundled yt-dlp" }
@@ -174,4 +175,5 @@ val prepareBundledEngine by tasks.registering {
     }
 }
 android.sourceSets["main"].res.srcDir(bundledEngineRes)
+android.sourceSets["androidTest"].assets.srcDir("src/test/resources")
 tasks.named("preBuild").configure { dependsOn(prepareBundledEngine) }

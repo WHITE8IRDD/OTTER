@@ -1264,8 +1264,10 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 continue
             }
             try {
-                partialFile.copyTo(destination, overwrite = true)
-                partialFile.delete()
+                if (!partialFile.renameTo(destination)) {
+                    partialFile.copyTo(destination, overwrite = true)
+                    partialFile.delete()
+                }
                 return destination
             } catch (e: Exception) {
                 destination.delete()

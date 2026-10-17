@@ -342,8 +342,6 @@ object InstagramMediaParser {
         }
         val display = node.optString("display_url", "")
         if (display.isNotEmpty()) normalizeUrl(display)?.let { return it }
-        val thumbnail = node.optString("thumbnail_src", "")
-        if (thumbnail.isNotEmpty()) normalizeUrl(thumbnail)?.let { return it }
         node.optString("display_uri", "").takeIf { it.isNotEmpty() }?.let { uri ->
             normalizeUrl(uri)?.let { return it }
         }
@@ -484,4 +482,3 @@ object InstagramMediaParser {
         return lower.contains("you must log in to continue") || lower.contains("please wait a few minutes")
     }
 }
-
