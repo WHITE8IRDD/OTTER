@@ -6,6 +6,7 @@ on:
       - arena/23a7b6e2-otter
       - arena/b09a8450-otter
       - arena/3dd8a9d3-otter
+      - arena/67f963f4-otter
   workflow_dispatch:
 
 permissions:

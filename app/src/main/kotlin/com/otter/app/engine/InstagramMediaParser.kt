@@ -312,6 +312,10 @@ object InstagramMediaParser {
         val queue = ArrayDeque<Any>()
         queue.add(root)
         var visited = 0
+        // A node that declared a carousel but exposed only one readable slide is still
+        // that post's carousel: without keeping it, a 1-of-5 read reported "complete"
+        // and the picker never warned about the four missing slides.
+        var singleSlideFallback: Slides? = null
         while (queue.isNotEmpty() && visited < 20_000) {
             val node = queue.removeFirst()
             visited++
@@ -320,7 +324,10 @@ object InstagramMediaParser {
                     // A sidecar of one of the suggested posts must not answer for the post that was
                     // asked for; without this the walk returned the first carousel on the page.
                     if (isForeignPost(node, shortcode)) continue
-                    slides(node, shortcode)?.let { if (it.size >= 2) return it }
+                    slides(node, shortcode)?.let {
+                        if (it.size >= 2) return it
+                        if (singleSlideFallback == null) singleSlideFallback = it
+                    }
                     for (key in node.keys()) {
                         node.opt(key)?.let { if (it is JSONObject || it is JSONArray) queue.add(it) }
                     }
@@ -332,7 +339,7 @@ object InstagramMediaParser {
                 }
             }
         }
-        return null
+        return singleSlideFallback
     }
 
     /** The photo and video slides of one multi-slide post, in payload order. */

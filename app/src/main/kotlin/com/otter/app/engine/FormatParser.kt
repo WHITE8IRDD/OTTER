@@ -831,7 +831,12 @@ class FormatParser(private val context: Context? = null) {
         url: String = ""
     ): CarouselMedia {
         val extractor = videoInfo.extractor?.lowercase() ?: ""
-        if (!extractor.contains("instagram")) return CarouselMedia(emptyList())
+        val isInstagram = extractor.contains("instagram")
+        // TikTok photo-mode posts are galleries of stills too. The page parser is the
+        // primary route for them; this is the fallback for when it comes back empty and
+        // the engine is the only one left that read the post.
+        val isTikTok = extractor.contains("tiktok")
+        if (!isInstagram && !isTikTok) return CarouselMedia(emptyList())
 
         val json = parsedJson ?: try { JSONObject(rawJson) } catch (e: Exception) { null }
             ?: return CarouselMedia(emptyList())
@@ -840,11 +845,15 @@ class FormatParser(private val context: Context? = null) {
         val entries = json.optJSONArray("entries")
 
         if (responseType != "playlist") {
-            val isVideo = json.optBoolean("is_video", false) || json.has("formats")
-            if (isVideo) return CarouselMedia(emptyList())
-            val singleUrl = videoInfo.url?.takeIf { it.isNotEmpty() }
-            val singleThumb = videoInfo.thumbnail?.takeIf { it.isNotEmpty() }
-            return CarouselMedia(listOfNotNull(singleUrl, singleThumb).take(1))
+            // One picture, no playlist: only Instagram ever answers that shape.
+            if (!isTikTok) {
+                val isVideo = json.optBoolean("is_video", false) || json.has("formats")
+                if (isVideo) return CarouselMedia(emptyList())
+                val singleUrl = videoInfo.url?.takeIf { it.isNotEmpty() }
+                val singleThumb = videoInfo.thumbnail?.takeIf { it.isNotEmpty() }
+                return CarouselMedia(listOfNotNull(singleUrl, singleThumb).take(1))
+            }
+            return CarouselMedia(emptyList())
         }
 
         if (entries == null || entries.length() == 0) {
@@ -855,7 +864,8 @@ class FormatParser(private val context: Context? = null) {
         val videos = mutableListOf<String>()
         for (i in 0 until minOf(entries.length(), MAX_CAROUSEL_SLIDES)) {
             val entry = entries.optJSONObject(i) ?: continue
-            val entryIsVideo = entry.optBoolean("is_video", false) || entry.has("formats")
+            val entryIsVideo = entry.optBoolean("is_video", false) || entry.has("formats") ||
+                entry.has("requested_formats")
             if (entryIsVideo) {
                 // Video slides go through the video path: any URL yt-dlp can extract works.
                 val candidate = entry.optString("url").takeIf { it.isNotEmpty() }
@@ -863,14 +873,26 @@ class FormatParser(private val context: Context? = null) {
                 if (candidate != null && candidate != url) videos.add(candidate)
                 continue
             }
-            entry.optString("url").takeIf { it.isNotEmpty() }?.let { photos.add(it) }
-                ?: entry.optString("thumbnail").takeIf { it.isNotEmpty() }?.let { photos.add(it) }
+            val photo = entry.optString("url").takeIf { it.isNotEmpty() }
+                ?: entry.optString("thumbnail").takeIf { it.isNotEmpty() }
+                ?: continue
+            // A TikTok entry is a slide only when it IS a file: a flat playlist can
+            // list video page links, and those are not pictures of a post.
+            if (isTikTok && !isTikTokCdnMedia(photo)) continue
+            photos.add(photo)
         }
         return CarouselMedia(
             photos = photos.distinct().take(MAX_CAROUSEL_SLIDES),
             videos = videos.distinct().take(MAX_CAROUSEL_SLIDES),
             expectedCount = entries.length()
         )
+    }
+
+    /** A file on TikTok's CDN (or any URL that names an image file outright). */
+    private fun isTikTokCdnMedia(url: String): Boolean {
+        if (MediaUrlNormalizer.isDirectImageUrl(url)) return true
+        val host = runCatching { URL(url).host.lowercase() }.getOrNull() ?: return false
+        return host.contains("tiktokcdn") || host.contains("byteoversea") || host.contains("ibytedtos")
     }
 
     private fun parseSubtitleTracks(json: JSONObject): List<SubtitleTrack> {

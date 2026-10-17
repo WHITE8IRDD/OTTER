@@ -253,6 +253,11 @@
     <string name="quick_download_title">تنزيل سريع</string>
     <string name="quick_download_started">بدأ التنزيل السريع</string>
     <string name="quick_download_failed">فشل: %s</string>
+    <string name="quick_download_reading">جارٍ قراءة المنشور…</string>
+    <string name="quick_download_read_failed">تعذّرت قراءة هذا المنشور</string>
+    <string name="quick_download_starting">جارٍ بدء التنزيل…</string>
+    <string name="quick_download_background_note">تستمر التنزيلات في الخلفية — يمكنك متابعة التصفح</string>
+    <string name="quick_download_video_item">فيديو واحد — أفضل جودة متاحة</string>
     <string name="no_valid_url">لم يتم العثور على رابط صالح</string>
 
     <!-- NotificationHelper -->
@@ -341,6 +346,7 @@
     <string name="media_saved_partial">تم حفظ %1$d، وفشل %2$d.</string>
     <string name="content_desc_video">فيديو %d</string>
     <string name="content_desc_video_slide">شريحة فيديو</string>
+    <string name="content_desc_selected_slide">محدَّد</string>
     <string name="content_desc_copy_hashtags">نسخ الوسوم</string>
     <string name="history_details_title">تفاصيل التنزيل</string>
     <string name="history_details_hint">انقر على أي تنزيل لعرض عنوانه ووصفه ووسومه</string>

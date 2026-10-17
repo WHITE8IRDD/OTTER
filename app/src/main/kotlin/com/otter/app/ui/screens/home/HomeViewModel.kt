@@ -23,6 +23,7 @@ import com.otter.app.service.DownloadService
 import com.otter.app.service.DownloadStateHolder
 import com.otter.app.R
 import com.otter.app.util.FileHelper
+import com.otter.app.util.FriendlyErrors
 import com.otter.app.util.isValidUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -669,88 +670,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun friendlyErrorMessage(rawError: String, url: String): String {
-        val platform = FetchErrorClassifier.detectPlatform(url)
-        val app = getApplication<Application>()
-
-        return when (FetchErrorClassifier.classify(rawError, platform)) {
-            FetchErrorClassifier.Kind.NO_DOWNLOADABLE_MEDIA ->
-                app.getString(R.string.error_no_downloadable_media)
-
-            FetchErrorClassifier.Kind.EXTRACTION_FAILED ->
-                app.getString(R.string.error_extraction_failed)
-
-            FetchErrorClassifier.Kind.INSUFFICIENT_STORAGE ->
-                app.getString(R.string.error_storage_full)
-
-            FetchErrorClassifier.Kind.NETWORK_TIMEOUT ->
-                app.getString(R.string.error_network_timeout)
-
-            FetchErrorClassifier.Kind.NO_INTERNET ->
-                app.getString(R.string.error_no_internet)
-
-            FetchErrorClassifier.Kind.VIDEO_UNAVAILABLE ->
-                app.getString(R.string.error_video_unavailable)
-
-            FetchErrorClassifier.Kind.PRIVATE_VIDEO ->
-                app.getString(R.string.error_private_video)
-
-            FetchErrorClassifier.Kind.VIDEO_REMOVED ->
-                app.getString(R.string.error_video_removed)
-
-            FetchErrorClassifier.Kind.COPYRIGHT ->
-                app.getString(R.string.error_copyright)
-
-            FetchErrorClassifier.Kind.AUTH_REQUIRED ->
-                app.getString(R.string.error_auth_required, getCookieHint(platform))
-
-            FetchErrorClassifier.Kind.REGION_BLOCKED ->
-                app.getString(R.string.error_region_blocked)
-
-            FetchErrorClassifier.Kind.LIVE_NOT_STARTED ->
-                app.getString(R.string.error_live_not_started)
-
-            FetchErrorClassifier.Kind.LIVE_ENDED ->
-                app.getString(R.string.error_live_ended)
-
-            FetchErrorClassifier.Kind.CODEC_ISSUE ->
-                app.getString(R.string.error_codec_issue)
-
-            FetchErrorClassifier.Kind.FORMAT_UNAVAILABLE ->
-                app.getString(R.string.error_format_unavailable)
-
-            FetchErrorClassifier.Kind.INSTAGRAM_LOGIN ->
-                app.getString(R.string.error_instagram_login)
-
-            FetchErrorClassifier.Kind.TWITTER_RATE_LIMIT ->
-                app.getString(R.string.error_twitter_rate_limit)
-
-            FetchErrorClassifier.Kind.TIKTOK_EXTRACTOR ->
-                app.getString(R.string.error_tiktok_extractor)
-
-            FetchErrorClassifier.Kind.FACEBOOK_LOGIN ->
-                app.getString(R.string.error_facebook_login)
-
-            FetchErrorClassifier.Kind.BOT_CHALLENGE ->
-                app.getString(R.string.error_bot_challenge)
-
-            FetchErrorClassifier.Kind.SOURCE_RESTRICTED ->
-                app.getString(R.string.error_source_restricted)
-
-            FetchErrorClassifier.Kind.GENERIC ->
-                app.getString(R.string.error_generic_with_hint)
-        }
-    }
-
-    private fun detectPlatform(url: String): Int = FetchErrorClassifier.detectPlatform(url)
-
-    private fun getCookieHint(platform: Int): String {
-        return when (platform) {
-            FetchErrorClassifier.PLATFORM_INSTAGRAM -> getApplication<Application>().getString(R.string.cookie_hint_instagram)
-            FetchErrorClassifier.PLATFORM_FACEBOOK -> getApplication<Application>().getString(R.string.cookie_hint_facebook)
-            FetchErrorClassifier.PLATFORM_TWITTER -> getApplication<Application>().getString(R.string.cookie_hint_twitter)
-            FetchErrorClassifier.PLATFORM_YOUTUBE -> getApplication<Application>().getString(R.string.cookie_hint_youtube_age)
-            else -> getApplication<Application>().getString(R.string.cookie_hint_generic)
-        }
+        // The wording lives in one place so the Quick Download window and this screen
+        // say the same thing about the same failure.
+        return FriendlyErrors.message(getApplication<Application>(), rawError, url)
     }
 }
 

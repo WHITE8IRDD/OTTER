@@ -105,4 +105,13 @@ class TikTokPhotoParserTest {
         assertFalse(TikTokPhotoParser.isPhotoModeUrl("https://www.tiktok.com/@someone/video/7123456789012345678"))
         assertFalse(TikTokPhotoParser.isPhotoModeUrl("https://example.com/@someone/photo/7123456789012345678"))
     }
+
+    @Test
+    fun forwardedPhotoLinksMayDropTheUserSegmentButStillArePhotoMode() {
+        // Web shares and forwards can carry /photo/<id> without the @user prefix.
+        assertTrue(TikTokPhotoParser.isPhotoModeUrl("https://www.tiktok.com/photo/7123456789012345678?is_from_webapp=1"))
+        assertTrue(TikTokPhotoParser.isPhotoModeUrl("https://www.tiktok.com/t/ZMabcdef/photo/7123456789012345678"))
+        // A video permalink is never photo mode, whatever else the path carries.
+        assertFalse(TikTokPhotoParser.isPhotoModeUrl("https://www.tiktok.com/video/7123456789012345678"))
+    }
 }

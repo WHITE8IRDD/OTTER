@@ -19,6 +19,7 @@ import com.otter.app.data.model.DownloadPhase
 import com.otter.app.data.model.DownloadState
 import com.otter.app.data.model.DownloadStatus
 import com.otter.app.data.repository.DownloadRepository
+import com.otter.app.engine.MediaSlide
 import com.otter.app.R
 import com.otter.app.util.FileHelper
 import com.otter.app.util.NotificationHelper
@@ -44,6 +45,8 @@ class DownloadService : Service() {
     companion object {
         private const val TAG = "DownloadService"
         const val ACTION_START_DOWNLOAD = "com.otter.app.START_DOWNLOAD"
+        /** One job of picked gallery files (photos *and* clips) fetched straight from their CDN URLs. */
+        const val ACTION_START_MEDIA_BATCH = "com.otter.app.START_MEDIA_BATCH"
         const val ACTION_PAUSE_DOWNLOAD = "com.otter.app.PAUSE_DOWNLOAD"
         const val ACTION_RESUME_DOWNLOAD = "com.otter.app.RESUME_DOWNLOAD"
         const val ACTION_CANCEL_DOWNLOAD = "com.otter.app.CANCEL_DOWNLOAD"
@@ -57,6 +60,9 @@ class DownloadService : Service() {
         const val EXTRA_AUTO_CAPTION_LANGS = "extra_auto_caption_langs"
         const val EXTRA_EMBED_SUBTITLES = "extra_embed_subtitles"
         const val EXTRA_SUBTITLE_FORMAT = "extra_subtitle_format"
+        /** Parallel lists for [ACTION_START_MEDIA_BATCH]: the files and their kind (0 = picture, 1 = video). */
+        const val EXTRA_MEDIA_URLS = "extra_media_urls"
+        const val EXTRA_MEDIA_KINDS = "extra_media_kinds"
         // Metadata kept with the history entry so it can be shown and copied later.
         const val EXTRA_UPLOADER = "extra_uploader"
         const val EXTRA_DESCRIPTION = "extra_description"
@@ -69,6 +75,11 @@ class DownloadService : Service() {
         private const val NOTIFICATION_THROTTLE_MS = 500L
         private const val PREFS_ACTIVE_DOWNLOAD = "active_download_service"
         private const val PREF_ACTIVE_URL = "active_url"
+        private const val PREF_ACTIVE_ACTION = "active_action"
+        private const val PREF_ACTION_SINGLE = "single"
+        private const val PREF_ACTION_BATCH = "batch"
+        private const val PREF_ACTIVE_MEDIA_URLS = "active_media_urls"
+        private const val PREF_ACTIVE_MEDIA_KINDS = "active_media_kinds"
     }
 
     override fun onCreate() {
@@ -105,6 +116,10 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return when (intent.action) {
             ACTION_START_DOWNLOAD -> {
                 handleStart(intent)
+                START_STICKY
+            }
+            ACTION_START_MEDIA_BATCH -> {
+                handleStartMediaBatch(intent)
                 START_STICKY
             }
             ACTION_PAUSE_DOWNLOAD -> {
@@ -149,6 +164,20 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ).forEach { key -> editor.putBoolean(key, intent.getBooleanExtra(key, false)) }
         editor.putLong(EXTRA_DURATION, intent.getLongExtra(EXTRA_DURATION, 0L))
         editor.putString(PREF_ACTIVE_URL, intent.getStringExtra(EXTRA_URL))
+        // A batch carries its files as parallel lists; one line each survives a
+        // process death (URLs and 0/1 markers never contain a newline).
+        editor.putString(
+            PREF_ACTIVE_MEDIA_URLS,
+            intent.getStringArrayListExtra(EXTRA_MEDIA_URLS)?.joinToString("\n")
+        )
+        editor.putString(
+            PREF_ACTIVE_MEDIA_KINDS,
+            intent.getIntegerArrayListExtra(EXTRA_MEDIA_KINDS)?.joinToString("\n")
+        )
+        editor.putString(
+            PREF_ACTIVE_ACTION,
+            if (intent.action == ACTION_START_MEDIA_BATCH) PREF_ACTION_BATCH else PREF_ACTION_SINGLE
+        )
         // The small request record is committed before yt-dlp starts. If Android
         // kills the process, --continue can resume the partial file on service restart.
         editor.commit()
@@ -157,8 +186,12 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     private fun restorePendingDownloadIntent(): Intent? {
         val preferences = getSharedPreferences(PREFS_ACTIVE_DOWNLOAD, Context.MODE_PRIVATE)
         val url = preferences.getString(PREF_ACTIVE_URL, null)?.takeIf { it.isNotBlank() } ?: return null
+        val isBatch = preferences.getString(PREF_ACTIVE_ACTION, PREF_ACTION_SINGLE) == PREF_ACTION_BATCH
+        val batchUrls = preferences.getString(PREF_ACTIVE_MEDIA_URLS, null)
+            ?.split('\n')?.filter { it.isNotBlank() }
+        if (isBatch && batchUrls.isNullOrEmpty()) return null
         return Intent(this, DownloadService::class.java).apply {
-            action = ACTION_START_DOWNLOAD
+            action = if (isBatch) ACTION_START_MEDIA_BATCH else ACTION_START_DOWNLOAD
             listOf(
                 EXTRA_URL, EXTRA_FORMAT_ID, EXTRA_OUTPUT_DIR, EXTRA_TITLE, EXTRA_THUMBNAIL_URL,
                 EXTRA_SUBTITLE_LANGS, EXTRA_AUTO_CAPTION_LANGS, EXTRA_SUBTITLE_FORMAT,
@@ -174,6 +207,18 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
             ).forEach { key -> putExtra(key, preferences.getBoolean(key, false)) }
             putExtra(EXTRA_DURATION, preferences.getLong(EXTRA_DURATION, 0L))
             putExtra(EXTRA_URL, url)
+            if (isBatch) {
+                putStringArrayListExtra(EXTRA_MEDIA_URLS, ArrayList(batchUrls.orEmpty()))
+                val kinds = preferences.getString(PREF_ACTIVE_MEDIA_KINDS, null)
+                    ?.split('\n')
+                    ?.map { it.trim().toIntOrNull() ?: 0 }
+                    .orEmpty()
+                // Kinds are parallel to the URLs; anything missing reads as a picture.
+                putIntegerArrayListExtra(
+                    EXTRA_MEDIA_KINDS,
+                    ArrayList(List(batchUrls!!.size) { index -> kinds.getOrElse(index) { 0 } })
+                )
+            }
         }
     }
 
@@ -279,6 +324,172 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                 ActiveDownloadStateHolder.clear()
             }
         }
+    }
+
+    // ─── MEDIA BATCH (quick-download gallery picks) ───────────────────────────
+
+    /**
+     * One job of picked gallery files — photos and clips together — fetched straight
+     * from the signed CDN URLs the post handed out. This is what the Quick Download
+     * window sends: the window closes back into Instagram while this service keeps
+     * the files coming and records one History row for the post.
+     */
+    private fun handleStartMediaBatch(intent: Intent) {
+        val sourceUrl = intent.getStringExtra(EXTRA_URL) ?: return
+        val mediaUrls = intent.getStringArrayListExtra(EXTRA_MEDIA_URLS)
+            .orEmpty().filter { it.isNotBlank() }
+        val kinds = intent.getIntegerArrayListExtra(EXTRA_MEDIA_KINDS).orEmpty()
+        if (mediaUrls.isEmpty()) {
+            Log.w(TAG, "[BATCH-1] no media URLs in batch request")
+            stopSelf()
+            return
+        }
+        persistPendingDownload(intent)
+        var outputDir = intent.getStringExtra(EXTRA_OUTPUT_DIR) ?: ""
+        if (outputDir.isBlank()) {
+            val savedPath = runBlocking(Dispatchers.IO) { repository.downloadPath.first() }
+            outputDir = if (savedPath.isNotBlank()) savedPath
+            else "${getExternalFilesDir(null)?.parentFile?.parentFile?.absolutePath}/Download/Otter/"
+        }
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.default_video_title)
+        val thumbUrl = intent.getStringExtra(EXTRA_THUMBNAIL_URL)
+
+        pendingUploader = intent.getStringExtra(EXTRA_UPLOADER).orEmpty()
+        pendingThumbnailUrl = thumbUrl
+        pendingDescription = intent.getStringExtra(EXTRA_DESCRIPTION).orEmpty()
+        pendingHashtags = intent.getStringExtra(EXTRA_HASHTAGS)
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        pendingDuration = intent.getLongExtra(EXTRA_DURATION, 0L)
+        pendingFormatId = ""
+        pendingIsAudioOnly = false
+        pendingHasSubtitles = false
+        pendingSkipHistory = intent.getBooleanExtra(EXTRA_SKIP_HISTORY, false)
+
+        if (!thumbUrl.isNullOrEmpty()) {
+            serviceScope.launch(Dispatchers.IO) {
+                try {
+                    thumbnailBitmap = loadThumbnail(thumbUrl)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "[BATCH] thumbnail load failed", e)
+                }
+            }
+        }
+        Log.i(TAG, "[BATCH-2] MEDIA BATCH START files=${mediaUrls.size} outputDir=$outputDir title=$title")
+
+        try {
+            val initialNotification = NotificationHelper.buildProgressNotification(
+                this, title, DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING), url = sourceUrl
+            )
+            startForeground(NotificationHelper.NOTIFICATION_ID_DOWNLOAD, initialNotification)
+            DownloadStateHolder.update(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
+            ActiveDownloadStateHolder.updateState(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING), title, sourceUrl)
+        } catch (e: Throwable) {
+            Log.e(TAG, "[BATCH-3] startForeground failed", e)
+        }
+
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val slides = mediaUrls.mapIndexed { index, url ->
+                    MediaSlide(url = url, isVideo = kinds.getOrElse(index) { 0 } != 0)
+                }
+                val summary = repository.downloadMedia(
+                    slides = slides,
+                    baseName = title,
+                    outputDir = outputDir,
+                    onProgress = { state ->
+                        // Success/Error are folded into the summary this call returns;
+                        // forwarding them here would record a History row for a
+                        // newline-joined path list instead of one finished post.
+                        if (state is DownloadState.Downloading) {
+                            handleCommonState(state, sourceUrl, title, fromResume = false)
+                        }
+                    },
+                    refererUrl = sourceUrl
+                )
+                if (summary.savedCount > 0) {
+                    val firstPath = summary.savedPaths.first()
+                    Log.i(
+                        TAG,
+                        "[BATCH-4] saved ${summary.savedCount}/${slides.size} file(s)" +
+                            if (summary.failedCount > 0) " (${summary.failedCount} failed: ${summary.firstFailure})" else ""
+                    )
+                    val finalState = DownloadState.Success(firstPath)
+                    DownloadStateHolder.update(finalState)
+                    ActiveDownloadStateHolder.updateState(finalState, title, sourceUrl)
+                    try {
+                        NotificationHelper.showCompleteNotification(
+                            this@DownloadService, title, firstPath, thumbnailBitmap
+                        )
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "[BATCH-4b] complete notification threw", e)
+                    }
+                    if (!pendingSkipHistory) {
+                        try {
+                            val record = buildBatchRecord(sourceUrl, title, summary.savedPaths)
+                            runBlocking(Dispatchers.IO) { repository.saveDownloadItem(record) }
+                            Log.i(TAG, "[BATCH-4c] history record saved for the batch")
+                        } catch (e: Throwable) {
+                            Log.e(TAG, "[BATCH-4d] failed to save history record", e)
+                        }
+                    }
+                } else {
+                    val message = summary.firstFailure.ifBlank { getString(R.string.failed_all_images) }
+                    Log.w(TAG, "[BATCH-5] no files saved: $message")
+                    val finalState = DownloadState.Error(message)
+                    DownloadStateHolder.update(finalState)
+                    ActiveDownloadStateHolder.updateState(finalState, title, sourceUrl)
+                    try {
+                        NotificationHelper.showErrorNotification(this@DownloadService, title, message)
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "[BATCH-5b] error notification threw", e)
+                    }
+                }
+            } catch (e: CancellationException) {
+                Log.i(TAG, "[BATCH-6] job cancelled (service stopping)")
+            } catch (e: Throwable) {
+                Log.e(TAG, "[BATCH-7] unexpected error", e)
+                try {
+                    NotificationHelper.showErrorNotification(
+                        this@DownloadService, title, e.message ?: "Download failed"
+                    )
+                } catch (ignored: Throwable) {
+                }
+            } finally {
+                clearPendingDownload(sourceUrl)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                ActiveDownloadStateHolder.clear()
+            }
+        }
+    }
+
+    /** One History row for a finished gallery batch: the post, sized by its files together. */
+    private fun buildBatchRecord(sourceUrl: String, title: String, savedPaths: List<String>): DownloadItem {
+        val firstPath = savedPaths.first()
+        val totalSize = savedPaths.sumOf { path ->
+            runCatching { FileHelper.getFileSizeBytes(path) }.getOrDefault(0L)
+        }
+        val extension = firstPath.substringAfterLast('/')
+            .substringAfterLast('.', "")
+            .lowercase()
+        return DownloadItem(
+            url = sourceUrl,
+            title = title,
+            uploader = pendingUploader,
+            thumbnailUrl = pendingThumbnailUrl ?: firstPath,
+            filePath = firstPath,
+            fileSize = totalSize,
+            duration = pendingDuration,
+            formatId = "",
+            ext = extension,
+            isAudioOnly = false,
+            description = pendingDescription,
+            hashtags = pendingHashtags,
+            status = DownloadStatus.COMPLETED.name
+        )
     }
 
     // ─── PAUSE ────────────────────────────────────────────────────────────────

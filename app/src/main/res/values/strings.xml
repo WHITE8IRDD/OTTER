@@ -203,6 +203,7 @@
     <string name="content_desc_image">Image %d</string>
     <string name="content_desc_video">Video %d</string>
     <string name="content_desc_video_slide">Video slide</string>
+    <string name="content_desc_selected_slide">Selected</string>
     <string name="content_desc_copy_hashtags">Copy hashtags</string>
 
     <!-- CookiesScreen -->
@@ -272,6 +273,11 @@
     <string name="quick_download_title">Quick Download</string>
     <string name="quick_download_started">Quick download started</string>
     <string name="quick_download_failed">Failed: %s</string>
+    <string name="quick_download_reading">Reading post…</string>
+    <string name="quick_download_read_failed">Could not read this post</string>
+    <string name="quick_download_starting">Starting download…</string>
+    <string name="quick_download_background_note">Downloads keep running in the background — you can keep browsing</string>
+    <string name="quick_download_video_item">1 video — best available quality</string>
     <string name="no_valid_url">No valid URL found</string>
 
     <!-- NotificationHelper -->
