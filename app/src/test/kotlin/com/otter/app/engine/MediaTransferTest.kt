@@ -1,11 +1,11 @@
 package com.otter.app.engine
 
-import com.sun.net.httpserver.HttpServer
+import java.net.ServerSocket
+import java.util.concurrent.Executors
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import java.net.InetSocketAddress
 import java.net.HttpURLConnection
 import java.net.URL
 import java.io.IOException
@@ -16,18 +16,28 @@ class MediaTransferTest {
     private fun media(name: String) = javaClass.getResourceAsStream("/media/$name")!!.use { it.readBytes() }
 
     private fun response(bytes: ByteArray, mime: String, status: Int = 200, declared: Long = bytes.size.toLong(), block: (HttpURLConnection) -> Unit) {
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/media") { exchange ->
-            try {
-                exchange.responseHeaders.set("Content-Type", mime)
-                exchange.sendResponseHeaders(status, declared)
-                exchange.responseBody.use { it.write(bytes) }
-            } finally { exchange.close() }
+        val server = ServerSocket(0)
+        val executor = Executors.newSingleThreadExecutor()
+        val task = executor.submit {
+            server.accept().use { client ->
+                val input = client.getInputStream().bufferedReader()
+                input.readLine()
+                var line = input.readLine()
+                while (!line.isNullOrEmpty()) line = input.readLine()
+                client.getOutputStream().use { output ->
+                    output.write("HTTP/1.1 $status Test\r\nContent-Type: $mime\r\nContent-Length: $declared\r\nConnection: close\r\n\r\n".toByteArray())
+                    output.write(bytes)
+                    output.flush()
+                }
+            }
         }
-        server.start()
-        val c = URL("http://127.0.0.1:${server.address.port}/media").openConnection() as HttpURLConnection
+        val c = URL("http://127.0.0.1:${server.localPort}/media").openConnection() as HttpURLConnection
         c.readTimeout = 1500
-        try { block(c) } finally { c.disconnect(); server.stop(0) }
+        try { block(c) } finally {
+            c.disconnect()
+            server.close()
+            executor.shutdownNow()
+        }
     }
 
     @Test fun downloadsRealVideoWithExactBytesAndProgress() {
