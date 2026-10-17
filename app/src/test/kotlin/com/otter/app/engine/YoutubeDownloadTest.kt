@@ -87,6 +87,12 @@ class YoutubeDownloadTest {
     }
 
     @Test
+    fun aMissingRequestedIdDoesNotReturnSomebodyElsesDownload() {
+        media("Other [aaaaaaaaaaa].mp4", 9000L)
+        assertNull(MediaFileLocator.findDownloaded(folder.root, "BaW_jenozKc"))
+    }
+
+    @Test
     fun withoutAnIdTheNewestMediaFileIsPicked() {
         media("older.mp4", 1_000L)
         val newest = media("newest.m4a", 9_000L)

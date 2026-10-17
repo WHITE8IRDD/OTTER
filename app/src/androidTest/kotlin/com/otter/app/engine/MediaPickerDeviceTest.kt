@@ -44,7 +44,7 @@ class MediaPickerDeviceTest {
         var toggled = -1
         show(listOf(CarouselItem("", true), CarouselItem("", false))) { toggled = it }
         // Pictures is shown first but still represents item 2 of the original post.
-        compose.onNodeWithText("2", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("2").performClick()
         compose.runOnIdle { assertEquals(1, toggled) }
     }
 }

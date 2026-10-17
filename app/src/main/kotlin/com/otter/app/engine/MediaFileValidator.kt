@@ -39,6 +39,7 @@ object MediaFileValidator {
         "matroska" -> "mkv"
         "mpegts" -> "ts"
         "id3" -> "mp3"
+        "adts" -> "aac"
         in imageContainers, in videoContainers, in audioContainers -> container
         else -> null
     }
@@ -74,6 +75,7 @@ object MediaFileValidator {
             header[0] == 0x89.toByte() && ascii(1, 3) == "PNG" -> "png"
             header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() -> if (String(header, Charsets.ISO_8859_1).contains("webm")) "webm" else "matroska"
             header.size > 188 && header[0] == 0x47.toByte() && header[188] == 0x47.toByte() -> "mpegts"
+            header[0] == 0xFF.toByte() && (header[1].toInt() and 0xF6) == 0xF0 -> "adts"
             header[0] == 0xFF.toByte() && (header[1].toInt() and 0xF6) == 0xF2 -> "mp3"
             ascii(0, 4) == "RIFF" && ascii(8, 4) == "AVI " -> "avi"
             ascii(0, 2) == "BM" -> "bmp"

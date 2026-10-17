@@ -97,6 +97,22 @@ class MediaPipelineDeviceTest {
         } finally { output.deleteRecursively() }
     }
 
+    @Test fun explicitlyRequestedAudioIsNotRejectedAsMissingVideo() = withServer { base ->
+        val output = File(context.cacheDir, "audio-${System.nanoTime()}").apply { mkdirs() }
+        try {
+            val states = mutableListOf<com.otter.app.data.model.DownloadState>()
+            runBlocking {
+                Downloader(context).download("$base/audio-only.m4a", "best", output.path,
+                    { states.add(it) }, isAudioOnly = true)
+            }
+            val success = states.lastOrNull() as? com.otter.app.data.model.DownloadState.Success
+            assertNotNull("Audio download must succeed: $states", success)
+            val files = output.listFiles().orEmpty().filter { it.extension == "m4a" }
+            assertEquals(1, files.size)
+            assertTrue(MediaFileValidator.validate(files.single(), MediaFileValidator.Kind.AUDIO) is MediaFileValidator.Outcome.Valid)
+        } finally { output.deleteRecursively() }
+    }
+
     @Test fun bundledEngineAndFfmpegMergeSeparateAudioAndVideoIntoPlayableMp4() = withServer { base ->
         EngineRuntime.initialize(context)
         val output = File(context.cacheDir, "merge-${System.nanoTime()}").apply { mkdirs() }

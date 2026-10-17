@@ -28,7 +28,7 @@ object MediaFileLocator {
 
         val id = videoId.trim()
         val tagged = if (id.isEmpty()) emptyList() else files.filter { it.name.contains("[$id]") }
-        val pool = tagged.ifEmpty { files }
+        val pool = if (id.isNotEmpty()) tagged else files
         return pool.maxByOrNull { it.lastModified() }
     }
 }

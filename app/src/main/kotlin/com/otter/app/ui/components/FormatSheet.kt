@@ -811,6 +811,7 @@ private fun SlideCard(
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(previewUrl)
+                            .apply { com.otter.app.engine.MediaPreviewHeaders.forUrl(previewUrl).forEach { (name, value) -> addHeader(name, value) } }
                             .size(360)
                             .crossfade(true)
                             .build(),
