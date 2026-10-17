@@ -247,7 +247,7 @@
     <string name="btn_select_all">SELECT ALL</string>
     <string name="btn_clear_format">CLEAR</string>
     <string name="btn_download_selected">Download Selected (%d)</string>
-    <string name="carousel_photos">Photos</string>
+    <string name="carousel_photos">Pictures</string>
     <string name="carousel_videos">Videos</string>
     <string name="carousel_partial">Only %1$d of %2$d slides could be read. The rest may need site cookies or may not be public.</string>
     <string name="carousel_kinds">%1$d pictures, %2$d videos — pick any of them</string>

@@ -1,0 +1,61 @@
+{
+  "release": "Outter 28",
+  "source_sha256": null,
+  "apk_sha256": null,
+  "tested_by": null,
+  "device": null,
+  "scenarios": {
+    "instagram_single_image": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "instagram_single_video": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "instagram_image_carousel": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "instagram_video_carousel": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "instagram_mixed_carousel": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "no_thumbnail_substitution": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "youtube_shorts": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "youtube_long_form": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "tiktok_video": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "valid_outputs": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "failure_recovery": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "picker_responsiveness": {
+      "status": "not_run",
+      "evidence": null
+    },
+    "existing_functionality": {
+      "status": "not_run",
+      "evidence": null
+    }
+  }
+}

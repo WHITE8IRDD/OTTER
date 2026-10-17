@@ -3,6 +3,7 @@ package com.otter.app.share
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -42,6 +44,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -78,24 +82,24 @@ fun QuickDownloadWindow(
     val scrimInteraction = androidx.compose.runtime.remember {
         androidx.compose.foundation.interaction.MutableInteractionSource()
     }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            // The dimmed backdrop is part of the window: tapping outside cancels it,
-            // and the user lands exactly where they were.
-            .background(Color.Black.copy(alpha = 0.45f))
-            .clickable(
-                indication = null,
-                interactionSource = scrimInteraction
-            ) { onDismiss() }
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Keep the backdrop separate: a clickable ancestor merged the whole window's
+        // labels into its dismiss action and could dismiss taps inside the card.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .testTag("quick-download-backdrop")
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable(indication = null, interactionSource = scrimInteraction) { onDismiss() }
+        )
         Card(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxWidth()
                 .padding(16.dp)
                 // A dialog, not a page: bounded height, the file list scrolls inside it.
-                .heightIn(max = 580.dp),
+                .heightIn(max = 580.dp)
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) },
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -343,18 +347,28 @@ private fun ReadyBody(
             columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f, fill = false)
                 .heightIn(max = 300.dp)
+                .testTag("quick-media-grid")
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(items) { index, item ->
-                QuickSlideCard(
-                    index = index,
-                    item = item,
-                    isSelected = state.selection.contains(index),
-                    onToggle = onToggle
-                )
+            for (isVideo in listOf(false, true)) {
+                val indices = items.indices.filter { items[it].isVideo == isVideo }
+                if (indices.isNotEmpty()) {
+                    item(key = "section-$isVideo", span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            text = stringResource(if (isVideo) R.string.carousel_videos else R.string.carousel_photos) + " (${indices.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                    items(indices.size, key = { "slide-${indices[it]}" }) { position ->
+                        val index = indices[position]
+                        QuickSlideCard(index, items[index], state.selection.contains(index), onToggle)
+                    }
+                }
             }
         }
 
@@ -418,6 +432,7 @@ private fun QuickSlideCard(
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(previewUrl)
+                            .apply { com.otter.app.engine.MediaPreviewHeaders.forUrl(previewUrl).forEach { (name, value) -> addHeader(name, value) } }
                             .size(360)
                             .crossfade(true)
                             .build(),

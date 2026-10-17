@@ -39,8 +39,7 @@ class OtterApplication : Application() {
 
     private suspend fun initAVEngine() = withContext(Dispatchers.IO) {
         try {
-            YoutubeDL.getInstance().init(this@OtterApplication)
-            FFmpeg.getInstance().init(this@OtterApplication)
+            com.otter.app.engine.EngineRuntime.initialize(this@OtterApplication)
             Log.i(TAG, "Engine initialized successfully")
         } catch (e: YoutubeDLException) {
             Log.e(TAG, "Failed to initialize engine", e)

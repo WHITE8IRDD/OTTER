@@ -260,7 +260,8 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
             ?: emptyList()
         pendingDuration = intent.getLongExtra(EXTRA_DURATION, 0L)
         pendingFormatId = formatId
-        pendingIsAudioOnly = intent.getBooleanExtra(EXTRA_IS_AUDIO_ONLY, false)
+        val isAudioOnly = intent.getBooleanExtra(EXTRA_IS_AUDIO_ONLY, false)
+        pendingIsAudioOnly = isAudioOnly
         pendingHasSubtitles = intent.getBooleanExtra(EXTRA_HAS_SUBTITLES, false)
         pendingSkipHistory = intent.getBooleanExtra(EXTRA_SKIP_HISTORY, false)
 
@@ -288,9 +289,9 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                     { u, f, progress ->
                         try {
                             if (saveThumbnail) {
-                                repository.downloadWithThumbnail(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title)
+                                repository.downloadWithThumbnail(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title, isAudioOnly)
                             } else {
-                                repository.startDownload(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title)
+                                repository.startDownload(u, f, outputDir, progress, subtitleLangs, embedSubtitles, subtitleFormat, autoCaptionLangs, title, isAudioOnly)
                             }
                         } catch (e: Throwable) {
                             Log.e(TAG, "[START-3] download function threw for $u", e)

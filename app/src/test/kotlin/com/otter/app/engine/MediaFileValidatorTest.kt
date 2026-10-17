@@ -12,10 +12,8 @@ import java.io.File
  * Whether a finished download is a file the user can open.
  *
  * The app used to call a download successful when the path existed and had a size — which is how a
- * CDN error page written into `video.mp4` (an expired signed URL answers 403 with a body) ended up in
- * the gallery as a 1.5 KB "video". The validator is the last gate before the green notification, so
- * what it must never do is reject a real file it does not recognise: an unknown header is accepted
- * when the size looks right.
+ * CDN error page written into `video.mp4` ended up in the gallery as a 1.5 KB "video".
+ * Typed downloads must fail closed when the body cannot be identified as media.
  */
 class MediaFileValidatorTest {
 
@@ -108,15 +106,14 @@ class MediaFileValidatorTest {
     }
 
     @Test
-    fun anUnknownHeaderOfAPlausibleSizeIsAccepted() {
-        // A container the sniffer does not know (aavi, a real .divx, an exotic caption stream) must
-        // not turn a working download into a reported failure.
+    fun anUnknownHeaderIsNotProofOfVideo() {
+        // Size alone cannot turn arbitrary bytes into proof of a valid video.
         val outcome = MediaFileValidator.validate(
             file("odd.mkv", ByteArray(4096) { 0x01 }),
             MediaFileValidator.Kind.VIDEO
         )
 
-        assertEquals(MediaFileValidator.Outcome.Valid(4096L, "unknown"), outcome)
+        assertTrue(outcome is MediaFileValidator.Outcome.Invalid)
     }
 
     @Test

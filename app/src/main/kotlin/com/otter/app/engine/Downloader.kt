@@ -10,6 +10,8 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
@@ -144,8 +146,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 Platform.TIKTOK -> {
                     // Match the public web extractor used by FormatParser. A hard-coded
                     // mobile IID made metadata and downloads use different format lists.
-                    request.addOption("--user-agent", MediaUrlNormalizer.TIKTOK_USER_AGENT)
-                    request.addOption("--add-header", "Referer:https://www.tiktok.com/")
+                    PlatformExtractionPolicy.options(url).forEach { (flag, value) -> request.addOption(flag, value) }
                     request.addOption("--extractor-retries", "5")
                 }
                 Platform.FACEBOOK -> {
@@ -177,11 +178,6 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 Platform.YOUTUBE -> {
                     // Let yt-dlp use its current client headers (important for Shorts and EJS challenges).
                     request.addOption("--extractor-retries", "5")
-                    // Work around YouTube's SABR-only web client for regular/long videos: the
-                    // android_sdkless client is being killed and returns 403/no URL, so drop it
-                    // from the default chain and keep the clients that still hand out plain
-                    // HTTPS streams. Shorts are unaffected (single muxed stream).
-                    request.addOption("--extractor-args", "youtube:player_client=default,-android_sdkless")
                     // A merged video+audio of a long-form video or a Short lands in MP4 (a
                     // remux, never a re-encode) instead of MKV, which every Android gallery
                     // and player opens. Same reasoning as YTDLnis' "compatible" output mode.
@@ -199,27 +195,16 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         ): String? {
             return try {
                 Log.w(TAG, "[FORMAT-REFRESH] Format may be expired, re-fetching for $url")
+                formatParser.clearCacheForUrl(url)
                 val result = formatParser.fetchVideoInfo(url)
-                if (result.isFailure) {
-                    Log.w(TAG, "[FORMAT-REFRESH] Re-fetch failed: ${result.exceptionOrNull()?.message}")
-                    return null
-                }
+                if (result.isFailure) return null
                 val info = result.getOrThrow()
-                val matching = info.formats.find { fmt ->
-                    fmt.formatId == currentFormatId || fmt.formatId.startsWith(currentFormatId.take(5))
-                }
-                if (matching != null) {
-                    Log.i(TAG, "[FORMAT-REFRESH] Found matching format: ${matching.formatId} (was $currentFormatId)")
-                    matching.formatId
+                val selectedVideo = currentFormatId.substringBefore('+').substringBefore('/')
+                if (selectedVideo.startsWith("best") || info.formats.any { it.formatId == selectedVideo }) {
+                    currentFormatId // preserve audio pairing, fallbacks and the user's resolution
                 } else {
-                    val firstVideo = info.formats.firstOrNull { !it.isAudioOnly }
-                    if (firstVideo != null) {
-                        Log.i(TAG, "[FORMAT-REFRESH] No exact match, using first video: ${firstVideo.formatId}")
-                        firstVideo.formatId
-                    } else {
-                        Log.w(TAG, "[FORMAT-REFRESH] No formats found in refreshed info")
-                        null
-                    }
+                    Log.w(TAG, "Selected quality is no longer available; reopen the format picker")
+                    null
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "[FORMAT-REFRESH] Exception during refresh: ${e.message}")
@@ -362,28 +347,25 @@ class Downloader(private val context: Context, private val formatParser: FormatP
     /** A URL without its query string: signed CDN URLs and tokens do not belong in logcat. */
     private fun redact(url: String): String = url.substringBefore('?')
 
-    private fun getWorkingDir(): File {
-        return File(context.cacheDir, "ytdlp").also { it.mkdirs() }
+    private fun getWorkingDir(url: String): File {
+        val key = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
+        return File(File(context.cacheDir, "ytdlp"), key).also { it.mkdirs() }
     }
 
     private fun copyToExternal(internalPath: String, outputDir: String): String {
         val srcFile = File(internalPath)
         var destFile = File(outputDir, srcFile.name)
-        // Delete existing file at destination if present (more reliable than copyTo overwrite on some devices)
-        if (destFile.exists()) {
+        var counter = 1
+        while (!destFile.createNewFile()) {
+            destFile = File(outputDir, "${srcFile.nameWithoutExtension} (${counter++}).${srcFile.extension}")
+        }
+        try {
+            srcFile.copyTo(destFile, overwrite = true)
+        } catch (e: Exception) {
             destFile.delete()
+            throw e
         }
-        // If delete failed or file still exists, add a numeric suffix
-        if (destFile.exists()) {
-            var counter = 1
-            val name = srcFile.nameWithoutExtension
-            val ext = srcFile.extension
-            while (destFile.exists()) {
-                destFile = File(outputDir, "${name} ($counter).$ext")
-                counter++
-            }
-        }
-        srcFile.copyTo(destFile)
         Log.i(TAG, "copyToExternal: $internalPath -> $destFile")
         com.otter.app.util.FileHelper.scanFile(context, destFile.absolutePath)
         return destFile.absolutePath
@@ -394,7 +376,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
      * download wrote straight into the download folder, that folder is not ours to
      * clear however the download ended.
      */
-    private fun cleanup(dir: File = getWorkingDir()) {
+    private fun cleanup(dir: File) {
         val cacheRoot = context.cacheDir.absolutePath
         if (dir.absolutePath == cacheRoot || dir.absolutePath.startsWith("$cacheRoot/")) {
             dir.deleteRecursively()
@@ -440,9 +422,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         embedSubtitles: Boolean = false,
         subtitleFormat: String = "srt",
         autoCaptionLangs: String = "",
-        title: String = ""
+        title: String = "",
+        isAudioOnly: Boolean = false
     ) = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
+        FormatParser.ensureEngineReady(context)
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -479,7 +463,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
-                val workingDir = if (writesDirectly) outputFile else getWorkingDir()
+                val workingDir = if (writesDirectly) outputFile else getWorkingDir(url)
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this, url, settings.cookiesEnabled)
@@ -526,7 +510,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
-                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                EngineRuntime.execute(request, processId) { progress, etaInSeconds, line ->
                     val now = System.currentTimeMillis()
                     if (now - lastEmitTime < emitIntervalMs) return@execute
                     lastEmitTime = now
@@ -569,14 +553,15 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 val downloadedFile = findDownloadedFile(workingDir.absolutePath, url)
                 if (downloadedFile != null) {
                     val expectedKind = when {
-                        settings.extractAudio || currentFormatId.contains("audio") ||
-                            localFormatId.contains("audio") || localFormatId.startsWith("bestaudio") ->
+                        settings.extractAudio || isAudioOnly || localFormatId.startsWith("bestaudio") ->
                             MediaFileValidator.Kind.AUDIO
                         else -> MediaFileValidator.Kind.VIDEO
                     }
                     when (val check = MediaFileValidator.validate(File(downloadedFile), expectedKind)) {
-                        is MediaFileValidator.Outcome.Valid ->
+                        is MediaFileValidator.Outcome.Valid -> {
+                            if (expectedKind == MediaFileValidator.Kind.VIDEO) requireVideoTrack(File(downloadedFile))
                             Log.i(TAG, "download VALIDATED ${check.container} ${check.sizeBytes}B")
+                        }
                         is MediaFileValidator.Outcome.Invalid -> {
                             // A file that is not what was asked for is a failure, not a success with
                             // a bad name: reporting it here is the difference between "downloaded" and
@@ -632,7 +617,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     // e.g. "requested format is not available") must not end the download: drop the
                     // cache and re-extract on the next attempt instead.
                     Log.w(TAG, "[DL] cached extraction failed, re-extracting on next attempt")
-                    cleanup()
+                    cleanup(getWorkingDir(url))
                     continue
                 }
 
@@ -663,7 +648,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         val newFmtId = refreshFormatInfo(formatParser!!, url, localFormatId)
                         if (newFmtId != null) {
                             currentFormatId = newFmtId
-                            cleanup()
+                            cleanup(getWorkingDir(url))
                             Log.i(TAG, "[DL-RETRY] retrying with a refreshed format $currentFormatId")
                             continue
                         }
@@ -678,7 +663,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                     DownloadRetryPolicy.Action.RETRY -> {
                         Log.w(TAG, "[DL-RETRY] attempt $attempt/$maxAttempts failed for ${redact(url)}, will retry. Error: $msg")
-                        cleanup()
+                        cleanup(getWorkingDir(url))
                     }
 
                     DownloadRetryPolicy.Action.SUCCEED -> return@withContext
@@ -696,7 +681,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val isLive = isLiveStream(url)
         val settings = readSettings()
         try {
-            val workingDir = getWorkingDir()
+            val workingDir = getWorkingDir(url)
 
             val outputFile = File(outputDir)
             if (!outputFile.exists() && !outputFile.mkdirs()) {
@@ -721,14 +706,14 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
             onProgress(DownloadState.Downloading(0.5f, phase = DownloadPhase.DOWNLOADING))
 
-            YoutubeDL.getInstance().execute(request, processId) { _, _, _ -> }
+            EngineRuntime.execute(request, processId) { _, _, _ -> }
 
             activeDownloads.remove(url)
 
             val thumbFile = findThumbnailFile(workingDir.absolutePath, url)
             if (thumbFile != null) {
                 val externalPath = copyToExternal(thumbFile, outputDir)
-                cleanup()
+                cleanup(getWorkingDir(url))
                 onProgress(DownloadState.Success(externalPath))
             } else {
                 onProgress(DownloadState.Success(outputDir))
@@ -749,9 +734,11 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         embedSubtitles: Boolean = false,
         subtitleFormat: String = "srt",
         autoCaptionLangs: String = "",
-        title: String = ""
+        title: String = "",
+        isAudioOnly: Boolean = false
     ) = withContext(Dispatchers.IO) {
         EngineLock.markUsed()
+        FormatParser.ensureEngineReady(context)
         var currentFormatId = formatId
         val isLive = isLiveStream(url)
         val platform = detectPlatform(url)
@@ -779,7 +766,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 if (!outputFile.exists() && !outputFile.mkdirs()) {
                     throw IOException(context.getString(R.string.creating_output_dir_failed) + ": $outputDir")
                 }
-                val workingDir = if (writesDirectly) outputFile else getWorkingDir()
+                val workingDir = if (writesDirectly) outputFile else getWorkingDir(url)
 
                 val request = YoutubeDLRequest(MediaUrlNormalizer.normalizeYouTubeShortsUrl(url)).apply {
                     addCookies(this, url, settings.cookiesEnabled)
@@ -823,7 +810,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                 onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
 
-                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                EngineRuntime.execute(request, processId) { progress, etaInSeconds, line ->
                     val now = System.currentTimeMillis()
                     if (now - lastEmitTime < emitIntervalMs) return@execute
                     lastEmitTime = now
@@ -870,7 +857,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 if (downloadedFile != null) {
                     val check = MediaFileValidator.validate(
                         File(downloadedFile),
-                        if (settings.extractAudio) MediaFileValidator.Kind.AUDIO else MediaFileValidator.Kind.VIDEO
+                        if (settings.extractAudio || isAudioOnly || localFormatId.startsWith("bestaudio")) MediaFileValidator.Kind.AUDIO else MediaFileValidator.Kind.VIDEO
                     )
                     if (check is MediaFileValidator.Outcome.Invalid) {
                         Log.e(TAG, "downloadWithThumbnail produced an invalid file: ${check.reason}")
@@ -878,6 +865,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         onProgress(DownloadState.Error(context.getString(R.string.download_file_invalid, check.reason)))
                         return@withContext
                     }
+                    if (!settings.extractAudio && !isAudioOnly && !localFormatId.startsWith("bestaudio")) requireVideoTrack(File(downloadedFile))
                     val fileSize = File(downloadedFile).length()
                     Log.i(TAG, "downloadWithThumbnail VERIFIED ${(check as MediaFileValidator.Outcome.Valid).container} size=${fileSize} bytes")
                     val externalPath = if (writesDirectly) {
@@ -914,7 +902,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 if (usedCachedExtraction && youtubeVideoId.isNotEmpty()) {
                     YoutubeInfoCache.invalidate(YoutubeInfoCache.file(context, youtubeVideoId))
                     Log.w(TAG, "[DL] cached extraction failed, re-extracting on next attempt")
-                    cleanup()
+                    cleanup(getWorkingDir(url))
                     continue
                 }
 
@@ -931,7 +919,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         val newFmtId = formatParser?.let { refreshFormatInfo(it, url, localFormatId) }
                         if (newFmtId != null) {
                             currentFormatId = newFmtId
-                            cleanup()
+                            cleanup(getWorkingDir(url))
                             Log.i(TAG, "[DL-RETRY] downloadWithThumbnail retrying with refreshed format $currentFormatId")
                             continue
                         }
@@ -943,7 +931,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                     DownloadRetryPolicy.Action.RETRY -> {
                         Log.w(TAG, "[DL-RETRY] downloadWithThumbnail attempt $attempt/$maxAttempts failed for ${redact(url)}, will retry. Error: $msg")
-                        cleanup()
+                        cleanup(getWorkingDir(url))
                     }
 
                     else -> {
@@ -1008,7 +996,18 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         val safeBase = sanitizeBaseName(baseName)
         val savedByIndex = ConcurrentHashMap<Int, String>()
         val failedCount = java.util.concurrent.atomic.AtomicInteger(0)
-        val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val progressLock = Any()
+        val fractions = FloatArray(items.size)
+        var lastBatchEmit = 0L
+        fun report(index: Int, fraction: Float, finished: Boolean = false) = synchronized(progressLock) {
+            fractions[index] = maxOf(fractions[index], fraction)
+            val now = System.nanoTime()
+            if (finished || now - lastBatchEmit > 150_000_000L) {
+                lastBatchEmit = now
+                onProgress(DownloadState.Downloading(fractions.sum() / items.size, phase = DownloadPhase.DOWNLOADING))
+            }
+        }
+        onProgress(DownloadState.Downloading(0f, phase = DownloadPhase.PREPARING))
         val firstFailure = java.util.concurrent.atomic.AtomicReference<String>("")
         val semaphore = Semaphore(minOf(4, items.size))
 
@@ -1022,7 +1021,10 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                             baseName = safeBase,
                             outputDir = directory,
                             refererUrl = refererUrl,
-                            isVideo = slide.isVideo
+                            isVideo = slide.isVideo,
+                            onBytes = { received, expected ->
+                                if (expected > 0) report(index, (received.toFloat() / expected).coerceAtMost(0.99f))
+                            }
                         )
                         savedByIndex[index] = path
                     } catch (e: CancellationException) {
@@ -1032,13 +1034,7 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                         failedCount.incrementAndGet()
                         firstFailure.compareAndSet("", describeSlideFailure(e, slide))
                     } finally {
-                        val completed = completedCount.incrementAndGet()
-                        onProgress(
-                            DownloadState.Downloading(
-                                progress = completed.toFloat() / items.size.toFloat(),
-                                phase = DownloadPhase.DOWNLOADING
-                            )
-                        )
+                        report(index, 1f, finished = true)
                     }
                 }
             }
@@ -1080,8 +1076,10 @@ class Downloader(private val context: Context, private val formatParser: FormatP
         baseName: String,
         outputDir: File,
         refererUrl: String?,
-        isVideo: Boolean
+        isVideo: Boolean,
+        onBytes: (Long, Long) -> Unit
     ): String {
+        val transferContext = currentCoroutineContext()
         val sourceUrl = URL(mediaUrl)
         if (sourceUrl.protocol != "http" && sourceUrl.protocol != "https") {
             throw IOException("Unsupported media URL scheme")
@@ -1114,29 +1112,17 @@ class Downloader(private val context: Context, private val formatParser: FormatP
 
                 val status = httpConnection.responseCode
                 if (status !in 200..299) throw ImageHttpException(status)
-                val contentType = httpConnection.contentType?.substringBefore(';')
-                    ?.trim()?.lowercase(java.util.Locale.ROOT).orEmpty()
 
-                httpConnection.inputStream.use { input ->
-                    FileOutputStream(partialFile).use { output ->
-                        val buffer = ByteArray(65_536)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            if (count == 0) continue
-                            output.write(buffer, 0, count)
-                        }
-                        output.flush()
-                    }
-                }
+                val verified = MediaTransfer.copyResponse(
+                    httpConnection, partialFile,
+                    if (isVideo) MediaFileValidator.Kind.VIDEO else MediaFileValidator.Kind.IMAGE,
+                    checkCancelled = { transferContext.ensureActive() },
+                    onBytes = onBytes
+                )
+                if (isVideo) requireVideoTrack(partialFile)
 
-                if (partialFile.length() == 0L ||
-                    !isLikelyMediaFile(partialFile, contentType, mediaUrl, isVideo)
-                ) {
-                    throw IOException("The server response was not a ${if (isVideo) "video" else "picture"}")
-                }
-
-                val extension = mediaExtension(contentType, mediaUrl, partialFile, isVideo)
+                val extension = MediaFileValidator.extensionFor(verified.container)
+                    ?: throw IOException("Unsupported media container: ${verified.container}")
                 val destination = saveMediaWithUniqueName(partialFile, outputDir, baseName, index, extension)
                 com.otter.app.util.FileHelper.scanFile(context, destination.absolutePath)
                 return destination.absolutePath
@@ -1183,114 +1169,18 @@ class Downloader(private val context: Context, private val formatParser: FormatP
             error is java.io.EOFException
     }
 
-    /** Accepts an image or, for a video slide, an actual video payload. */
-    private fun isLikelyMediaFile(
-        file: File,
-        contentType: String,
-        sourceUrl: String,
-        isVideo: Boolean
-    ): Boolean {
-        if (!isVideo) return isLikelyImageFile(file, contentType, sourceUrl)
-        if (contentType.startsWith("video/")) return true
-        if (sniffVideoExtension(file) != null) return true
-        if (contentType.contains("html") || contentType.contains("json") ||
-            contentType.startsWith("text/")
-        ) return false
-        return looksLikeVideoUrl(sourceUrl) && (
-            contentType.isBlank() ||
-                contentType == "application/octet-stream" ||
-                contentType == "binary/octet-stream"
-            )
-    }
-
-    /** mp4/m4v/webm/mov in the path, ignoring the signed query string. */
-    private fun videoExtensionFromUrl(url: String): String? {
-        val path = runCatching { URL(url).path }.getOrNull() ?: return null
-        val extension = path.substringAfterLast('/', "").substringAfterLast('.', "")
-            .lowercase(java.util.Locale.ROOT)
-        return extension.takeIf { it in setOf("mp4", "m4v", "mov", "webm") }
-    }
-
-    private fun looksLikeVideoUrl(url: String): Boolean = videoExtensionFromUrl(url) != null
-
-    /** Reads the container magic: an ISO base media file ("....ftyp") or a Matroska stream. */
-    private fun sniffVideoExtension(file: File): String? {
-        return runCatching {
-            val header = ByteArray(16)
-            val count = file.inputStream().use { it.read(header) }
-            if (count >= 8 && String(header, 4, 4, Charsets.US_ASCII) == "ftyp") return@runCatching "mp4"
-            if (count >= 4 && header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() &&
-                header[2] == 0xDF.toByte() && header[3] == 0xA3.toByte()
-            ) return@runCatching "webm"
-            null
-        }.getOrNull()
-    }
-
-    private fun isLikelyImageFile(file: File, contentType: String, sourceUrl: String): Boolean {
-        if (sniffImageExtension(file) != null) return true
-        if (contentType.startsWith("image/")) return true
-        if (contentType.contains("html") || contentType.contains("json") || contentType.startsWith("text/")) return false
-        return MediaUrlNormalizer.isDirectImageUrl(sourceUrl) &&
-            (contentType.isBlank() || contentType == "application/octet-stream" || contentType == "binary/octet-stream")
-    }
-
-    private fun mediaExtension(
-        contentType: String,
-        sourceUrl: String,
-        file: File,
-        isVideo: Boolean
-    ): String {
-        if (!isVideo) return imageExtension(contentType, sourceUrl, file)
-        val mimeExtension = when (contentType.substringBefore(';').lowercase(java.util.Locale.ROOT)) {
-            "video/mp4" -> "mp4"
-            "video/quicktime" -> "mov"
-            "video/webm" -> "webm"
-            "video/x-m4v", "video/m4v" -> "m4v"
-            else -> null
-        }
-        return mimeExtension
-            ?: sniffVideoExtension(file)
-            ?: videoExtensionFromUrl(sourceUrl)
-            ?: "mp4"
-    }
-
-    private fun imageExtension(contentType: String, sourceUrl: String, file: File): String {
-        val mimeExtension = when (contentType.substringBefore(';').lowercase(java.util.Locale.ROOT)) {
-            "image/jpeg", "image/jpg", "image/pjpeg" -> "jpg"
-            "image/png", "image/x-png" -> "png"
-            "image/webp" -> "webp"
-            "image/gif" -> "gif"
-            "image/avif" -> "avif"
-            "image/bmp", "image/x-ms-bmp" -> "bmp"
-            "image/tiff" -> "tif"
-            "image/svg+xml" -> "svg"
-            else -> null
-        }
-        return mimeExtension
-            ?: sniffImageExtension(file)
-            ?: MediaUrlNormalizer.imageExtensionFromUrl(sourceUrl)?.let {
-                if (it == "jpeg") "jpg" else it
+    /** A valid ISO container could still be audio-only; require an actual video track. */
+    private fun requireVideoTrack(file: File) {
+        val extractor = android.media.MediaExtractor()
+        try {
+            extractor.setDataSource(file.absolutePath)
+            val hasVideo = (0 until extractor.trackCount).any {
+                extractor.getTrackFormat(it).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("video/") == true
             }
-            ?: "jpg"
-    }
-
-    private fun sniffImageExtension(file: File): String? {
-        return runCatching {
-            val header = ByteArray(16)
-            val count = file.inputStream().use { it.read(header) }
-            if (count >= 3 && header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() && header[2] == 0xFF.toByte()) return@runCatching "jpg"
-            if (count >= 8 && header.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))) return@runCatching "png"
-            if (count >= 6 && String(header, 0, 6, Charsets.US_ASCII).startsWith("GIF8")) return@runCatching "gif"
-            if (count >= 12 && String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "WEBP") return@runCatching "webp"
-            if (count >= 2 && String(header, 0, 2, Charsets.US_ASCII) == "BM") return@runCatching "bmp"
-            if (count >= 4 && (
-                    (header[0] == 'I'.code.toByte() && header[1] == 'I'.code.toByte() && header[2] == '*'.code.toByte() && header[3] == 0.toByte()) ||
-                    (header[0] == 'M'.code.toByte() && header[1] == 'M'.code.toByte() && header[2] == 0.toByte() && header[3] == '*'.code.toByte())
-                )) return@runCatching "tif"
-            val prefix = String(header, 0, count.coerceAtLeast(0), Charsets.UTF_8).trimStart()
-            if (prefix.startsWith("<svg", ignoreCase = true) || prefix.startsWith("<?xml", ignoreCase = true)) return@runCatching "svg"
-            null
-        }.getOrNull()
+            if (!hasVideo) throw IOException("The downloaded file has no playable video track")
+        } finally {
+            extractor.release()
+        }
     }
 
     private fun saveMediaWithUniqueName(
@@ -1309,8 +1199,10 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                 continue
             }
             try {
-                partialFile.copyTo(destination, overwrite = true)
-                partialFile.delete()
+                if (!partialFile.renameTo(destination)) {
+                    partialFile.copyTo(destination, overwrite = true)
+                    partialFile.delete()
+                }
                 return destination
             } catch (e: Exception) {
                 destination.delete()
