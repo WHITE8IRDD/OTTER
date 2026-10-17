@@ -18,7 +18,46 @@ build as successful Instagram/YouTube/TikTok downloading.
   the GitHub integration (HTTP 403); this does not establish that Actions cannot
   access the existing signing secret. The signed-candidate workflow tests that.
 
-## Automated coverage (results appended after runs)
+## Verified automated results — 2026-10-17 UTC
+
+Application source commit: `aef5eeea420de3648ab29ffd951f019d1cc455f7`.
+Application source SHA-256 fingerprint:
+`5ee11dcb8d7a0b7a45dd2d0ea5ac99ff2f99d5f3d9299a77824abd99df568844`.
+Documentation-only commits after this do not change the fingerprint.
+
+- [Android validation run 39048860304](https://github.com/WHITE8IRDD/OTTER/actions/runs/39048860304):
+  **169 JVM tests passed; 0 failures, 0 errors, 0 skipped.** Debug APK build passed.
+- Same run, device job: **8 Android API 35 / x86_64 emulator tests passed; 0 failures,
+  0 errors, 0 skipped.** Mixed-media downloads, real image/frame decoding, video/audio
+  tracks, poster rejection, audio-only downloading, native separate-stream FFmpeg
+  merging and grouped-picker interaction/scroll/dismiss behaviour were exercised.
+- [Signed candidate run 39048860329](https://github.com/WHITE8IRDD/OTTER/actions/runs/39048860329):
+  release APKs and AAB built successfully with the **existing official signing key**.
+  APK signature, version 28 / code 22 and non-debuggable checks passed. The universal
+  signed release APK **installed and launched successfully on API 35 / x86_64**.
+- Four release-evidence guard tests passed locally and in the validation job.
+- All four synthetic media fixtures were independently decoded by FFmpeg locally.
+- Publication step: **skipped intentionally**. No `v28` official release was created.
+
+### Candidate download (not an official release)
+
+[Outter-28-signed-candidate artifact](https://github.com/WHITE8IRDD/OTTER/actions/runs/39048860329/artifacts/12106638769)
+contains `Outter 28.apk`, ABI-specific APKs, AAB and `SHA256SUMS.txt`.
+Artifacts require GitHub access and expire according to Actions retention settings.
+
+Universal `Outter 28.apk` SHA-256 (from the build's notice/checksum output):
+`7c2d2c08eb7b5c03557456d7290c181d8adbbdf7d9f906ac86f3a7ec05ee0ac5`.
+
+The direct Actions dispatch API returned HTTP 403 with this integration. Candidate
+builds ran successfully through the branch-push workflow instead. Signing is **not**
+blocked: the existing Actions signing secret worked. Official publication was not
+attempted because the mandatory real-source verification is incomplete.
+
+An earlier emulator run exposed the quick window's backdrop merging the card's
+labels into the dismiss action. The backdrop is now separate; a five-item carousel
+scroll test and inside-card/outside-card tap tests passed in the final run.
+
+## Automated coverage
 
 - Existing JVM regression suite plus typed Instagram regressions: HTML poster
   reintroduction, play-button overlays, distinct child shortcodes, 3-picture /
@@ -81,3 +120,20 @@ short/full TikTok links, multiple YouTube resolutions and separate-stream mergin
 5. Update the release notes from candidate status only after sign-off. Publish
    with the exact title **Outter 28**, tag `v28`, and universal asset
    `Outter 28.apk`, retaining ABI builds/AAB and SHA-256 checksums.
+
+## Remaining limitations / acceptance gaps
+
+- No current live Instagram/YouTube/TikTok URL has been successfully downloaded by
+  this pass. The public engine integration has been improved and exercised offline;
+  this is not proof of current platform extractor success. Do not claim otherwise.
+- Private/restricted/unavailable posts, expiring URLs and source-side automation
+  restrictions can still fail. Unresolved Instagram video slides are missing/partial
+  media, not downloadable posters. The direct gallery path requires resolved media
+  files; manifest-only or separate-stream gallery entries need additional resolution
+  if the source does not expose progressive media. Do not silently substitute images.
+- Real-world network loss, pause/resume, background-service lifecycle, rapid repeated
+  share requests, numeric audio-track resume and upgrade behaviour need physical-device
+  regression verification. No claim of universal stability is made from the synthetic
+  tests. Device coverage here is API 35 x86_64, not every supported Android/ARM version.
+- The verification JSON deliberately retains pending entries. Filling it with invented
+  successes, or removing the gate merely to publish, would violate the release criteria.
