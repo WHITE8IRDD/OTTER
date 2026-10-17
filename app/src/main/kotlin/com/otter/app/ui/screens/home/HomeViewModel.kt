@@ -672,7 +672,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun friendlyErrorMessage(rawError: String, url: String): String {
         // The wording lives in one place so the Quick Download window and this screen
         // say the same thing about the same failure.
-        return FriendlyErrors.message(getApplication(), rawError, url)
+        return FriendlyErrors.message(getApplication<Application>(), rawError, url)
     }
 }
 
