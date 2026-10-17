@@ -182,6 +182,10 @@ class Downloader(private val context: Context, private val formatParser: FormatP
                     // from the default chain and keep the clients that still hand out plain
                     // HTTPS streams. Shorts are unaffected (single muxed stream).
                     request.addOption("--extractor-args", "youtube:player_client=default,-android_sdkless")
+                    // A merged video+audio of a long-form video or a Short lands in MP4 (a
+                    // remux, never a re-encode) instead of MKV, which every Android gallery
+                    // and player opens. Same reasoning as YTDLnis' "compatible" output mode.
+                    request.addOption("--merge-output-format", "mp4")
                 }
                 else -> {}
             }

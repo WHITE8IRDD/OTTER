@@ -99,13 +99,19 @@ object TikTokPhotoParser {
         )
     }
 
-    /** True only for a photo-mode item, not the video's ordinary cover image. */
+    /**
+     * True only for a photo-mode item, not the video's ordinary cover image.
+     *
+     * The page shape is `/@user/photo/<id>`, but forwarded links and web shares can
+     * carry the `/photo/<id>` part without the `@user` prefix, so the marker is the
+     * `/photo/<id>` segment itself. A `/video/` link is never photo mode.
+     */
     fun isPhotoModeUrl(url: String): Boolean {
         if (!MediaUrlNormalizer.hostMatches(url, "tiktok.com") &&
             !MediaUrlNormalizer.hostMatches(url, "tiktokv.com")
         ) return false
         val path = runCatching { URL(url).path }.getOrNull() ?: return false
-        return Regex("""(?:^|/)@[^/]+/photo/\d+(?:/|$)""", RegexOption.IGNORE_CASE).containsMatchIn(path)
+        return Regex("""(?:^|/)photo/\d+(?:/|$)""", RegexOption.IGNORE_CASE).containsMatchIn(path)
     }
 
     private fun findImagePostOwner(root: Any, targetId: String): JSONObject? {

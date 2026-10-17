@@ -253,6 +253,11 @@
     <string name="quick_download_title">Téléchargement rapide</string>
     <string name="quick_download_started">Téléchargement rapide démarré</string>
     <string name="quick_download_failed">Échec : %s</string>
+    <string name="quick_download_reading">Lecture de la publication…</string>
+    <string name="quick_download_read_failed">Impossible de lire cette publication</string>
+    <string name="quick_download_starting">Démarrage du téléchargement…</string>
+    <string name="quick_download_background_note">Les téléchargements continuent en arrière-plan — vous pouvez continuer à naviguer</string>
+    <string name="quick_download_video_item">1 vidéo — meilleure qualité disponible</string>
     <string name="no_valid_url">Aucune URL valide trouvée</string>
 
     <!-- NotificationHelper -->
@@ -341,6 +346,7 @@
     <string name="media_saved_partial">%1$d enregistré(s), %2$d échec(s).</string>
     <string name="content_desc_video">Vidéo %d</string>
     <string name="content_desc_video_slide">Diapositive vidéo</string>
+    <string name="content_desc_selected_slide">Sélectionné</string>
     <string name="content_desc_copy_hashtags">Copier les hashtags</string>
     <string name="history_details_title">Détails du téléchargement</string>
     <string name="history_details_hint">Touchez un téléchargement pour voir son titre, sa description et ses hashtags</string>
